@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}{{ '商品情報の編集' if item else '商品登録' }} - 株式会社 開花{% endblock %}
+{% block content %}
+<style>
+  .self-inventory {max-width:1080px;margin:0 auto;color:#334155}
+  .self-inventory .page-header {display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:1.5rem}
+  .self-inventory h1 {font-size:1.65rem;margin:0 0 .45rem;color:#1e293b}
+  .self-inventory .subtitle {color:#64748b;font-size:.9rem;margin:0;line-height:1.7}
+  .self-inventory .form-grid {display:grid;grid-template-columns:1fr 1fr;gap:1.3rem}
+  .self-inventory .form-section {background:white;border:1px solid #e2e8f0;border-radius:12px;padding:1.5rem;min-width:0}
+  .self-inventory h2 {font-size:1.15rem;border-bottom:2px solid #667eea;padding-bottom:.8rem;margin:0 0 1.3rem}
+  .self-inventory .form-group {margin-bottom:1.15rem}
+  .self-inventory label {display:block;font-size:.9rem;font-weight:600;margin-bottom:.45rem}
+  .self-inventory input:not([type=checkbox]),.self-inventory textarea {box-sizing:border-box;width:100%;border:1px solid #cbd5e1;border-radius:7px;padding:.75rem;font:inherit;min-height:44px;background:white;color:#334155}
+  .self-inventory input:focus,.self-inventory textarea:focus {outline:3px solid #c7d2fe;border-color:#667eea}
+  .self-inventory input[readonly],.self-inventory textarea[readonly] {background:#f8fafc;color:#64748b}
+  .self-inventory .form-pair {display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+  .self-inventory .required {font-size:.7rem;color:#b91c1c;margin-left:.4rem}
+  .self-inventory .form-help {display:block;color:#64748b;font-size:.8rem;line-height:1.7;margin-top:.4rem}
+  .self-inventory .form-actions {display:flex;justify-content:flex-end;align-items:center;gap:1rem;padding-top:1.5rem;flex-wrap:wrap}
+  .self-inventory .btn {min-height:44px;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:7px;padding:.7rem 1.4rem;font:inherit;font-weight:600;text-decoration:none;cursor:pointer}
+  .self-inventory .btn-primary {background:#667eea;color:white}
+  .self-inventory .btn-secondary {background:#e2e8f0;color:#334155}
+  .self-inventory .notice {padding:1rem 1.2rem;margin-bottom:1.3rem;border-radius:8px;line-height:1.75;background:#eef2ff;color:#4338ca}
+  .self-inventory .notice-error {background:#fef2f2;color:#b91c1c;border:1px solid #fecaca}
+  .self-inventory .photo-grid {display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem;margin:.8rem 0}
+  .self-inventory .photo-tile {border:1px solid #e2e8f0;border-radius:8px;padding:.5rem;min-width:0}
+  .self-inventory .photo-tile img {width:100%;height:110px;object-fit:contain;border-radius:5px;background:#f8fafc}
+  .self-inventory .photo-tile label {font-size:.75rem;display:flex;gap:.35rem;align-items:center;min-height:36px;margin:0}
+  .self-inventory .photo-tile input {min-width:18px;min-height:18px}
+  @media(max-width:760px) {.self-inventory .form-grid {grid-template-columns:1fr}.self-inventory .form-section {padding:1.1rem}.self-inventory .form-pair {gap:.65rem}.self-inventory .form-actions .btn {flex:1}.self-inventory h1 {font-size:1.4rem}}
+</style>
+<div class="self-inventory">
+  <div class="page-header">
+    <div><h1>{{ '商品情報の編集' if item else '自分で登録・自己保管' }}</h1><p class="subtitle">自宅などで保管する商品の情報・販売・発送をご自身で記録します。</p></div>
+    <a class="btn btn-secondary" href="{{ url_for('view_item', id=item.id) if item else url_for('index') }}">{{ '商品詳細に戻る' if item else '商品一覧に戻る' }}</a>
+  </div>
+  {% if error %}<div class="notice notice-error" role="alert">{{ error }}{% if photos_enabled %}<br>写真を選択していた場合は、もう一度選択してください。{% endif %}</div>{% endif %}
+  {% if custody_context is defined and not item %}<div class="notice">こちらはご自身で保管・登録する商品です。開花に商品を送って登録も任せる場合は、<a href="{{ url_for('inventory_intake_new') }}">開花へ預ける・登録を依頼</a>から受け付けできます。商品名だけでも登録でき、詳細は後から追加できます。</div>{% endif %}
+  {% if locked %}<div class="notice" role="status">開花への依頼中・配送中・開花管理中の商品は、この画面で編集できません。預け入れの受付状況をご確認ください。変更が必要な場合は開花へお問い合わせください。</div>{% endif %}
+  <form method="POST" enctype="multipart/form-data" id="self-inventory-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token_value }}">
+    <input type="hidden" name="submission_token" value="{{ submission_token }}">
+    <div class="form-grid">
+      <section class="form-section">
+        <h2>基本情報</h2>
+        <div class="form-group"><label for="product_name">商品名<span class="required">必須</span></label><input id="product_name" name="product_name" value="{{ values.product_name|default('', true) }}" maxlength="200" required {% if locked %}readonly{% endif %}></div>
+        <div class="form-pair">
+          <div class="form-group"><label for="brand_name">ブランド名</label><input id="brand_name" name="brand_name" value="{{ values.brand_name|default('', true) }}" maxlength="100" {% if locked %}readonly{% endif %}></div>
+          <div class="form-group"><label for="model_number">型番</label><input id="model_number" name="model_number" value="{{ values.model_number|default('', true) }}" maxlength="100" {% if locked %}readonly{% endif %}></div>
+        </div>
+        <div class="form-pair">
+          <div class="form-group"><label for="item_condition">コンディション</label><input id="item_condition" name="item_condition" value="{{ values.item_condition|default('', true) }}" maxlength="10" placeholder="例：Aランク" {% if locked %}readonly{% endif %}></div>
+          <div class="form-group"><label for="purchase_date">仕入日</label><input type="date" id="purchase_date" name="purchase_date" value="{{ values.purchase_date|default('', true) }}" {% if locked %}readonly{% endif %}></div>
+        </div>
+        <div class="form-group"><label for="store_name">仕入先</label><input id="store_name" name="store_name" value="{{ values.store_name|default('', true) }}" maxlength="200" {% if locked %}readonly{% endif %}></div>
+        <div class="form-group"><label for="supplier_detail">仕入先の詳細</label><input id="supplier_detail" name="supplier_detail" value="{{ values.supplier_detail|default('', true) }}" maxlength="50" {% if locked %}readonly{% endif %}></div>
+        <div class="form-pair">
+          <div class="form-group"><label for="purchase_price">仕入価格（円）</label><input type="number" id="purchase_price" name="purchase_price" value="{{ values.purchase_price|default(0, true) }}" min="0" max="1000000000" step="1" inputmode="numeric" {% if locked %}readonly{% endif %}></div>
+          <div class="form-group"><label for="payment_method">支払方法</label><input id="payment_method" name="payment_method" value="{{ values.payment_method|default('', true) }}" maxlength="50" {% if locked %}readonly{% endif %}></div>
+        </div>
+        <div class="form-group"><label for="notes">メモ</label><textarea id="notes" name="notes" rows="5" maxlength="10000" placeholder="商品の状態や付属品など" {% if locked %}readonly{% endif %}>{{ values.notes|default('', true) }}</textarea></div>
+      </section>
+      <div>
+        <section class="form-section" style="margin-bottom:1.3rem">
+          <h2>販売の予定</h2>
+          <div class="form-group"><label for="listing_price">出品予定価格（円）</label><input type="number" id="listing_price" name="listing_price" value="{{ values.listing_price|default(0, true) }}" min="0" max="1000000000" step="1" inputmode="numeric" {% if locked %}readonly{% endif %}></div>
+          <div class="form-pair">
+            <div class="form-group"><label for="expected_shipping">想定送料（円）</label><input type="number" id="expected_shipping" name="expected_shipping" value="{{ values.expected_shipping|default(0, true) }}" min="0" max="1000000000" step="1" inputmode="numeric" {% if locked %}readonly{% endif %}></div>
+            <div class="form-group"><label for="expected_commission">想定手数料（円）</label><input type="number" id="expected_commission" name="expected_commission" value="{{ values.expected_commission|default(0, true) }}" min="0" max="1000000000" step="1" inputmode="numeric" {% if locked %}readonly{% endif %}></div>
+          </div>
+          <p class="form-help">ここで入力した金額は予定額です。実際の売却・送料・手数料・発送状況は、商品詳細の「自分の販売を記録」から保存できます。</p>
+        </section>
+        <section class="form-section">
+          <h2>商品写真</h2>
+          {% if item and item.photo_path %}<div class="photo-grid"><div class="photo-tile"><img src="{{ url_for('static', filename=item.photo_path) }}" alt="メイン写真">{% if not locked %}<label><input type="checkbox" name="remove_photo" value="1">この写真を外す</label>{% endif %}</div></div>{% endif %}
+          {% if photos_enabled and not locked %}<div class="form-group"><label for="photo">メイン写真</label><input type="file" id="photo" name="photo" accept="image/jpeg,image/png,image/webp"><span class="form-help">JPEG・PNG・WebP。端末の写真やカメラから選択できます。</span></div>{% endif %}
+          {% if additional_photos %}<div class="photo-grid">{% for photo in additional_photos %}<div class="photo-tile"><img src="{{ url_for('static', filename=photo) }}" alt="追加写真 {{ loop.index }}">{% if not locked %}<label><input type="checkbox" name="remove_additional" value="{{ loop.index0 }}">この写真を外す</label>{% endif %}</div>{% endfor %}</div>{% endif %}
+          {% if photos_enabled and not locked %}<div class="form-group"><label for="additional_photos">追加写真</label><input type="file" id="additional_photos" name="additional_photos" multiple accept="image/jpeg,image/png,image/webp"><span class="form-help">メイン写真とは別に、合計19枚まで登録できます。1回の送信は全体で40MB以下にしてください。</span></div>{% elif not photos_enabled %}<p class="form-help">写真の追加は現在ご利用いただけません。</p>{% endif %}
+        </section>
+      </div>
+    </div>
+    <div class="form-actions"><a href="{{ url_for('view_item', id=item.id) if item else url_for('index') }}" class="btn btn-secondary">戻る</a>{% if not locked %}{% if not item %}<button type="submit" name="continue_register" value="1" class="btn btn-secondary">登録して次の商品へ</button>{% endif %}<button type="submit" class="btn btn-primary">{{ '変更を保存する' if item else '商品を登録する' }}</button>{% endif %}</div>
+  </form>
+</div>
+{% endblock %}

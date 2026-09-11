@@ -1,0 +1,1486 @@
+{% extends "base.html" %}
+
+{% set form_items = items if items else [] %}
+{% set is_edit = mitsumori is defined and mitsumori %}
+{% set source_mode = source_invoice is defined and source_invoice %}
+
+{% block title %}{% if is_edit %}見積り依頼書編集{% else %}見積り依頼書作成{% endif %} - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="mitsumori-form-page{% if source_mode %} source-mode{% endif %}">
+    <div class="page-header">
+        <div>
+            <h1>{% if is_edit %}見積り依頼書編集{% else %}見積り依頼書作成{% endif %}</h1>
+            <p class="page-subtitle">管理画面の書類作成と同じ明細形式で、開花へ送る見積り依頼書を作成します。</p>
+        </div>
+        <a href="{{ url_for('user_document_list') }}" class="btn btn-secondary">書類一覧へ戻る</a>
+    </div>
+
+    <div class="form-info-box">
+        <strong>見積り依頼書について</strong>
+        <span>商品一覧から選択すると、数量・単価・合計金額が自動で計算されます。下書き保存後は、作成完了にする前であれば編集できます。</span>
+    </div>
+
+    <form method="POST" class="mitsumori-form" id="mitsumori-form">
+        {% if source_mode %}
+        <input type="hidden" id="source-invoice-id" name="source_invoice_id" value="{{ source_invoice.id }}">
+        {% endif %}
+        <section class="form-section">
+            <h2>基本情報</h2>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>No.</label>
+                    <input type="text" value="{{ mitsumori.document_no if is_edit else document_no }}" readonly class="form-control readonly">
+                </div>
+                <div class="form-group">
+                    <label for="issue_date">発行日 <span class="required">*</span></label>
+                    <input type="date" id="issue_date" name="issue_date" value="{{ source_invoice.issue_date if source_mode else (mitsumori.issue_date if is_edit else today) }}" required class="form-control{% if source_mode %} readonly{% endif %}" {% if source_mode %}readonly{% endif %}>
+                </div>
+                <div class="form-group">
+                    <label for="valid_until">有効期限</label>
+                    <input type="date" id="valid_until" name="valid_until" value="{{ mitsumori.valid_until if is_edit else '' }}" class="form-control">
+                </div>
+            </div>
+        </section>
+
+        <section class="form-section">
+            <h2>送付先</h2>
+            <div class="form-grid">
+                <div class="form-group full-width">
+                    <label for="company_name">会社名 <span class="required">*</span></label>
+                    <input type="text" id="company_name" name="company_name" value="{{ mitsumori.company_name if is_edit else '株式会社 開花' }}" required class="form-control readonly" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="department">部署名</label>
+                    <input type="text" id="department" name="department" value="{{ mitsumori.department if is_edit else '' }}" placeholder="例: 買取担当" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label for="contact_person">担当者名</label>
+                    <input type="text" id="contact_person" name="contact_person" value="{{ mitsumori.contact_person if is_edit else '' }}" placeholder="例: ご担当者" class="form-control">
+                </div>
+                <div class="form-group full-width">
+                    <label for="address">住所</label>
+                    <input type="text" id="address" name="address" value="{{ mitsumori.address if is_edit else '' }}" placeholder="必要な場合のみ入力してください" class="form-control">
+                </div>
+            </div>
+        </section>
+
+        <section class="form-section">
+            <h2>見積依頼内容</h2>
+            <div class="form-group">
+                <label for="subject">件名 <span class="required">*</span></label>
+                <input type="text" id="subject" name="subject" value="{{ mitsumori.subject if is_edit else '見積り依頼書' }}" required placeholder="例: ブランド品の見積り依頼" class="form-control">
+            </div>
+
+            {% if source_mode %}
+            <div class="source-invoice-panel">
+                <div>
+                    <strong>&#20803;&#12398;&#36023;&#21462;&#26126;&#32048;&#26360;: {{ source_invoice.invoice_no or source_invoice.id }}</strong>
+                    <span>{{ source_invoice.issue_date or '-' }}</span>
+                </div>
+                <button type="button" class="btn btn-info" id="reflect-all-source-items">&#12377;&#12409;&#12390;&#21453;&#26144;</button>
+            </div>
+            <div class="source-items-list" id="source-items-list">
+                {% for item in source_items %}
+                <label class="source-item-row">
+                    <input type="checkbox" name="source_invoice_item_choice[]" value="{{ item.id }}" checked>
+                    <span class="source-item-name">{{ item.product_name }}</span>
+                    <span class="source-item-amount">&#165;{{ "{:,}".format(item.amount or 0) }}</span>
+                </label>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="product-selector">
+                <label for="product-select">商品を追加</label>
+                <select id="product-select" class="form-control product-select-box">
+                    <option value="">-- 商品一覧から選択 --</option>
+                    {% for product in my_merchandise %}
+                    <option
+                        value="{{ product.id }}"
+                        data-product-name="{{ product.product_name or '' }}"
+                        data-brand-name="{{ product.brand_name or '' }}"
+                        data-price="{{ product.listing_price or 0 }}"
+                    >
+                        {{ product.product_name or '商品' }}{% if product.brand_name %} / {{ product.brand_name }}{% endif %}{% if product.listing_price %}（¥{{ "{:,}".format(product.listing_price|int) }}）{% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+                <button type="button" class="btn btn-info" id="add-product-btn">追加</button>
+            </div>
+            <div id="product-select-meta" class="product-select-meta">
+                {% if not my_merchandise %}追加できる商品がありません。手入力で明細を作成できます。{% endif %}
+            </div>
+
+            {% endif %}
+
+            <div class="table-responsive">
+                <table class="items-table" id="items-table">
+                    <thead>
+                        <tr>
+                            <th class="col-no">No.</th>
+                            <th>商品名・内容 <span class="required">*</span></th>
+                            <th class="col-qty">数量</th>
+                            <th class="col-price">単価</th>
+                            <th class="col-amount">金額</th>
+                            <th class="col-action"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="items-body">
+                        {% if form_items %}
+                            {% for item in form_items %}
+                            <tr class="item-row">
+                                <td class="item-no">{{ item.item_no or loop.index }}</td>
+                                <td>
+                                    <input type="text" name="item_name[]" value="{{ item.item_name }}" class="form-control" required>
+                                    <input type="hidden" name="merchandise_id[]" value="{{ item.merchandise_id or '' }}">
+                                    <input type="hidden" name="unit[]" value="{{ item.unit or '点' }}">
+                                </td>
+                                <td><input type="number" name="quantity[]" value="{{ item.quantity or 1 }}" class="form-control calc-input" min="1"></td>
+                                <td><input type="number" name="unit_price[]" value="{{ item.unit_price or 0 }}" class="form-control calc-input" min="0" step="1"></td>
+                                <td class="row-amount">¥0</td>
+                                <td><button type="button" class="btn btn-danger btn-sm remove-row">削除</button></td>
+                            </tr>
+                            {% endfor %}
+                        {% elif not source_mode %}
+                            {% for i in range(3) %}
+                            <tr class="item-row">
+                                <td class="item-no">{{ i + 1 }}</td>
+                                <td>
+                                    <input type="text" name="item_name[]" class="form-control">
+                                    <input type="hidden" name="merchandise_id[]" value="">
+                                    <input type="hidden" name="unit[]" value="点">
+                                </td>
+                                <td><input type="number" name="quantity[]" value="1" class="form-control calc-input" min="1"></td>
+                                <td><input type="number" name="unit_price[]" value="0" class="form-control calc-input" min="0" step="1"></td>
+                                <td class="row-amount">¥0</td>
+                                <td><button type="button" class="btn btn-danger btn-sm remove-row">削除</button></td>
+                            </tr>
+                            {% endfor %}
+                        {% endif %}
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="6">
+                                <button type="button" class="btn btn-secondary" id="add-row">+ 行を追加</button>
+                            </td>
+                        </tr>
+                        <tr class="totals-row">
+                            <td colspan="3"></td>
+                            <td class="text-right"><strong>合計金額</strong></td>
+                            <td id="total-amount">¥0</td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </section>
+
+        <section class="form-section">
+            <h2>備考・条件</h2>
+            <div class="form-group">
+                <textarea name="notes" rows="4" class="form-control" placeholder="確認してほしい条件、補足事項など">{{ mitsumori.notes if is_edit else '' }}</textarea>
+            </div>
+        </section>
+
+        <section class="form-section preview-check-section">
+            <div>
+                <h2>書類プレビュー確認</h2>
+                <p>作成完了の前に、実際の書類としてどのように表示されるか確認できます。内容を確認して問題なければ、プレビュー画面から作成完了してください。</p>
+            </div>
+            <button type="button" class="btn btn-primary" id="open-preview-btn">書類を確認する</button>
+        </section>
+
+        <div class="form-actions">
+            <button type="submit" name="status" value="draft" class="btn btn-secondary">下書き保存</button>
+        </div>
+    </form>
+
+    <div class="document-preview-modal" id="document-preview-modal" aria-hidden="true">
+        <div class="document-preview-backdrop" data-close-preview></div>
+        <div class="document-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="preview-title">
+            <div class="document-preview-toolbar">
+                <div>
+                    <span class="preview-kicker">送信前プレビュー</span>
+                    <h2 id="preview-title">見積り依頼書の確認</h2>
+                </div>
+                <button type="button" class="preview-close-btn" data-close-preview>閉じる</button>
+            </div>
+
+            <div class="preview-sheet">
+                <div class="preview-sheet-title">見 積 依 頼 書</div>
+
+                <div class="preview-header">
+                    <div>
+                        <div class="preview-recipient"><span id="preview-company-name">株式会社 開花</span><span class="preview-suffix">御中</span></div>
+                        <div id="preview-department" class="preview-muted"></div>
+                        <div id="preview-contact-person" class="preview-muted"></div>
+                    </div>
+                    <div class="preview-meta">
+                        <div>No.：{{ mitsumori.document_no if is_edit else document_no }}</div>
+                        <div>発行日：<span id="preview-issue-date"></span></div>
+                        <div id="preview-valid-row">有効期限：<span id="preview-valid-until"></span></div>
+                    </div>
+                </div>
+
+                <p class="preview-message">下記商品の見積りを依頼いたします。ご確認のほどよろしくお願いいたします。</p>
+
+                <div class="preview-amount-row">
+                    <div class="preview-amount-box">
+                        <span>見積依頼金額</span>
+                        <strong id="preview-total-main">¥0 (税込)</strong>
+                    </div>
+                    <div class="preview-sender-box">
+                        <strong>{{ current_user.display_name or current_user.username or 'ご依頼者' }}</strong>
+                        <span>見積り依頼者</span>
+                        <span>件名：<span id="preview-subject-inline"></span></span>
+                    </div>
+                </div>
+
+                <table class="preview-items-table">
+                    <thead>
+                        <tr>
+                            <th>No.</th>
+                            <th>商品名・内容</th>
+                            <th>数量</th>
+                            <th>単価</th>
+                            <th>金額(税込)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="preview-items-body"></tbody>
+                </table>
+
+                <div class="preview-footer">
+                    <div class="preview-note-block">
+                        <strong>備考・条件：</strong>
+                        <div id="preview-notes"></div>
+                    </div>
+                    <table class="preview-summary-table">
+                        <tr>
+                            <th>合計点数</th>
+                            <td id="preview-item-count">0 点</td>
+                        </tr>
+                        <tr>
+                            <th>小計</th>
+                            <td id="preview-subtotal">¥0</td>
+                        </tr>
+                        <tr>
+                            <th>内税(10%)</th>
+                            <td id="preview-tax">0</td>
+                        </tr>
+                        <tr class="preview-summary-total">
+                            <th>合計(税込)</th>
+                            <td id="preview-total">¥0</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
+            <div class="document-preview-actions">
+                <button type="button" class="btn btn-secondary" data-close-preview>編集に戻る</button>
+                <button type="button" class="btn btn-primary" id="complete-from-preview-btn">この内容で作成完了</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.mitsumori-form-page,
+.mitsumori-form {
+    display: grid;
+    gap: 1.25rem;
+}
+
+.mitsumori-form-page {
+    max-width: 1120px;
+    margin: 0 auto;
+}
+
+.page-header,
+.form-actions,
+.product-selector {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.page-header h1 {
+    margin: 0;
+    color: #0f172a;
+}
+
+.page-subtitle {
+    margin: 0.35rem 0 0;
+    color: #64748b;
+    line-height: 1.7;
+}
+
+.form-info-box {
+    display: grid;
+    gap: 0.25rem;
+    padding: 1rem 1.15rem;
+    border: 1px solid #bfdbfe;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%);
+    color: #1d4ed8;
+    line-height: 1.7;
+}
+
+.form-section {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
+    padding: 1.25rem;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+}
+
+.form-section h2 {
+    margin: 0 0 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 2px solid #60a5fa;
+    color: #0f172a;
+    font-size: 1.08rem;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.form-group.full-width {
+    grid-column: 1 / -1;
+}
+
+.form-group label,
+.product-selector label {
+    color: #334155;
+    font-weight: 700;
+}
+
+.required {
+    color: #dc2626;
+}
+
+.form-control {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 0.68rem 0.78rem;
+    border: 1px solid #d1d5db;
+    border-radius: 10px;
+    background: #fff;
+    color: #0f172a;
+    font-size: 0.95rem;
+}
+
+.form-control.readonly {
+    background: #f8fafc;
+    color: #64748b;
+}
+
+.product-selector {
+    justify-content: flex-start;
+    margin: 0.85rem 0 0.35rem;
+}
+
+.product-selector label {
+    min-width: 88px;
+}
+
+.product-select-box {
+    flex: 1 1 360px;
+    min-width: 240px;
+    max-width: 100%;
+}
+
+.product-select-meta {
+    min-height: 24px;
+    margin-bottom: 0.75rem;
+    color: #64748b;
+    font-size: 0.9rem;
+}
+
+.source-invoice-panel {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+    margin: 0.85rem 0;
+    padding: 0.9rem 1rem;
+    border: 1px solid #bfdbfe;
+    border-radius: 12px;
+    background: #eff6ff;
+    color: #1e3a8a;
+}
+
+.source-invoice-panel div {
+    display: grid;
+    gap: 0.2rem;
+}
+
+.source-items-list {
+    display: grid;
+    gap: 0.5rem;
+    margin-bottom: 0.85rem;
+}
+
+.source-item-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #fff;
+}
+
+.source-item-name {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.source-item-amount {
+    font-weight: 800;
+    color: #0f172a;
+    white-space: nowrap;
+}
+
+.source-mode #add-row {
+    display: none;
+}
+
+.source-mode .items-table tfoot tr:first-child {
+    display: none;
+}
+
+.table-responsive {
+    max-width: 100%;
+    overflow-x: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+}
+
+.items-table {
+    width: 100%;
+    min-width: 860px;
+    border-collapse: collapse;
+}
+
+.items-table th,
+.items-table td {
+    padding: 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+    text-align: left;
+    vertical-align: middle;
+}
+
+.items-table th {
+    background: #f8fafc;
+    color: #334155;
+    font-size: 0.88rem;
+    white-space: nowrap;
+}
+
+.items-table tbody tr:last-child td,
+.items-table tfoot tr:last-child td {
+    border-bottom: none;
+}
+
+.col-no {
+    width: 56px;
+}
+
+.col-qty {
+    width: 105px;
+}
+
+.col-price,
+.col-amount {
+    width: 140px;
+}
+
+.col-action {
+    width: 90px;
+}
+
+.item-no,
+.row-amount,
+#total-amount,
+.text-right {
+    text-align: right;
+}
+
+.row-amount,
+#total-amount {
+    color: #0f172a;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.totals-row td {
+    background: #eff6ff;
+    font-weight: 800;
+}
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    padding: 0.65rem 0.95rem;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    color: #fff;
+    font-weight: 800;
+    text-decoration: none;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.btn-primary {
+    background: #0f172a;
+}
+
+.btn-secondary {
+    background: #fff;
+    color: #475569;
+    border-color: #cbd5e1;
+}
+
+.btn-info {
+    background: #2563eb;
+}
+
+.btn-danger {
+    background: #fff;
+    color: #dc2626;
+    border-color: #fecaca;
+}
+
+.btn-sm {
+    min-height: 34px;
+    padding: 0.42rem 0.72rem;
+    font-size: 0.84rem;
+}
+
+.form-actions {
+    justify-content: flex-end;
+}
+
+.preview-check-section {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.preview-check-section h2 {
+    margin-bottom: 0.35rem;
+}
+
+.preview-check-section p {
+    margin: 0;
+    color: #64748b;
+    line-height: 1.7;
+}
+
+.document-preview-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: none;
+}
+
+.document-preview-modal.open {
+    display: block;
+}
+
+.document-preview-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.64);
+}
+
+.document-preview-dialog {
+    position: relative;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    width: min(1040px, calc(100vw - 32px));
+    max-width: 100%;
+    max-height: calc(100vh - 32px);
+    margin: 16px auto;
+    overflow: hidden;
+    border-radius: 22px;
+    background: #f8fafc;
+    box-shadow: 0 28px 80px rgba(15, 23, 42, 0.35);
+}
+
+.document-preview-toolbar,
+.document-preview-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    background: #fff;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.document-preview-actions {
+    justify-content: flex-end;
+    border-top: 1px solid #e2e8f0;
+    border-bottom: none;
+}
+
+.document-preview-toolbar h2 {
+    margin: 0.15rem 0 0;
+    color: #0f172a;
+    font-size: 1.2rem;
+}
+
+.preview-kicker {
+    color: #2563eb;
+    font-size: 0.78rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+}
+
+.preview-close-btn {
+    min-height: 36px;
+    padding: 0.45rem 0.8rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 999px;
+    background: #fff;
+    color: #475569;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.preview-sheet {
+    width: min(820px, calc(100% - 32px));
+    max-width: 100%;
+    box-sizing: border-box;
+    margin: 1rem auto;
+    padding: 32px;
+    overflow: auto;
+    background: #fff;
+    color: #111827;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+    font-size: 0.86rem;
+}
+
+.preview-sheet-title {
+    margin-bottom: 1.2rem;
+    padding-bottom: 0.65rem;
+    border-bottom: 2px solid #111827;
+    text-align: center;
+    font-size: 1.55rem;
+    font-weight: 900;
+    letter-spacing: 0.32em;
+}
+
+.preview-header,
+.preview-amount-row,
+.preview-footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 1.25rem;
+}
+
+.preview-recipient {
+    display: inline-block;
+    margin-bottom: 0.35rem;
+    padding-bottom: 0.25rem;
+    border-bottom: 1px solid #111827;
+    font-size: 1.1rem;
+    font-weight: 900;
+}
+
+.preview-suffix {
+    margin-left: 0.5rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.preview-muted,
+.preview-message,
+.preview-note-block {
+    color: #4b5563;
+}
+
+.preview-meta {
+    min-width: 220px;
+    text-align: right;
+    line-height: 1.8;
+}
+
+.preview-message {
+    margin: 1.2rem 0;
+    text-align: center;
+}
+
+.preview-amount-row {
+    align-items: stretch;
+    margin-bottom: 1.2rem;
+}
+
+.preview-amount-box,
+.preview-sender-box {
+    flex: 1;
+    display: grid;
+    gap: 0.35rem;
+    padding: 1rem;
+    border: 1px solid #d1d5db;
+    background: #f9fafb;
+}
+
+.preview-amount-box {
+    place-items: center;
+    border: 2px solid #111827;
+}
+
+.preview-amount-box span {
+    font-weight: 800;
+}
+
+.preview-amount-box strong {
+    color: #1d4ed8;
+    font-size: 1.45rem;
+}
+
+.preview-sender-box {
+    text-align: right;
+}
+
+.preview-items-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+}
+
+.preview-items-table th,
+.preview-items-table td,
+.preview-summary-table th,
+.preview-summary-table td {
+    padding: 0.48rem 0.55rem;
+    border: 1px solid #111827;
+}
+
+.preview-items-table th,
+.preview-summary-table th {
+    background: #f3f4f6;
+}
+
+.preview-items-table th {
+    text-align: center;
+}
+
+.preview-footer {
+    align-items: flex-start;
+    margin-top: 1rem;
+}
+
+.preview-note-block {
+    flex: 1;
+    min-height: 48px;
+    white-space: pre-wrap;
+}
+
+.preview-summary-table {
+    width: 320px;
+    border-collapse: collapse;
+}
+
+.preview-summary-table td {
+    text-align: right;
+}
+
+.preview-summary-total th,
+.preview-summary-total td {
+    font-weight: 900;
+}
+
+@media (max-width: 760px) {
+    .mitsumori-form-page,
+    .mitsumori-form,
+    .form-section,
+    .table-responsive,
+    .document-preview-dialog,
+    .preview-sheet {
+        min-width: 0;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+
+    .mitsumori-form-page {
+        padding: 0;
+    }
+
+    .page-header,
+    .form-actions,
+    .product-selector,
+    .preview-check-section,
+    .document-preview-toolbar,
+    .document-preview-actions {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .page-header .btn,
+    .form-actions .btn,
+    .product-selector .btn,
+    .preview-check-section .btn,
+    .document-preview-actions .btn {
+        width: 100%;
+    }
+
+    .form-section {
+        padding: 1rem;
+        overflow: hidden;
+    }
+
+    .form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .product-selector {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 0.65rem;
+    }
+
+    .product-selector label,
+    .product-select-box {
+        min-width: 0;
+        width: 100%;
+    }
+
+    .table-responsive {
+        overflow: visible;
+        border: 0;
+        border-radius: 0;
+    }
+
+    .items-table,
+    .items-table thead,
+    .items-table tbody,
+    .items-table tfoot,
+    .items-table tr,
+    .items-table th,
+    .items-table td {
+        display: block;
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+    }
+
+    .items-table {
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+
+    .items-table thead {
+        display: none;
+    }
+
+    .items-table tbody {
+        display: grid;
+        gap: 0.75rem;
+    }
+
+    .items-table .item-row {
+        padding: 0.8rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        background: #fff;
+        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+    }
+
+    .items-table .item-row td {
+        display: grid;
+        grid-template-columns: 86px minmax(0, 1fr);
+        gap: 0.5rem;
+        align-items: center;
+        padding: 0.42rem 0;
+        border-bottom: 0;
+        text-align: left;
+    }
+
+    .items-table .item-row td::before {
+        color: #64748b;
+        font-size: 0.78rem;
+        font-weight: 800;
+    }
+
+    .items-table .item-row td:nth-child(1)::before {
+        content: "No.";
+    }
+
+    .items-table .item-row td:nth-child(2) {
+        grid-template-columns: 1fr;
+    }
+
+    .items-table .item-row td:nth-child(2)::before {
+        content: "商品名・内容";
+    }
+
+    .items-table .item-row td:nth-child(3)::before {
+        content: "数量";
+    }
+
+    .items-table .item-row td:nth-child(4)::before {
+        content: "単価";
+    }
+
+    .items-table .item-row td:nth-child(5)::before {
+        content: "金額";
+    }
+
+    .items-table .item-row td:nth-child(6)::before {
+        content: "操作";
+    }
+
+    .items-table .item-row .row-amount,
+    .items-table .item-row .item-no {
+        text-align: left;
+    }
+
+    .items-table tfoot {
+        margin-top: 0.75rem;
+    }
+
+    .items-table tfoot tr {
+        display: grid;
+        gap: 0.45rem;
+        padding: 0.85rem;
+        border-radius: 14px;
+        background: #eff6ff;
+    }
+
+    .items-table tfoot td {
+        padding: 0;
+        border: 0;
+        background: transparent;
+        text-align: left;
+    }
+
+    .items-table tfoot td:empty {
+        display: none;
+    }
+
+    .items-table tfoot .text-right,
+    #total-amount {
+        text-align: left;
+    }
+
+    #total-amount {
+        font-size: 1.1rem;
+    }
+
+    .document-preview-dialog {
+        width: 100vw;
+        height: 100vh;
+        max-height: 100vh;
+        margin: 0;
+        border-radius: 0;
+    }
+
+    .document-preview-toolbar,
+    .document-preview-actions {
+        padding: 0.85rem;
+    }
+
+    .preview-sheet {
+        width: calc(100% - 16px);
+        max-width: 420px;
+        padding: 14px 12px;
+        overflow-x: hidden;
+        font-size: 0.68rem;
+    }
+
+    .preview-header,
+    .preview-amount-row,
+    .preview-footer {
+        flex-direction: column;
+    }
+
+    .preview-meta,
+    .preview-sender-box {
+        text-align: left;
+    }
+
+    .preview-summary-table {
+        width: 100%;
+    }
+
+    .preview-sheet-title {
+        margin-bottom: 0.8rem;
+        font-size: 1.05rem;
+        letter-spacing: 0.18em;
+    }
+
+    .preview-recipient {
+        font-size: 0.84rem;
+    }
+
+    .preview-meta {
+        min-width: 0;
+        line-height: 1.55;
+    }
+
+    .preview-message {
+        margin: 0.75rem 0;
+    }
+
+    .preview-amount-box,
+    .preview-sender-box {
+        padding: 0.65rem;
+    }
+
+    .preview-amount-box strong {
+        font-size: 1rem;
+    }
+
+    .preview-items-table,
+    .preview-summary-table {
+        table-layout: fixed;
+        font-size: 0.6rem;
+    }
+
+    .preview-items-table th,
+    .preview-items-table td,
+    .preview-summary-table th,
+    .preview-summary-table td {
+        padding: 0.32rem 0.24rem;
+        word-break: break-word;
+    }
+
+    .preview-items-table th:nth-child(1),
+    .preview-items-table td:nth-child(1) {
+        width: 12%;
+    }
+
+    .preview-items-table th:nth-child(2),
+    .preview-items-table td:nth-child(2) {
+        width: 40%;
+    }
+
+    .preview-items-table th:nth-child(3),
+    .preview-items-table td:nth-child(3) {
+        width: 12%;
+    }
+
+    .preview-items-table th:nth-child(4),
+    .preview-items-table td:nth-child(4) {
+        width: 18%;
+    }
+
+    .preview-items-table th:nth-child(5),
+    .preview-items-table td:nth-child(5) {
+        width: 18%;
+    }
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const itemsBody = document.getElementById('items-body');
+    const addRowButton = document.getElementById('add-row');
+    const addProductButton = document.getElementById('add-product-btn');
+    const productSelect = document.getElementById('product-select');
+    const productSelectMeta = document.getElementById('product-select-meta');
+    const form = document.getElementById('mitsumori-form');
+    const previewModal = document.getElementById('document-preview-modal');
+    const openPreviewButton = document.getElementById('open-preview-btn');
+    const completeFromPreviewButton = document.getElementById('complete-from-preview-btn');
+    const sourceInvoiceId = document.getElementById('source-invoice-id');
+    const sourceItems = {{ source_items|default([])|tojson }};
+    const reflectAllSourceItemsButton = document.getElementById('reflect-all-source-items');
+    const isSourceMode = Boolean(sourceInvoiceId);
+
+    function formatYen(value) {
+        const amount = Number(value || 0);
+        return `¥${amount.toLocaleString('ja-JP')}`;
+    }
+
+    function updateRowNumbers() {
+        document.querySelectorAll('#items-body .item-row').forEach((row, index) => {
+            const noCell = row.querySelector('.item-no');
+            if (noCell) {
+                noCell.textContent = index + 1;
+            }
+        });
+    }
+
+    function updateRowAmount(row) {
+        const quantity = Number(row.querySelector('input[name="quantity[]"]')?.value || 0);
+        const unitPrice = Number(row.querySelector('input[name="unit_price[]"]')?.value || 0);
+        const amountCell = row.querySelector('.row-amount');
+        if (amountCell) {
+            amountCell.textContent = formatYen(quantity * unitPrice);
+        }
+    }
+
+    function updateTotalAmount() {
+        let total = 0;
+        document.querySelectorAll('#items-body .item-row').forEach((row) => {
+            const quantity = Number(row.querySelector('input[name="quantity[]"]')?.value || 0);
+            const unitPrice = Number(row.querySelector('input[name="unit_price[]"]')?.value || 0);
+            total += quantity * unitPrice;
+        });
+        document.getElementById('total-amount').textContent = formatYen(total);
+    }
+
+    function bindRowEvents(row) {
+        row.querySelectorAll('.calc-input').forEach((input) => {
+            input.addEventListener('input', () => {
+                updateRowAmount(row);
+                updateTotalAmount();
+            });
+        });
+
+        const removeButton = row.querySelector('.remove-row');
+        if (removeButton) {
+            removeButton.addEventListener('click', () => {
+                const rowCount = itemsBody.querySelectorAll('.item-row').length;
+                if (rowCount <= 1) {
+                    row.querySelector('input[name="item_name[]"]').value = '';
+                    row.querySelector('input[name="merchandise_id[]"]').value = '';
+                    row.querySelector('input[name="quantity[]"]').value = '1';
+                    row.querySelector('input[name="unit[]"]').value = '点';
+                    row.querySelector('input[name="unit_price[]"]').value = '0';
+                    updateRowAmount(row);
+                    updateTotalAmount();
+                    return;
+                }
+                row.remove();
+                updateRowNumbers();
+                updateTotalAmount();
+            });
+        }
+
+        updateRowAmount(row);
+    }
+
+    function createRow(item = {}) {
+        const row = document.createElement('tr');
+        row.className = 'item-row';
+        row.innerHTML = `
+            <td class="item-no"></td>
+            <td>
+                <input type="text" name="item_name[]" class="form-control">
+                <input type="hidden" name="merchandise_id[]" value="">
+                <input type="hidden" name="unit[]" value="点">
+            </td>
+            <td><input type="number" name="quantity[]" class="form-control calc-input" min="1" value="1"></td>
+            <td><input type="number" name="unit_price[]" class="form-control calc-input" min="0" step="1" value="0"></td>
+            <td class="row-amount">¥0</td>
+            <td><button type="button" class="btn btn-danger btn-sm remove-row">削除</button></td>
+        `;
+
+        row.querySelector('input[name="item_name[]"]').value = item.itemName || '';
+        row.querySelector('input[name="merchandise_id[]"]').value = item.merchandiseId || '';
+        row.querySelector('input[name="quantity[]"]').value = item.quantity || 1;
+        row.querySelector('input[name="unit[]"]').value = item.unit || '点';
+        row.querySelector('input[name="unit_price[]"]').value = item.unitPrice || 0;
+
+        itemsBody.appendChild(row);
+        bindRowEvents(row);
+        updateRowNumbers();
+        updateTotalAmount();
+        return row;
+    }
+
+    function createSourceRow(item = {}) {
+        const row = document.createElement('tr');
+        row.className = 'item-row source-item-reflected';
+        row.innerHTML = `
+            <td class="item-no"></td>
+            <td>
+                <input type="text" name="item_name[]" class="form-control readonly" readonly>
+                <input type="hidden" name="merchandise_id[]" value="">
+                <input type="hidden" name="unit[]" value="点">
+                <input type="hidden" name="source_invoice_item_id[]" value="">
+            </td>
+            <td><input type="number" name="quantity[]" class="form-control calc-input readonly" min="1" value="1" readonly></td>
+            <td><input type="number" name="unit_price[]" class="form-control calc-input readonly" min="0" step="1" value="0" readonly></td>
+            <td class="row-amount">¥0</td>
+            <td><button type="button" class="btn btn-danger btn-sm remove-row">解除</button></td>
+        `;
+        row.querySelector('input[name="item_name[]"]').value = item.product_name || item.itemName || '';
+        row.querySelector('input[name="merchandise_id[]"]').value = item.merchandise_id || item.merchandiseId || '';
+        row.querySelector('input[name="unit[]"]').value = item.unit || '点';
+        row.querySelector('input[name="source_invoice_item_id[]"]').value = item.id || '';
+        row.querySelector('input[name="quantity[]"]').value = item.quantity || 1;
+        row.querySelector('input[name="unit_price[]"]').value = item.unit_price || item.unitPrice || 0;
+        itemsBody.appendChild(row);
+        bindRowEvents(row);
+        updateRowNumbers();
+        updateTotalAmount();
+        return row;
+    }
+
+    function reflectSelectedSourceItems() {
+        if (!isSourceMode) {
+            return;
+        }
+        itemsBody.innerHTML = '';
+        const selectedIds = new Set(
+            Array.from(document.querySelectorAll('input[name="source_invoice_item_choice[]"]:checked')).map((input) => String(input.value))
+        );
+        sourceItems
+            .filter((item) => selectedIds.has(String(item.id)))
+            .forEach((item) => createSourceRow(item));
+        updateRowNumbers();
+        updateTotalAmount();
+    }
+
+    function findBlankRow() {
+        return Array.from(itemsBody.querySelectorAll('.item-row')).find((row) => {
+            const nameInput = row.querySelector('input[name="item_name[]"]');
+            return nameInput && !nameInput.value.trim();
+        });
+    }
+
+    function fillRow(row, item) {
+        row.querySelector('input[name="item_name[]"]').value = item.itemName || '';
+        row.querySelector('input[name="merchandise_id[]"]').value = item.merchandiseId || '';
+        row.querySelector('input[name="quantity[]"]').value = item.quantity || 1;
+        row.querySelector('input[name="unit[]"]').value = item.unit || '点';
+        row.querySelector('input[name="unit_price[]"]').value = item.unitPrice || 0;
+        updateRowAmount(row);
+        updateTotalAmount();
+    }
+
+    function selectedProductData() {
+        if (!productSelect || !productSelect.value) {
+            return null;
+        }
+        const option = productSelect.options[productSelect.selectedIndex];
+        const productName = option.dataset.productName || option.textContent.trim();
+        const brandName = option.dataset.brandName || '';
+        const displayName = brandName ? `${productName} / ${brandName}` : productName;
+        return {
+            itemName: displayName,
+            merchandiseId: option.value,
+            quantity: 1,
+            unit: '点',
+            unitPrice: Number(option.dataset.price || 0)
+        };
+    }
+
+    function updateProductMeta() {
+        if (!productSelectMeta || !productSelect) {
+            return;
+        }
+        const data = selectedProductData();
+        if (!data) {
+            productSelectMeta.textContent = productSelect.options.length > 1
+                ? '商品を選択すると、明細へ追加できます。'
+                : '追加できる商品がありません。手入力で明細を作成できます。';
+            return;
+        }
+        productSelectMeta.textContent = `${data.itemName} / 参考単価 ${formatYen(data.unitPrice)}`;
+    }
+
+    function setText(id, value) {
+        const element = document.getElementById(id);
+        if (element) {
+            element.textContent = value || '';
+        }
+    }
+
+    function collectPreviewData() {
+        const rows = [];
+        document.querySelectorAll('#items-body .item-row').forEach((row) => {
+            const itemName = row.querySelector('input[name="item_name[]"]')?.value.trim() || '';
+            if (!itemName) {
+                return;
+            }
+            const quantity = Number(row.querySelector('input[name="quantity[]"]')?.value || 0);
+            const unitPrice = Number(row.querySelector('input[name="unit_price[]"]')?.value || 0);
+            rows.push({
+                itemName,
+                quantity: quantity || 1,
+                unitPrice,
+                amount: (quantity || 1) * unitPrice
+            });
+        });
+
+        const total = rows.reduce((sum, row) => sum + row.amount, 0);
+        return {
+            issueDate: document.getElementById('issue_date')?.value || '',
+            validUntil: document.getElementById('valid_until')?.value || '',
+            companyName: document.getElementById('company_name')?.value || '株式会社 開花',
+            department: document.getElementById('department')?.value || '',
+            contactPerson: document.getElementById('contact_person')?.value || '',
+            subject: document.getElementById('subject')?.value || '見積り依頼書',
+            notes: document.querySelector('textarea[name="notes"]')?.value || '',
+            rows,
+            total
+        };
+    }
+
+    function renderPreview(data) {
+        setText('preview-company-name', data.companyName);
+        setText('preview-department', data.department);
+        setText('preview-contact-person', data.contactPerson ? `${data.contactPerson} 様` : '');
+        setText('preview-issue-date', data.issueDate || '-');
+        setText('preview-valid-until', data.validUntil || '-');
+        setText('preview-subject-inline', data.subject);
+        setText('preview-notes', data.notes || 'なし');
+        setText('preview-total-main', `${formatYen(data.total)} (税込)`);
+        setText('preview-item-count', `${data.rows.reduce((total, row) => total + row.quantity, 0)} 点`);
+        setText('preview-subtotal', formatYen(data.total));
+        setText('preview-tax', Math.floor(data.total * 10 / 110).toLocaleString('ja-JP'));
+        setText('preview-total', formatYen(data.total));
+
+        const validRow = document.getElementById('preview-valid-row');
+        if (validRow) {
+            validRow.style.display = data.validUntil ? '' : 'none';
+        }
+
+        const body = document.getElementById('preview-items-body');
+        body.innerHTML = '';
+        const visibleRows = Math.max(8, data.rows.length);
+        for (let index = 0; index < visibleRows; index += 1) {
+            const item = data.rows[index];
+            const row = document.createElement('tr');
+            const values = item
+                ? [index + 1, item.itemName, item.quantity, formatYen(item.unitPrice), formatYen(item.amount)]
+                : [index + 1, '', '', '', ''];
+            values.forEach((value, valueIndex) => {
+                const cell = document.createElement('td');
+                cell.textContent = value;
+                if ([0, 2, 3, 4].includes(valueIndex)) {
+                    cell.classList.add(valueIndex >= 3 ? 'text-right' : 'text-center');
+                }
+                row.appendChild(cell);
+            });
+            body.appendChild(row);
+        }
+    }
+
+    function validateBeforePreview() {
+        if (!form.reportValidity()) {
+            return false;
+        }
+        const data = collectPreviewData();
+        if (data.rows.length === 0) {
+            alert('商品名・内容を1件以上入力してください。');
+            return false;
+        }
+        return data;
+    }
+
+    function openPreview() {
+        const data = validateBeforePreview();
+        if (!data) {
+            return;
+        }
+        renderPreview(data);
+        previewModal.classList.add('open');
+        previewModal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closePreview() {
+        previewModal.classList.remove('open');
+        previewModal.setAttribute('aria-hidden', 'true');
+    }
+
+    function submitCompletedFromPreview() {
+        const data = validateBeforePreview();
+        if (!data) {
+            closePreview();
+            return;
+        }
+        form.querySelectorAll('input[data-preview-status]').forEach((input) => input.remove());
+        const statusInput = document.createElement('input');
+        statusInput.type = 'hidden';
+        statusInput.name = 'status';
+        statusInput.value = 'completed';
+        statusInput.dataset.previewStatus = 'true';
+        form.appendChild(statusInput);
+        form.submit();
+    }
+
+    if (reflectAllSourceItemsButton) {
+        reflectAllSourceItemsButton.addEventListener('click', () => {
+            document.querySelectorAll('input[name="source_invoice_item_choice[]"]').forEach((input) => {
+                input.checked = true;
+            });
+            reflectSelectedSourceItems();
+        });
+    }
+
+    document.querySelectorAll('input[name="source_invoice_item_choice[]"]').forEach((input) => {
+        input.addEventListener('change', reflectSelectedSourceItems);
+    });
+
+    if (isSourceMode) {
+        reflectSelectedSourceItems();
+    }
+
+    if (addRowButton && !isSourceMode) {
+        addRowButton.addEventListener('click', () => createRow());
+    }
+
+    if (productSelect) {
+        productSelect.addEventListener('change', updateProductMeta);
+        updateProductMeta();
+    }
+
+    if (addProductButton) {
+        addProductButton.addEventListener('click', () => {
+            const data = selectedProductData();
+            if (!data) {
+                alert('追加する商品を選択してください。');
+                return;
+            }
+            const blankRow = findBlankRow();
+            if (blankRow) {
+                fillRow(blankRow, data);
+            } else {
+                createRow(data);
+            }
+            productSelect.value = '';
+            updateProductMeta();
+        });
+    }
+
+    if (openPreviewButton) {
+        openPreviewButton.addEventListener('click', openPreview);
+    }
+
+    if (completeFromPreviewButton) {
+        completeFromPreviewButton.addEventListener('click', submitCompletedFromPreview);
+    }
+
+    document.querySelectorAll('[data-close-preview]').forEach((button) => {
+        button.addEventListener('click', closePreview);
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && previewModal.classList.contains('open')) {
+            closePreview();
+        }
+    });
+
+    document.querySelectorAll('#items-body .item-row').forEach(bindRowEvents);
+    updateRowNumbers();
+    updateTotalAmount();
+});
+</script>
+{% endblock %}

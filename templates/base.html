@@ -1,0 +1,2556 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, viewport-fit=cover">
+    <title>{% block title %}株式会社 開花{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32x32.png') }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16x16.png') }}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+    <meta name="theme-color" content="#1a1a2e">
+    <style>
+        .history-back-bar {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 0.55rem;
+            flex-wrap: wrap;
+            margin-bottom: 0.9rem;
+        }
+
+        .history-back-button,
+        .history-back-inline-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.45rem 0.8rem;
+            border: 1px solid #d1d5db;
+            border-radius: 999px;
+            background: #fff;
+            color: #475569;
+            font-size: 0.85rem;
+            font-weight: 700;
+            line-height: 1.5;
+            letter-spacing: 0.02em;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.2s ease;
+        }
+
+        .history-back-button:hover,
+        .history-back-inline-item:hover {
+            background: #f8fafc;
+            border-color: #94a3b8;
+            color: #0f172a;
+        }
+
+        .context-back-inline-source:empty {
+            display: none !important;
+        }
+
+        .analytics-detail-trigger {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            margin-top: 0.6rem;
+            padding: 0.35rem 0.7rem;
+            border: 1px solid #cbd5e1;
+            border-radius: 999px;
+            background: #fff;
+            color: #334155;
+            font-size: 0.78rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .analytics-detail-trigger:hover {
+            border-color: #93c5fd;
+            color: #1d4ed8;
+            background: #eff6ff;
+        }
+
+        .analytics-detail-modal {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            background: rgba(15, 23, 42, 0.55);
+            z-index: 2000;
+        }
+
+        .analytics-detail-modal.is-open {
+            display: flex;
+        }
+
+        .analytics-detail-dialog {
+            width: min(720px, 100%);
+            max-height: min(85vh, 760px);
+            overflow-y: auto;
+            background: #fff;
+            border-radius: 18px;
+            box-shadow: 0 24px 60px rgba(15, 23, 42, 0.24);
+            border: 1px solid #dbeafe;
+        }
+
+        .analytics-detail-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+            padding: 1.1rem 1.2rem 0.9rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .analytics-detail-header h3 {
+            margin: 0;
+            font-size: 1.05rem;
+            color: #0f172a;
+            line-height: 1.55;
+            letter-spacing: 0.03em;
+        }
+
+        .analytics-detail-close {
+            border: none;
+            background: transparent;
+            color: #64748b;
+            font-size: 1.5rem;
+            line-height: 1;
+            cursor: pointer;
+        }
+
+        .analytics-detail-close:hover {
+            color: #0f172a;
+        }
+
+        .analytics-detail-body {
+            padding: 1rem 1.2rem 1.2rem;
+            display: grid;
+            gap: 0.9rem;
+        }
+
+        .analytics-detail-formula {
+            padding: 0.85rem 0.95rem;
+            border-radius: 12px;
+            background: #eff6ff;
+            color: #1d4ed8;
+            font-size: 0.9rem;
+            line-height: 1.8;
+            letter-spacing: 0.02em;
+        }
+
+        .analytics-detail-lines {
+            display: grid;
+            gap: 0.55rem;
+        }
+
+        .analytics-detail-line {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+            padding: 0.7rem 0.8rem;
+            border-radius: 10px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+        }
+
+        .analytics-detail-line-label {
+            color: #475569;
+            font-size: 0.9rem;
+            line-height: 1.75;
+            letter-spacing: 0.02em;
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+
+        .analytics-detail-line-value {
+            color: #0f172a;
+            font-size: 0.92rem;
+            font-weight: 700;
+            text-align: right;
+            line-height: 1.65;
+            flex: 0 0 auto;
+            padding-left: 0.5rem;
+        }
+
+        .analytics-detail-note {
+            padding: 0.75rem 0.85rem;
+            border-radius: 10px;
+            background: #f8fafc;
+            color: #64748b;
+            font-size: 0.84rem;
+            line-height: 1.8;
+            letter-spacing: 0.02em;
+        }
+
+        .announcement-toast {
+            position: fixed;
+            right: 1rem;
+            bottom: 1rem;
+            z-index: 3200;
+            width: min(420px, calc(100vw - 1.5rem));
+            display: none;
+            gap: 0.9rem;
+            padding: 1rem 1.05rem;
+            border-radius: 18px;
+            background: #ffffff;
+            color: #0f172a;
+            box-shadow: 0 22px 60px rgba(15, 23, 42, 0.16);
+            border: 1px solid #dbeafe;
+        }
+
+        .announcement-toast.is-visible {
+            display: flex;
+            animation: announcement-toast-slide-in 0.22s ease-out;
+        }
+
+        .announcement-toast-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 72px;
+            height: 34px;
+            padding: 0 0.85rem;
+            border-radius: 999px;
+            background: #dbeafe;
+            color: #1d4ed8;
+            font-size: 0.8rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            flex: 0 0 auto;
+        }
+
+        .announcement-toast[data-type="important"] .announcement-toast-badge {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .announcement-toast[data-type="warning"] .announcement-toast-badge {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .announcement-toast[data-type="success"] .announcement-toast-badge {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .announcement-toast-body {
+            min-width: 0;
+            flex: 1 1 auto;
+            display: grid;
+            gap: 0.38rem;
+        }
+
+        .announcement-toast-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 0.75rem;
+        }
+
+        .announcement-toast-title {
+            margin: 0;
+            font-size: 0.98rem;
+            line-height: 1.6;
+            color: #0f172a;
+            word-break: break-word;
+        }
+
+        .announcement-toast-content {
+            margin: 0;
+            color: #334155;
+            line-height: 1.75;
+            font-size: 0.9rem;
+            word-break: break-word;
+        }
+
+        .announcement-toast-meta {
+            margin: 0;
+            color: #64748b;
+            font-size: 0.8rem;
+            line-height: 1.6;
+        }
+
+        .announcement-toast-close {
+            border: none;
+            background: #f1f5f9;
+            color: #334155;
+            font-size: 1.2rem;
+            line-height: 1;
+            cursor: pointer;
+            width: 1.9rem;
+            height: 1.9rem;
+            border-radius: 999px;
+            padding: 0;
+            flex: 0 0 auto;
+        }
+
+        .announcement-toast-close:hover {
+            background: #e2e8f0;
+            color: #0f172a;
+        }
+
+        @keyframes announcement-toast-slide-in {
+            from {
+                opacity: 0;
+                transform: translateY(12px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @media (max-width: 640px) {
+            .announcement-toast {
+                right: 0.75rem;
+                left: 0.75rem;
+                bottom: 0.75rem;
+                width: auto;
+                padding: 0.95rem;
+            }
+
+            .announcement-toast-badge {
+                min-width: 64px;
+                height: 30px;
+                padding: 0 0.7rem;
+            }
+        }
+    </style>
+    <!-- PWA / ホーム画面追加時の設定 -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="開花在庫管理">
+    <meta name="application-name" content="開花在庫管理">
+</head>
+<body>
+    <script>
+        (function setupInitialLoadingState() {
+            const isAuthenticated = {{ current_user.is_authenticated|tojson }};
+            const storagePrefix = 'kaika:loadingShown:';
+            const loadingKey = {{ ('kaika:loadingShown:' ~ current_user.get_id())|tojson if current_user.is_authenticated else 'null' }};
+
+            window.KAIKA_LOADING_KEY = loadingKey;
+            window.KAIKA_LOADING_STARTED_AT = Date.now();
+            window.KAIKA_LOADING_SHOULD_SHOW = false;
+
+            try {
+                if (isAuthenticated && loadingKey) {
+                    if (sessionStorage.getItem(loadingKey) !== '1') {
+                        window.KAIKA_LOADING_SHOULD_SHOW = true;
+                        document.documentElement.classList.add('show-app-loading');
+                    }
+                    return;
+                }
+
+                Object.keys(sessionStorage).forEach(function (key) {
+                    if (key.indexOf(storagePrefix) === 0) {
+                        sessionStorage.removeItem(key);
+                    }
+                });
+            } catch (error) {
+                if (isAuthenticated) {
+                    window.KAIKA_LOADING_SHOULD_SHOW = true;
+                    document.documentElement.classList.add('show-app-loading');
+                }
+            }
+        })();
+    </script>
+    <div class="app-loading-screen" id="appLoadingScreen" aria-label="読み込み中">
+        <img src="{{ url_for('static', filename='brand/kaika-header-logo-transparent.png') }}" alt="開花">
+    </div>
+    {% if current_user.is_authenticated %}
+    {% set nav_display_name = format_header_display_name(current_user.display_name, current_user.username, role=current_user.role, last_name=current_user.last_name) %}
+    <nav class="navbar">
+        <div class="nav-container">
+            <button type="button" class="hamburger-menu" onclick="toggleSidebar()">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+            <div class="nav-logo-center" aria-label="開花">
+                <img src="{{ url_for('static', filename='brand/kaika-header-logo-transparent.png') }}" alt="開花">
+            </div>
+            <div class="nav-right">
+                <button onclick="openProfitCalculator()" class="btn btn-calculator btn-sm" aria-label="計算式" title="計算式">計算式</button>
+            </div>
+            <div class="nav-user" id="navUser">
+                <div class="user-menu-trigger" onclick="toggleUserMenu(event)" title="{{ nav_display_name }}">
+                    <span class="user-name">{{ nav_display_name }}</span>
+                    {% if current_user.is_owner() and nav_display_name != 'オーナー' %}
+                    <span class="user-badge owner">オーナー</span>
+                    {% elif current_user.is_admin() and nav_display_name != '管理者' %}
+                    <span class="user-badge">管理者</span>
+                    {% endif %}
+                    <span class="menu-arrow">▼</span>
+                </div>
+                <div class="user-dropdown">
+                    <a href="{{ url_for('profile') }}">設定</a>
+                    <div class="divider"></div>
+                    <a href="{{ url_for('logout') }}">ログアウト</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+    
+    <!-- 支払い遅延警告バナー -->
+    {% if current_user.is_payment_overdue() %}
+    <div class="payment-warning-banner">
+        <span class="warning-icon">⚠️</span>
+        <span class="warning-text">月謝のお支払いが確認できておりません。お早めにお支払いをお願いいたします。</span>
+        <a href="{{ url_for('profile') }}" class="warning-link">決済情報を確認</a>
+        <a href="{{ url_for('disposal_options') }}" class="warning-link disposal-link">📦 商品処分オプション</a>
+    </div>
+    {% endif %}
+    
+    <!-- サイドバーメニュー -->
+    <div class="sidebar-edge-trigger" aria-hidden="true"></div>
+    <div class="sidebar-overlay" onclick="toggleSidebar()"></div>
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <span>メニュー</span>
+            <button type="button" class="sidebar-close" onclick="toggleSidebar()">×</button>
+        </div>
+        <div class="sidebar-nav">
+            {% if current_user.is_admin() %}
+            {% include "_sidebar_admin.html" %}
+            {% else %}
+            {% if current_user.is_admin() %}
+            <div class="sidebar-group-label">ホーム</div>
+            <div class="sidebar-category">
+                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_dashboard', 'admin_analytics_kaika_sales', 'user_analytics'] %}active{% endif %}" onclick="toggleCategory(this)">
+                    全体売上管理
+                    <span class="category-arrow">▼</span>
+                </button>
+                <div class="sidebar-category-items {% if request.endpoint in ['admin_dashboard', 'admin_analytics_kaika_sales', 'user_analytics'] %}open{% endif %}">
+                    <a href="{{ url_for('admin_dashboard') }}" class="{% if request.endpoint == 'admin_dashboard' %}active{% endif %}">全体売上管理</a>
+                    <a href="{{ url_for('admin_analytics_kaika_sales') }}" class="{% if request.endpoint == 'admin_analytics_kaika_sales' %}active{% endif %}">開花売上分析</a>
+                    <a href="{{ url_for('user_analytics') }}" class="{% if request.endpoint == 'user_analytics' %}active{% endif %}">全体クライアント売上分析</a>
+                </div>
+            </div>
+            {% endif %}
+            <!-- ========== ユーザー機能 ========== -->
+            <a href="{{ url_for('user_home') }}" class="{% if request.endpoint == 'user_home' %}active{% endif %}">ホーム</a>
+            {% if feature_plans_enabled %}
+            <a href="{{ url_for('feature_plans.plans') }}" class="{% if request.endpoint == 'feature_plans.plans' %}active{% endif %}">利用プラン</a>
+            {% if has_plan_feature('inventory_manage') %}
+            <a href="{{ url_for('self_inventory_new') }}">自分の在庫を登録</a>
+            <a href="{{ url_for('inventory_intake_new') }}">開花へ預ける・登録を依頼</a>
+            {% endif %}
+            <a href="{{ url_for('inventory_intakes') }}">預け入れ・登録受付</a>
+            {% endif %}
+            
+            <!-- 商品管理 -->
+            <div class="sidebar-category">
+                <button class="sidebar-category-toggle {% if request.endpoint in ['index', 'user_announcements_page', 'user_announcement_detail_page', 'admin_user_products', 'long_term_items', 'sales_agency_my_requests', 'sales_agency_my_requests_service'] %}active{% endif %}" onclick="toggleCategory(this)">
+                    <span class="menu-label">商品管理</span>
+                    <span class="category-arrow">▼</span>
+                </button>
+                <div class="sidebar-category-items {% if request.endpoint in ['index', 'user_announcements_page', 'user_announcement_detail_page', 'admin_user_products', 'long_term_items', 'sales_agency_my_requests', 'sales_agency_my_requests_service'] %}open{% endif %}">
+                    {% if current_user.is_admin() %}
+                    <a href="{{ url_for('admin_user_products') }}" class="{% if request.endpoint == 'admin_user_products' and not request.args.get('long_term_only') %}active{% endif %}">商品一覧</a>
+                    <a href="{{ url_for('admin_user_products', long_term_only=1) }}" class="{% if request.endpoint == 'admin_user_products' and request.args.get('long_term_only') %}active{% endif %}">長期保存商品</a>
+                    {% else %}
+                    <a href="{{ url_for('index') }}" class="{% if request.endpoint == 'index' %}active{% endif %}">商品一覧</a>
+                    <a href="{{ url_for('long_term_items') }}" class="{% if request.endpoint == 'long_term_items' %}active{% endif %}">
+                        <span class="menu-label">長期保存商品</span>
+                        {% if get_long_term_item_count() > 0 %}
+                        <span class="menu-badge-inline warning">{{ get_long_term_item_count() }}</span>
+                        {% endif %}
+                    </a>
+                    <a href="{{ url_for('sales_agency_my_requests') }}" class="{% if request.endpoint in ['sales_agency_my_requests', 'sales_agency_my_requests_service'] %}active{% endif %}">販売代行申請履歴</a>
+                    {% endif %}
+                    {% if not current_user.is_admin() %}
+                    <a href="{{ url_for('user_announcements_page') }}" class="{% if request.endpoint == 'user_announcements_page' %}active{% endif %}">お知らせ</a>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- 書類一覧 -->
+            <div class="sidebar-category">
+                <button class="sidebar-category-toggle {% if request.endpoint in ['user_document_list', 'user_mitsumori_requests', 'documents', 'documents_history_category', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view', 'user_mitsumori_list', 'user_mitsumori_add', 'user_mitsumori_view', 'user_mitsumori_edit', 'user_kaitori_shoudaku_list', 'user_kaitori_shoudaku_add', 'user_kaitori_shoudaku_view', 'user_kaitori_shoudaku_edit'] %}active{% endif %}" onclick="toggleCategory(this)">
+                    書類一覧
+                    <span class="category-arrow">▼</span>
+                </button>
+                <div class="sidebar-category-items {% if request.endpoint in ['user_document_list', 'user_mitsumori_requests', 'documents', 'documents_history_category', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view', 'user_mitsumori_list', 'user_mitsumori_add', 'user_mitsumori_view', 'user_mitsumori_edit', 'user_kaitori_shoudaku_list', 'user_kaitori_shoudaku_add', 'user_kaitori_shoudaku_view', 'user_kaitori_shoudaku_edit'] %}open{% endif %}">
+                    <div class="sidebar-subcategory">
+                        <div class="subcategory-label">作成する書類</div>
+                        <a href="{{ url_for('user_document_list') }}" class="{% if request.endpoint in ['user_document_list', 'user_mitsumori_requests', 'user_mitsumori_list', 'user_mitsumori_add', 'user_mitsumori_edit', 'user_kaitori_shoudaku_list', 'user_kaitori_shoudaku_add', 'user_kaitori_shoudaku_edit'] %}active{% endif %}">書類一覧</a>
+                    </div>
+
+                    <div class="sidebar-subcategory">
+                        <div class="subcategory-label">書類履歴</div>
+                        <a href="{{ url_for('documents') }}" class="{% if request.endpoint in ['documents', 'documents_history_category', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view', 'user_mitsumori_view', 'user_kaitori_shoudaku_view'] %}active{% endif %}">
+                            <span class="menu-label">書類履歴</span>
+                            {% if unread_document_history_count|default(0) > 0 %}
+                            <span class="menu-badge-inline">{{ unread_document_history_count }}</span>
+                            {% endif %}
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            {% if current_user.is_admin() %}
+            {% set admin_notification_count = get_pending_sale_request_count() + get_pending_disposal_count() %}
+            <div class="sidebar-category">
+                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_shipping_requests', 'admin_completion_requests', 'admin_disposal_requests', 'admin_sales_agency_requests', 'admin_sales_agency_request_detail'] %}active{% endif %}" onclick="toggleCategory(this)">
+                    <span class="menu-label">通知ボックス</span>
+                    {% if admin_notification_count > 0 %}
+                    <span class="menu-badge">{{ admin_notification_count }}</span>
+                    {% endif %}
+                    <span class="category-arrow">▼</span>
+                </button>
+                <div class="sidebar-category-items {% if request.endpoint in ['admin_shipping_requests', 'admin_completion_requests', 'admin_disposal_requests', 'admin_sales_agency_requests', 'admin_sales_agency_request_detail'] %}open{% endif %}">
+                    <a href="{{ url_for('admin_shipping_requests') }}" class="{% if request.endpoint == 'admin_shipping_requests' %}active{% endif %}">
+                        <span class="menu-label">発送BOX</span>
+                        {% if get_pending_sale_request_count_by_type('shipping_request') > 0 %}
+                        <span class="menu-badge-inline">{{ get_pending_sale_request_count_by_type('shipping_request') }}</span>
+                        {% endif %}
+                    </a>
+                    <a href="{{ url_for('admin_completion_requests') }}" class="{% if request.endpoint == 'admin_completion_requests' %}active{% endif %}">
+                        <span class="menu-label">取引完了BOX</span>
+                        {% if get_pending_sale_request_count_by_type('completion_report') > 0 %}
+                        <span class="menu-badge-inline">{{ get_pending_sale_request_count_by_type('completion_report') }}</span>
+                        {% endif %}
+                    </a>
+                    <a href="{{ url_for('admin_sales_agency_requests', service_type='wholesale') }}" class="{% if (request.endpoint == 'admin_sales_agency_requests' and request.args.get('service_type') == 'wholesale') or (request.endpoint == 'admin_sales_agency_request_detail' and req is defined and req.service_type == 'wholesale') %}active{% endif %}">
+                        <span class="menu-label">業者卸販売BOX</span>
+                        {% if get_pending_sales_agency_count_by_service('wholesale') > 0 %}
+                        <span class="menu-badge-inline">{{ get_pending_sales_agency_count_by_service('wholesale') }}</span>
+                        {% endif %}
+                    </a>
+                    <a href="{{ url_for('admin_sales_agency_requests', service_type='auction') }}" class="{% if (request.endpoint == 'admin_sales_agency_requests' and request.args.get('service_type') == 'auction') or (request.endpoint == 'admin_sales_agency_request_detail' and req is defined and req.service_type == 'auction') %}active{% endif %}">
+                        <span class="menu-label">業者オークションBOX</span>
+                        {% if get_pending_sales_agency_count_by_service('auction') > 0 %}
+                        <span class="menu-badge-inline">{{ get_pending_sales_agency_count_by_service('auction') }}</span>
+                        {% endif %}
+                    </a>
+                    <a href="{{ url_for('admin_sales_agency_requests', service_type='simultaneous') }}" class="{% if (request.endpoint == 'admin_sales_agency_requests' and request.args.get('service_type') == 'simultaneous') or (request.endpoint == 'admin_sales_agency_request_detail' and req is defined and req.service_type == 'simultaneous') %}active{% endif %}">
+                        <span class="menu-label">同時出品BOX</span>
+                        {% if get_pending_sales_agency_count_by_service('simultaneous') > 0 %}
+                        <span class="menu-badge-inline">{{ get_pending_sales_agency_count_by_service('simultaneous') }}</span>
+                        {% endif %}
+                    </a>
+                    <a href="{{ url_for('admin_disposal_requests') }}" class="{% if request.endpoint == 'admin_disposal_requests' %}active{% endif %}">
+                        <span class="menu-label">在庫処分申請</span>
+                        {% if get_pending_disposal_count() > 0 %}
+                        <span class="menu-badge-inline">{{ get_pending_disposal_count() }}</span>
+                        {% endif %}
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- データ確認 -->
+            <div class="sidebar-category">
+                <button class="sidebar-category-toggle {% if request.endpoint in ['user_analytics', 'reports', 'report_monthly', 'report_inventory', 'report_annual'] %}active{% endif %}" onclick="toggleCategory(this)">
+                    管理分析
+                    <span class="category-arrow">▼</span>
+                </button>
+                <div class="sidebar-category-items {% if request.endpoint in ['user_analytics', 'reports', 'report_monthly', 'report_inventory', 'report_annual'] %}open{% endif %}">
+                    {% if current_user.is_admin() %}
+                    <a href="{{ url_for('user_analytics') }}" class="{% if request.endpoint == 'user_analytics' %}active{% endif %}">クライアント別分析</a>
+                    <a href="{{ url_for('reports') }}" class="{% if request.endpoint in ['reports', 'report_monthly', 'report_inventory', 'report_annual'] %}active{% endif %}">レポート</a>
+                    {% else %}
+                    <a href="{{ url_for('user_analytics') }}" class="{% if request.endpoint == 'user_analytics' %}active{% endif %}">売上分析</a>
+                    <a href="{{ url_for('reports') }}" class="{% if request.endpoint in ['reports', 'report_monthly', 'report_inventory', 'report_annual'] %}active{% endif %}">レポート・CSV</a>
+                    {% endif %}
+                </div>
+            </div>
+            
+            {% if current_user.is_admin() %}
+            <!-- マスター設定（ユーザー機能用） -->
+            <div class="sidebar-category">
+                <button class="sidebar-category-toggle {% if request.endpoint == 'user_master_settings' %}active{% endif %}" onclick="toggleCategory(this)">
+                    マスター設定
+                    <span class="category-arrow">▼</span>
+                </button>
+                <div class="sidebar-category-items {% if request.endpoint == 'user_master_settings' %}open{% endif %}">
+                    <a href="{{ url_for('user_master_settings') }}" class="{% if request.endpoint == 'user_master_settings' %}active{% endif %}">商品登録用マスター</a>
+                </div>
+            </div>
+            {% endif %}
+            
+            {% if current_user.is_admin() %}
+            <!-- 機能（ユーザー機能用） -->
+            <div class="sidebar-category">
+                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_announcements', 'admin_stripe_dashboard'] or 'line' in request.endpoint %}active{% endif %}" onclick="toggleCategory(this)">
+                    機能
+                    <span class="category-arrow">▼</span>
+                </button>
+                <div class="sidebar-category-items {% if request.endpoint in ['admin_announcements', 'admin_stripe_dashboard'] or 'line' in request.endpoint %}open{% endif %}">
+                    <a href="{{ url_for('admin_announcements') }}" class="{% if request.endpoint == 'admin_announcements' %}active{% endif %}">お知らせ</a>
+                    {% if current_user.is_owner() %}
+                    <a href="{{ url_for('admin_line_dashboard_v2') }}" class="{% if 'line' in request.endpoint %}active{% endif %}">LINE連携</a>
+                    {% endif %}
+                    <a href="{{ url_for('admin_stripe_dashboard') }}" class="{% if request.endpoint == 'admin_stripe_dashboard' %}active{% endif %}">決済管理</a>
+                </div>
+            </div>
+            
+            <!-- 問い合わせ管理（管理者用） -->
+            <div class="sidebar-category">
+                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_inquiries', 'admin_inquiry_view', 'admin_inquiry_reply'] %}active{% endif %}" onclick="toggleCategory(this)">
+                    <span class="menu-label">問い合わせ管理</span>
+                    {% if get_unread_inquiry_count() > 0 %}
+                    <span class="menu-badge">{{ get_unread_inquiry_count() }}</span>
+                    {% endif %}
+                    <span class="category-arrow">▼</span>
+                </button>
+                <div class="sidebar-category-items {% if request.endpoint in ['admin_inquiries', 'admin_inquiry_view', 'admin_inquiry_reply'] %}open{% endif %}">
+                    <a href="{{ url_for('admin_inquiries') }}" class="{% if request.endpoint in ['admin_inquiries', 'admin_inquiry_view'] %}active{% endif %}">問い合わせ一覧</a>
+                </div>
+            </div>
+            {% endif %}
+            
+            {% if not current_user.is_admin() %}
+            <!-- お問い合わせ（一般ユーザーのみ表示） -->
+            <div class="sidebar-category">
+                <button class="sidebar-category-toggle {% if request.endpoint in ['inquiry_list', 'inquiry_new', 'inquiry_view', 'inquiry_reply'] %}active{% endif %}" onclick="toggleCategory(this)">
+                    お問い合わせ
+                    <span class="category-arrow">▼</span>
+                </button>
+                <div class="sidebar-category-items {% if request.endpoint in ['inquiry_list', 'inquiry_new', 'inquiry_view', 'inquiry_reply'] %}open{% endif %}">
+                    <a href="{{ url_for('inquiry_list') }}" class="{% if request.endpoint in ['inquiry_list', 'inquiry_view'] %}active{% endif %}">問い合わせ一覧</a>
+                    <a href="{{ url_for('inquiry_new') }}" class="{% if request.endpoint == 'inquiry_new' %}active{% endif %}">新規問い合わせ</a>
+                </div>
+            </div>
+            
+            <!-- サービス（一般ユーザーのみ表示） -->
+            <div class="sidebar-category">
+                <button class="sidebar-category-toggle {% if request.endpoint in ['public_proxy_service_list', 'public_proxy_service', 'public_proxy_service_history'] %}active{% endif %}" onclick="toggleCategory(this)">
+                    サービス
+                    <span class="category-arrow">▼</span>
+                </button>
+                <div class="sidebar-category-items {% if request.endpoint in ['public_proxy_service_list', 'public_proxy_service', 'public_proxy_service_history'] %}open{% endif %}">
+                    <a href="{{ url_for('public_proxy_service_list') }}" class="{% if request.endpoint in ['public_proxy_service_list', 'public_proxy_service'] %}active{% endif %}">代行仕入れサービス</a>
+                    <a href="{{ url_for('public_proxy_service_history') }}" class="{% if request.endpoint == 'public_proxy_service_history' %}active{% endif %}">オークション履歴</a>
+                </div>
+            </div>
+            {% endif %}
+            
+            {% if current_user.is_admin() %}
+            <!-- ========== 開花管理 ========== -->
+            <div class="sidebar-group-label admin-label">開花管理</div>
+            
+            <!-- 書類 -->
+            <div class="sidebar-category">
+                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_shikiriosho_add', 'admin_shikiriosho_list', 'admin_shikiriosho_view', 'admin_shikiriosho_edit', 'admin_kaitori_add', 'admin_kaitori_list', 'admin_kaitori_view', 'admin_kaitori_edit', 'admin_mitsumori_add', 'admin_mitsumori_list', 'admin_mitsumori_view', 'admin_mitsumori_edit', 'admin_kaitori_shoudaku_list', 'admin_kaitori_shoudaku_add', 'admin_kaitori_shoudaku_view', 'admin_mitsumori_houjin_list', 'admin_mitsumori_houjin_add'] %}active{% endif %}" onclick="toggleCategory(this)">
+                    書類
+                    <span class="category-arrow">▼</span>
+                </button>
+                <div class="sidebar-category-items {% if request.endpoint in ['admin_shikiriosho_add', 'admin_shikiriosho_list', 'admin_shikiriosho_view', 'admin_shikiriosho_edit', 'admin_kaitori_add', 'admin_kaitori_list', 'admin_kaitori_view', 'admin_kaitori_edit', 'admin_mitsumori_add', 'admin_mitsumori_list', 'admin_mitsumori_view', 'admin_mitsumori_edit', 'admin_kaitori_shoudaku_list', 'admin_kaitori_shoudaku_add', 'admin_kaitori_shoudaku_view', 'admin_mitsumori_houjin_list', 'admin_mitsumori_houjin_add'] %}open{% endif %}">
+                    
+                    <!-- 書類作成 -->
+                    <div class="sidebar-subcategory">
+                        <div class="subcategory-label">書類作成</div>
+                        <a href="{{ url_for('admin_shikiriosho_list') }}" class="{% if request.endpoint in ['admin_shikiriosho_add', 'admin_shikiriosho_list', 'admin_shikiriosho_view', 'admin_shikiriosho_edit'] %}active{% endif %}">精算書</a>
+                        <a href="{{ url_for('admin_kaitori_list') }}" class="{% if request.endpoint in ['admin_kaitori_add', 'admin_kaitori_list', 'admin_kaitori_view', 'admin_kaitori_edit'] %}active{% endif %}">買取明細書</a>
+                        <a href="{{ url_for('admin_mitsumori_list') }}" class="{% if request.endpoint in ['admin_mitsumori_add', 'admin_mitsumori_list', 'admin_mitsumori_view', 'admin_mitsumori_edit'] %}active{% endif %}">見積依頼書</a>
+                        <a href="{{ url_for('admin_kaitori_shoudaku_list') }}" class="{% if request.endpoint in ['admin_kaitori_shoudaku_list', 'admin_kaitori_shoudaku_add', 'admin_kaitori_shoudaku_view'] %}active{% endif %}">買取承諾書（法人版）</a>
+                    </div>
+                    
+                </div>
+            </div>
+            
+            <!-- 商品管理（管理者の商品） -->
+            <div class="sidebar-category">
+                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_items', 'admin_add_item'] %}active{% endif %}" onclick="toggleCategory(this)">
+                    商品管理
+                    <span class="category-arrow">▼</span>
+                </button>
+                <div class="sidebar-category-items {% if request.endpoint in ['admin_items', 'admin_add_item'] %}open{% endif %}">
+                    <a href="{{ url_for('admin_items') }}" class="{% if request.endpoint == 'admin_items' or request.endpoint == 'admin_add_item' %}active{% endif %}">商品一覧</a>
+                </div>
+            </div>
+            
+            <!-- データ確認 -->
+            <div class="sidebar-category">
+                <button class="sidebar-category-toggle {% if request.endpoint == 'admin_analytics_kaika' %}active{% endif %}" onclick="toggleCategory(this)">
+                    開花分析
+                    <span class="category-arrow">▼</span>
+                </button>
+                <div class="sidebar-category-items {% if request.endpoint == 'admin_analytics_kaika' %}open{% endif %}">
+                    {% if current_user.has_permission('analytics') %}
+                    <a href="{{ url_for('admin_analytics_kaika') }}" class="{% if request.endpoint == 'admin_analytics_kaika' %}active{% endif %}">開花管理分析</a>
+                    {% else %}
+                    <span class="sidebar-item-disabled">分析権限が付与されていません</span>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- マスター設定 -->
+            <div class="sidebar-category">
+                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_master_settings', 'admin_backup'] %}active{% endif %}" onclick="toggleCategory(this)">
+                    マスター設定
+                    <span class="category-arrow">▼</span>
+                </button>
+                <div class="sidebar-category-items {% if request.endpoint in ['admin_master_settings', 'admin_backup'] %}open{% endif %}">
+                    <a href="{{ url_for('admin_master_settings') }}" class="{% if request.endpoint == 'admin_master_settings' %}active{% endif %}">商品登録用マスター</a>
+                    {% if current_user.has_permission('backup') %}
+                    <a href="{{ url_for('admin_backup') }}" class="{% if request.endpoint == 'admin_backup' %}active{% endif %}">バックアップ</a>
+                    {% else %}
+                    <span class="sidebar-item-disabled">バックアップ権限が付与されていません</span>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- ===== 開花管理のみ ===== -->
+            
+            <!-- ユーザー管理 -->
+            <div class="sidebar-category">
+                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_users', 'admin_add_user', 'admin_edit_user'] %}active{% endif %}" onclick="toggleCategory(this)">
+                    ユーザー管理
+                    <span class="category-arrow">▼</span>
+                </button>
+                <div class="sidebar-category-items {% if request.endpoint in ['admin_users', 'admin_add_user', 'admin_edit_user'] %}open{% endif %}">
+                    {% if current_user.has_permission('users') %}
+                    <a href="{{ url_for('admin_users') }}" class="{% if request.endpoint == 'admin_users' or request.endpoint == 'admin_add_user' or request.endpoint == 'admin_edit_user' %}active{% endif %}">ユーザー一覧</a>
+                    {% else %}
+                    <span class="sidebar-item-disabled">ユーザー管理権限が付与されていません</span>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- サービス -->
+            <div class="sidebar-category">
+                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_proxy_service', 'admin_proxy_service_history', 'admin_auction_keisan_list', 'admin_auction_keisan_view', 'admin_auction_keisan_edit'] %}active{% endif %}" onclick="toggleCategory(this)">
+                    サービス
+                    <span class="category-arrow">▼</span>
+                </button>
+                <div class="sidebar-category-items {% if request.endpoint in ['admin_proxy_service', 'admin_proxy_service_history', 'admin_auction_keisan_list', 'admin_auction_keisan_view', 'admin_auction_keisan_edit'] %}open{% endif %}">
+                    {% if current_user.can_manage_proxy_service() %}
+                    <a href="{{ url_for('admin_proxy_service') }}" class="{% if request.endpoint in ['admin_proxy_service', 'admin_proxy_service_history'] %}active{% endif %}">代行仕入れサービス</a>
+                    <a href="{{ url_for('admin_auction_keisan_list') }}" class="{% if request.endpoint in ['admin_auction_keisan_list', 'admin_auction_keisan_view', 'admin_auction_keisan_edit'] %}active{% endif %}">計算書</a>
+                    {% else %}
+                    <span class="sidebar-item-disabled">代行仕入れオークション掲載権が付与されていません</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+            {% endif %}
+        </div>
+    </aside>
+    {% endif %}
+    
+    <main class="container">
+        {% set history_back_fallback = url_for('admin_items') if current_user.is_authenticated and current_user.is_admin() else (url_for('index') if current_user.is_authenticated else url_for('login')) %}
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">
+                    {{ message }}
+                    <button class="alert-close" onclick="this.parentElement.remove()">×</button>
+                </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        {% set is_user_home = request.endpoint == 'user_home' %}
+        {% set hide_context_back = request.endpoint == 'admin_proxy_service_detail' and request.args.get('history_view') %}
+        {% set history_back_top_endpoints = [
+            'index',
+            'user_home',
+            'user_document_list',
+            'documents',
+            'user_analytics',
+            'inquiry_list',
+            'admin_dashboard',
+            'admin_items',
+            'admin_users',
+            'admin_documents_dashboard',
+            'admin_documents_dashboard_v2',
+            'admin_documents_history',
+            'admin_documents_history_v2',
+            'admin_documents_history_category',
+            'admin_mitsumori_add',
+            'admin_mitsumori_pdf',
+            'admin_kaitori_add',
+            'admin_kaitori_pdf',
+            'admin_kaitori_shoudaku_add',
+            'admin_kaitori_shoudaku_pdf',
+            'admin_shikiriosho_add',
+            'admin_auction_keisan_add',
+            'admin_auction_keisan_pdf',
+            'admin_vendor_documents',
+            'admin_vendors',
+            'admin_monthly_fee_settings',
+            'admin_monthly_settlements',
+            'admin_shipping_requests',
+            'admin_completion_requests',
+            'admin_sales_agency_requests',
+            'admin_disposal_requests',
+            'admin_analytics',
+            'admin_analytics_kaika',
+            'admin_analytics_kaika_sales',
+            'admin_inquiries',
+            'reports'
+        ] %}
+        {% set hide_history_back = request.endpoint == 'login' or request.path in ['/', '/admin', '/admin/home'] or request.endpoint in history_back_top_endpoints or hide_context_back %}
+        {% if not hide_history_back %}
+        <div
+            class="history-back-bar"
+            id="historyBackBar"
+            {% if is_user_home %}hidden data-home-conditional="true"{% endif %}>
+            <button
+                type="button"
+                class="history-back-button"
+                onclick="try { if (window.history.length > 1) { window.history.back(); } else if (document.referrer) { window.location.href = document.referrer; } else { window.location.href='{{ history_back_fallback }}'; } } catch (error) { window.location.href='{{ history_back_fallback }}'; }">
+                ← 1つ前の画面に戻る
+            </button>
+        </div>
+        {% endif %}
+
+        {% block content %}{% endblock %}
+    </main>
+    {% if current_user.is_authenticated and not current_user.is_admin() and not current_user.is_owner() %}
+    <div class="announcement-toast" id="announcementToast" data-type="info" aria-live="polite" aria-atomic="true">
+        <div class="announcement-toast-badge" id="announcementToastBadge">お知らせ</div>
+        <div class="announcement-toast-body">
+            <div class="announcement-toast-header">
+                <h3 class="announcement-toast-title" id="announcementToastTitle">開花からお知らせ</h3>
+                <button type="button" class="announcement-toast-close" id="announcementToastClose" aria-label="お知らせを閉じる">×</button>
+            </div>
+            <p class="announcement-toast-content" id="announcementToastContent"></p>
+            <p class="announcement-toast-meta" id="announcementToastMeta"></p>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- 利益計算式モーダル -->
+    <div class="profit-calc-modal" id="profitCalcModal">
+        <div class="profit-calc-overlay" onclick="closeProfitCalculator()"></div>
+        <div class="profit-calc-content">
+            <div class="profit-calc-header">
+                <h2>利益計算式</h2>
+                <button class="profit-calc-close" onclick="closeProfitCalculator()">×</button>
+            </div>
+            <div class="profit-calc-body">
+                <!-- 計算式の説明 -->
+                <div class="calc-formula-section">
+                    <h3>計算式</h3>
+                    <div class="formula-box">
+                        <div class="formula-item">
+                            <span class="formula-label">利益</span>
+                            <span class="formula-eq">=</span>
+                            <span class="formula-value">売上 − 仕入額 − 媒体手数料 − 販売タイプ手数料 − 送料</span>
+                        </div>
+                        <div class="formula-item">
+                            <span class="formula-label">利益率</span>
+                            <span class="formula-eq">=</span>
+                            <span class="formula-value">利益 ÷ 仕入れ金額 × 100</span>
+                        </div>
+                    </div>
+                    <div class="formula-box" style="margin-top: 0.5rem; font-size: 0.85rem; color: #64748b;">
+                        <div>※ 媒体手数料は売上 × {{ fee_settings.get('commission_normal', '10') }}%（マスター設定連動）</div>
+                        <div>※ 販売タイプ手数料は段階別固定額（マスター設定連動）</div>
+                    </div>
+                </div>
+                
+                <!-- 計算機 -->
+                <div class="calc-input-section">
+                    <h3>利益計算機</h3>
+                    <div class="calc-input-grid">
+                        <div class="calc-input-row full-width">
+                            <label>媒体手数料</label>
+                            <select id="calcPlatform" class="calc-select" onchange="onPlatformChange()">
+                                <option value="mercari" selected>メルカリ（{{ fee_settings.get('commission_normal', '10') }}%）</option>
+                                <option value="rakuma">ラクマ（{{ fee_settings.get('commission_normal', '10') }}%）</option>
+                                <option value="yahuoku">ヤフオク（{{ fee_settings.get('commission_normal', '10') }}%）</option>
+                                <option value="yahoo_fleamarket">ヤフーフリマ（{{ fee_settings.get('commission_normal', '10') }}%）</option>
+                                <option value="buyma">バイマ（{{ fee_settings.get('commission_normal', '10') }}%）</option>
+                                <option value="other">その他（手動設定）</option>
+                            </select>
+                        </div>
+                        <div class="calc-input-row full-width">
+                            <label>販売タイプ</label>
+                            <select id="calcSaleType" class="calc-select" onchange="onSaleTypeChange()">
+                                <option value="none">なし</option>
+                                <option value="photo_packing">撮影梱包発送</option>
+                                <option value="wholesale">業者販売</option>
+                                <option value="multi_listing">同時出品</option>
+                                <option value="auction">オークション出品代行</option>
+                            </select>
+                        </div>
+                        <div class="calc-input-row">
+                            <label>売上（税込）</label>
+                            <input type="number" id="calcSalePrice" placeholder="0" oninput="calculateProfit()">
+                            <span class="input-unit">円</span>
+                        </div>
+                        <div class="calc-input-row">
+                            <label>仕入額</label>
+                            <input type="number" id="calcPurchasePrice" placeholder="0" oninput="calculateProfit()">
+                            <span class="input-unit">円</span>
+                        </div>
+                        <div class="calc-input-row">
+                            <label>媒体手数料（%）</label>
+                            <input type="number" id="calcPlatformFeeRate" placeholder="10" value="{{ fee_settings.get('commission_normal', '10') }}" step="0.1" oninput="calculateProfit()" readonly style="background-color: #f1f5f9;">
+                            <span class="input-unit">%</span>
+                        </div>
+                        <div class="calc-input-row">
+                            <label>送料</label>
+                            <input type="number" id="calcShipping" placeholder="0" value="0" oninput="calculateProfit()">
+                            <span class="input-unit">円</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 計算結果 -->
+                <div class="calc-result-section">
+                    <h3>計算結果</h3>
+                    <div class="calc-result-grid">
+                        <div class="calc-result-row">
+                            <span class="result-label">媒体手数料</span>
+                            <span class="result-value" id="resultPlatformFee">¥0</span>
+                        </div>
+                        <div class="calc-result-row" id="resultSaleTypeFeeRow" style="display:none;">
+                            <span class="result-label" id="resultSaleTypeFeeLabel">販売タイプ手数料</span>
+                            <span class="result-value" id="resultSaleTypeFee">¥0</span>
+                        </div>
+                        <div class="calc-result-row highlight">
+                            <span class="result-label">利益</span>
+                            <span class="result-value" id="resultProfit">¥0</span>
+                        </div>
+                        <div class="calc-result-row highlight">
+                            <span class="result-label">利益率</span>
+                            <span class="result-value" id="resultProfitRate">0%</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 逆算機能 -->
+                <div class="calc-reverse-section">
+                    <h3>目標利益から売上を逆算</h3>
+                    <div class="calc-input-grid">
+                        <div class="calc-input-row full-width">
+                            <label>媒体手数料</label>
+                            <select id="calcReversePlatform" class="calc-select" onchange="onReversePlatformChange()">
+                                <option value="mercari" selected>メルカリ（{{ fee_settings.get('commission_normal', '10') }}%）</option>
+                                <option value="rakuma">ラクマ（{{ fee_settings.get('commission_normal', '10') }}%）</option>
+                                <option value="yahuoku">ヤフオク（{{ fee_settings.get('commission_normal', '10') }}%）</option>
+                                <option value="yahoo_fleamarket">ヤフーフリマ（{{ fee_settings.get('commission_normal', '10') }}%）</option>
+                                <option value="buyma">バイマ（{{ fee_settings.get('commission_normal', '10') }}%）</option>
+                                <option value="other">その他（手動設定）</option>
+                            </select>
+                        </div>
+                        <div class="calc-input-row full-width">
+                            <label>販売タイプ</label>
+                            <select id="calcReverseSaleType" class="calc-select" onchange="onReverseSaleTypeChange()">
+                                <option value="none">なし</option>
+                                <option value="photo_packing">撮影梱包発送</option>
+                                <option value="wholesale">業者販売</option>
+                                <option value="multi_listing">同時出品</option>
+                                <option value="auction">オークション出品代行</option>
+                            </select>
+                        </div>
+                        <div class="calc-input-row">
+                            <label>目標利益</label>
+                            <input type="number" id="calcTargetProfit" placeholder="0" oninput="calculateReversePrice()">
+                            <span class="input-unit">円</span>
+                        </div>
+                        <div class="calc-input-row">
+                            <label>仕入額</label>
+                            <input type="number" id="calcReversePurchase" placeholder="0" oninput="calculateReversePrice()">
+                            <span class="input-unit">円</span>
+                        </div>
+                        <div class="calc-input-row">
+                            <label>媒体手数料（%）</label>
+                            <input type="number" id="calcReversePlatformFeeRate" placeholder="10" value="{{ fee_settings.get('commission_normal', '10') }}" step="0.1" oninput="calculateReversePrice()" readonly style="background-color: #f1f5f9;">
+                            <span class="input-unit">%</span>
+                        </div>
+                        <div class="calc-input-row">
+                            <label>送料</label>
+                            <input type="number" id="calcReverseShipping" placeholder="0" value="0" oninput="calculateReversePrice()">
+                            <span class="input-unit">円</span>
+                        </div>
+                    </div>
+                    <div class="calc-result-grid">
+                        <div class="calc-result-row" id="resultReverseSaleTypeFeeRow" style="display:none;">
+                            <span class="result-label" id="resultReverseSaleTypeFeeLabel">販売タイプ手数料</span>
+                            <span class="result-value" id="resultReverseSaleTypeFee">¥0</span>
+                        </div>
+                        <div class="calc-result-row highlight-blue">
+                            <span class="result-label">必要な売上額</span>
+                            <span class="result-value" id="resultRequiredPrice">¥0</span>
+                        </div>
+                        <div class="calc-result-row highlight">
+                            <span class="result-label">利益率</span>
+                            <span class="result-value" id="resultReverseProfitRate">0%</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 目標利益率から逆算機能 -->
+                <div class="calc-reverse-section" style="border-top: 2px solid #f59e0b; padding-top: 1.5rem; margin-top: 1.5rem;">
+                    <h3 style="color: #f59e0b;">目標利益率から売上を逆算</h3>
+                    <div class="calc-input-grid">
+                        <div class="calc-input-row full-width">
+                            <label>媒体手数料</label>
+                            <select id="calcRateReversePlatform" class="calc-select" onchange="onRateReversePlatformChange()">
+                                <option value="mercari" selected>メルカリ（{{ fee_settings.get('commission_normal', '10') }}%）</option>
+                                <option value="rakuma">ラクマ（{{ fee_settings.get('commission_normal', '10') }}%）</option>
+                                <option value="yahuoku">ヤフオク（{{ fee_settings.get('commission_normal', '10') }}%）</option>
+                                <option value="yahoo_fleamarket">ヤフーフリマ（{{ fee_settings.get('commission_normal', '10') }}%）</option>
+                                <option value="buyma">バイマ（{{ fee_settings.get('commission_normal', '10') }}%）</option>
+                                <option value="other">その他（手動設定）</option>
+                            </select>
+                        </div>
+                        <div class="calc-input-row full-width">
+                            <label>販売タイプ</label>
+                            <select id="calcRateReverseSaleType" class="calc-select" onchange="onRateReverseSaleTypeChange()">
+                                <option value="none">なし</option>
+                                <option value="photo_packing">撮影梱包発送</option>
+                                <option value="wholesale">業者販売</option>
+                                <option value="multi_listing">同時出品</option>
+                                <option value="auction">オークション出品代行</option>
+                            </select>
+                        </div>
+                        <div class="calc-input-row">
+                            <label>目標利益率</label>
+                            <input type="number" id="calcTargetProfitRate" placeholder="20" value="20" step="0.1" oninput="calculateRateReversePrice()">
+                            <span class="input-unit">%</span>
+                        </div>
+                        <div class="calc-input-row">
+                            <label>仕入額</label>
+                            <input type="number" id="calcRateReversePurchase" placeholder="0" oninput="calculateRateReversePrice()">
+                            <span class="input-unit">円</span>
+                        </div>
+                        <div class="calc-input-row">
+                            <label>媒体手数料（%）</label>
+                            <input type="number" id="calcRateReversePlatformFeeRate" placeholder="10" value="{{ fee_settings.get('commission_normal', '10') }}" step="0.1" oninput="calculateRateReversePrice()" readonly style="background-color: #f1f5f9;">
+                            <span class="input-unit">%</span>
+                        </div>
+                        <div class="calc-input-row">
+                            <label>送料</label>
+                            <input type="number" id="calcRateReverseShipping" placeholder="0" value="0" oninput="calculateRateReversePrice()">
+                            <span class="input-unit">円</span>
+                        </div>
+                    </div>
+                    <div class="calc-result-grid" style="border-color: #f59e0b;">
+                        <div class="calc-result-row" id="resultRateReverseSaleTypeFeeRow" style="display:none;">
+                            <span class="result-label" id="resultRateReverseSaleTypeFeeLabel">販売タイプ手数料</span>
+                            <span class="result-value" id="resultRateReverseSaleTypeFee">¥0</span>
+                        </div>
+                        <div class="calc-result-row" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);">
+                            <span class="result-label">必要な売上額</span>
+                            <span class="result-value" id="resultRateRequiredPrice" style="color: #b45309;">¥0</span>
+                        </div>
+                        <div class="calc-result-row" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);">
+                            <span class="result-label">想定利益</span>
+                            <span class="result-value" id="resultRateProfit" style="color: #b45309;">¥0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <style>
+    /* 利益計算ボタン */
+    .btn-calculator {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        border: none;
+        border-radius: 0 !important;
+    }
+    .btn-calculator:hover,
+    .btn-calculator:focus,
+    .btn-calculator:active {
+        background: linear-gradient(135deg, #059669 0%, #047857 100%);
+        border-radius: 0 !important;
+    }
+    
+    /* 利益計算モーダル */
+    .profit-calc-modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 9999;
+    }
+    .profit-calc-modal.open {
+        display: block;
+    }
+    .profit-calc-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.6);
+    }
+    .profit-calc-content {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: white;
+        border-radius: 16px;
+        width: 90%;
+        max-width: 600px;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    .profit-calc-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 20px 24px;
+        border-bottom: 1px solid #e2e8f0;
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        border-radius: 16px 16px 0 0;
+    }
+    .profit-calc-header h2 {
+        margin: 0;
+        font-size: 1.25rem;
+    }
+    .profit-calc-close {
+        background: rgba(255,255,255,0.2);
+        border: none;
+        color: white;
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        font-size: 1.25rem;
+        cursor: pointer;
+    }
+    .profit-calc-close:hover {
+        background: rgba(255,255,255,0.3);
+    }
+    .profit-calc-body {
+        padding: 24px;
+    }
+    .profit-calc-body h3 {
+        margin: 0 0 12px 0;
+        font-size: 1rem;
+        color: #1e293b;
+        border-bottom: 2px solid #10b981;
+        padding-bottom: 8px;
+    }
+    
+    /* 計算式セクション */
+    .calc-formula-section {
+        margin-bottom: 24px;
+    }
+    .formula-box {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 16px;
+    }
+    .formula-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 0;
+        font-size: 0.95rem;
+    }
+    .formula-item:not(:last-child) {
+        border-bottom: 1px dashed #e2e8f0;
+    }
+    .formula-label {
+        font-weight: 700;
+        color: #10b981;
+        min-width: 60px;
+    }
+    .formula-eq {
+        color: #64748b;
+    }
+    .formula-value {
+        color: #1e293b;
+    }
+    
+    /* 計算入力セクション */
+    .calc-input-section,
+    .calc-reverse-section {
+        margin-bottom: 24px;
+    }
+    .calc-input-grid {
+        display: grid;
+        gap: 12px;
+    }
+    .calc-input-row {
+        display: grid;
+        grid-template-columns: 140px 1fr 40px;
+        align-items: center;
+        gap: 12px;
+    }
+    .calc-input-row label {
+        font-size: 0.9rem;
+        color: #475569;
+    }
+    .calc-input-row input {
+        padding: 10px 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        font-size: 1rem;
+        text-align: right;
+    }
+    .calc-input-row input:focus {
+        outline: none;
+        border-color: #10b981;
+        box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+    }
+    .input-unit {
+        color: #64748b;
+        font-size: 0.9rem;
+    }
+    .calc-input-row.full-width {
+        grid-template-columns: 140px 1fr;
+    }
+    .calc-select {
+        padding: 10px 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        font-size: 0.95rem;
+        background: white;
+        cursor: pointer;
+    }
+    .calc-select:focus {
+        outline: none;
+        border-color: #10b981;
+        box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+    }
+    .calc-shipping-note {
+        grid-column: 1 / -1;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        background: #fef3c7;
+        border: 1px solid #fcd34d;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        color: #92400e;
+    }
+    .calc-shipping-note .note-icon {
+        font-size: 1rem;
+    }
+    .calc-checkbox-row {
+        grid-column: 1 / -1;
+        padding: 10px 12px;
+        background: #ecfdf5;
+        border: 1px solid #a7f3d0;
+        border-radius: 8px;
+    }
+    .calc-checkbox-label {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        cursor: pointer;
+        font-size: 0.9rem;
+        color: #065f46;
+    }
+    .calc-checkbox-label input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        accent-color: #10b981;
+        cursor: pointer;
+    }
+    .calc-checkbox-label span {
+        font-weight: 500;
+    }
+    
+    /* 計算結果セクション */
+    .calc-result-section {
+        margin-bottom: 24px;
+    }
+    .calc-result-grid {
+        display: grid;
+        gap: 8px;
+        margin-top: 12px;
+    }
+    .calc-result-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 16px;
+        background: #f8fafc;
+        border-radius: 8px;
+    }
+    .calc-result-row.highlight {
+        background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+    }
+    .calc-result-row.highlight-blue {
+        background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    }
+    .result-label {
+        font-weight: 600;
+        color: #475569;
+    }
+    .result-value {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #1e293b;
+        font-family: 'Consolas', monospace;
+    }
+    .calc-result-row.highlight .result-value {
+        color: #047857;
+    }
+    .calc-result-row.highlight-blue .result-value {
+        color: #1d4ed8;
+    }
+    .result-value.negative {
+        color: #dc2626 !important;
+    }
+    
+    @media (max-width: 600px) {
+        /* モーダルをPCと同様にポップアップ表示 */
+        .profit-calc-content {
+            width: 90%;
+            max-width: 500px;
+            max-height: 85vh;
+            border-radius: 16px;
+        }
+        .profit-calc-header {
+            border-radius: 16px 16px 0 0;
+            padding: 12px 16px;
+        }
+        .profit-calc-header h2 {
+            font-size: 1rem;
+        }
+        .profit-calc-body {
+            padding: 12px;
+        }
+        .profit-calc-body h3 {
+            font-size: 0.9rem;
+            margin-bottom: 8px;
+            padding-bottom: 6px;
+        }
+        
+        /* 計算式セクション */
+        .calc-formula-section {
+            margin-bottom: 16px;
+        }
+        .formula-box {
+            padding: 10px;
+        }
+        .formula-item {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 2px;
+            padding: 6px 0;
+            font-size: 0.85rem;
+        }
+        .formula-label {
+            font-size: 0.8rem;
+        }
+        .formula-eq {
+            display: none;
+        }
+        .formula-value {
+            font-size: 0.75rem;
+            color: #64748b;
+        }
+        
+        /* 入力セクション */
+        .calc-input-section,
+        .calc-reverse-section {
+            margin-bottom: 16px;
+        }
+        
+        /* 入力行を縦並びに */
+        .calc-input-row {
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 4px;
+            position: relative;
+        }
+        .calc-input-row label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #475569;
+        }
+        .calc-input-row.full-width {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* 入力欄とセレクトボックス */
+        .calc-input-row input {
+            width: 100%;
+            max-width: 100%;
+            font-size: 0.9rem;
+            padding: 8px 10px;
+            padding-right: 30px;
+            box-sizing: border-box;
+        }
+        .calc-select {
+            width: 100%;
+            max-width: 100%;
+            font-size: 0.8rem;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+        
+        /* 単位（円、%）を右寄せ */
+        .input-unit {
+            position: absolute;
+            right: 10px;
+            bottom: 10px;
+            font-size: 0.8rem;
+        }
+        
+        /* チェックボックスの長いテキストを折り返し */
+        .calc-checkbox-row {
+            padding: 6px 0;
+        }
+        .calc-checkbox-label {
+            align-items: flex-start;
+        }
+        .calc-checkbox-label input[type="checkbox"] {
+            margin-top: 2px;
+            flex-shrink: 0;
+        }
+        .calc-checkbox-label span {
+            font-size: 0.7rem;
+            line-height: 1.4;
+        }
+        
+        /* 送料無料の注記 */
+        .calc-shipping-note {
+            padding: 6px 8px;
+            font-size: 0.7rem;
+        }
+        
+        /* 結果セクション */
+        .calc-result-grid {
+            padding: 8px;
+        }
+        .calc-result-row {
+            padding: 8px 10px;
+        }
+        .result-label {
+            font-size: 0.8rem;
+        }
+        .result-value {
+            font-size: 0.95rem;
+        }
+    }
+    
+    /* 準備中メニュー項目 */
+    .sidebar-item-disabled {
+        display: block;
+        padding: 0.65rem 1.25rem 0.65rem 2rem;
+        color: var(--text-muted);
+        font-size: 0.85rem;
+        font-style: italic;
+        cursor: not-allowed;
+    }
+
+    .table-edge-scrollable {
+        cursor: ew-resize;
+    }
+
+    [data-detail-url] {
+        cursor: pointer;
+    }
+
+    .sidebar-edge-trigger {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 14px;
+        height: 100vh;
+        z-index: 895;
+        background: transparent;
+        touch-action: pan-y;
+    }
+
+    body.sidebar-open .sidebar-edge-trigger {
+        pointer-events: none;
+    }
+
+    [data-detail-url] {
+        cursor: pointer;
+    }
+
+    img.image-fallback {
+        object-fit: contain !important;
+        background: #f8fafc;
+    }
+
+    @media (max-width: 768px) {
+        .table-edge-scrollable {
+            cursor: auto;
+        }
+        .sidebar-edge-trigger {
+            display: none;
+            width: 0;
+            pointer-events: none;
+        }
+    }
+    </style>
+    
+    <script>
+        (function setupLoadingScreen() {
+            const loadingScreen = document.getElementById('appLoadingScreen');
+            if (!loadingScreen) return;
+            const shouldShowLoadingScreen = window.KAIKA_LOADING_SHOULD_SHOW === true;
+            const loadingKey = window.KAIKA_LOADING_KEY;
+
+            function hideLoadingScreen() {
+                try {
+                    if (loadingKey) {
+                        sessionStorage.setItem(loadingKey, '1');
+                    }
+                } catch (error) {
+                    // sessionStorage が使えない環境では表示制御だけ継続する
+                }
+                document.documentElement.classList.remove('show-app-loading');
+                loadingScreen.classList.add('is-hidden');
+                window.setTimeout(function () {
+                    if (loadingScreen && loadingScreen.parentNode) {
+                        loadingScreen.parentNode.removeChild(loadingScreen);
+                    }
+                }, 360);
+            }
+
+            if (!shouldShowLoadingScreen) {
+                hideLoadingScreen();
+                return;
+            }
+
+            const startedAt = Number(window.KAIKA_LOADING_STARTED_AT) || Date.now();
+            const remainingMs = Math.max(0, 2000 - (Date.now() - startedAt));
+            window.setTimeout(hideLoadingScreen, remainingMs);
+        })();
+
+        // アラート自動非表示
+        document.querySelectorAll('.alert').forEach(alert => {
+            setTimeout(() => alert.remove(), 5000);
+        });
+
+        (function setupDetailCardNavigation() {
+            const interactiveSelector = [
+                'a',
+                'button',
+                'input',
+                'select',
+                'textarea',
+                'label',
+                'summary',
+                'details',
+                '[role="button"]',
+                '[data-no-card-link]'
+            ].join(',');
+
+            document.addEventListener('click', function(event) {
+                if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+                    return;
+                }
+
+                const target = event.target instanceof Element ? event.target : null;
+                if (!target || target.closest(interactiveSelector)) {
+                    return;
+                }
+
+                const card = target.closest('[data-detail-url]');
+                if (!card) {
+                    return;
+                }
+
+                const url = card.getAttribute('data-detail-url');
+                if (!url) {
+                    return;
+                }
+
+                event.preventDefault();
+                event.stopPropagation();
+                window.location.href = url;
+            }, true);
+        })();
+
+        (function setupHistoryBackBar() {
+            const historyBackBar = document.getElementById('historyBackBar');
+            if (!historyBackBar) {
+                return;
+            }
+
+            document.querySelectorAll('.context-back-inline').forEach((link) => {
+                if (link.closest('#historyBackBar')) {
+                    return;
+                }
+                const source = link.parentElement;
+                link.classList.add('history-back-inline-item');
+                historyBackBar.appendChild(link);
+                if (source && source.classList.contains('context-back-inline-source') && source.children.length === 0) {
+                    source.remove();
+                }
+            });
+
+            if (historyBackBar.dataset.homeConditional !== 'true') {
+                return;
+            }
+
+            try {
+                if (!document.referrer) {
+                    return;
+                }
+
+                const referrerUrl = new URL(document.referrer);
+                const currentPath = window.location.pathname.replace(/\/+$/, '') || '/';
+                const referrerPath = referrerUrl.pathname.replace(/\/+$/, '') || '/';
+                const isSameOrigin = referrerUrl.origin === window.location.origin;
+                const isBlockedReferrer = referrerPath === '/login' || referrerPath.startsWith('/preview/user');
+                const shouldShow = isSameOrigin && referrerPath !== currentPath && !isBlockedReferrer;
+
+                if (shouldShow) {
+                    historyBackBar.hidden = false;
+                }
+            } catch (error) {
+                historyBackBar.hidden = true;
+            }
+        })();
+
+        // サイドバートグル
+        function setSidebarOpen(isOpen) {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.querySelector('.sidebar-overlay');
+            if (!sidebar || !overlay) {
+                return;
+            }
+            sidebar.classList.toggle('open', isOpen);
+            overlay.classList.toggle('open', isOpen);
+            document.body.classList.toggle('sidebar-open', isOpen);
+        }
+
+        function toggleSidebar(forceOpen) {
+            const sidebar = document.getElementById('sidebar');
+            if (!sidebar) {
+                return;
+            }
+            const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : !sidebar.classList.contains('open');
+            setSidebarOpen(shouldOpen);
+        }
+        window.setSidebarOpen = setSidebarOpen;
+        window.toggleSidebar = toggleSidebar;
+
+        (function setupSidebarEdgeTrigger() {
+            const edgeTrigger = document.querySelector('.sidebar-edge-trigger');
+            if (!edgeTrigger) {
+                return;
+            }
+            const mobileEdgeQuery = window.matchMedia('(max-width: 768px)');
+            const edgeActivationPx = 14;
+
+            function getEdgeClientX(event) {
+                if (event.touches && event.touches.length) {
+                    return event.touches[0].clientX;
+                }
+                if (event.changedTouches && event.changedTouches.length) {
+                    return event.changedTouches[0].clientX;
+                }
+                return typeof event.clientX === 'number' ? event.clientX : 0;
+            }
+
+            function openFromEdge(event) {
+                if (mobileEdgeQuery.matches || getEdgeClientX(event) > edgeActivationPx) {
+                    return;
+                }
+                const active = document.activeElement;
+                if (active && active.matches && active.matches('input, textarea, select, [contenteditable="true"]')) {
+                    return;
+                }
+                event.preventDefault();
+                toggleSidebar(true);
+            }
+
+            edgeTrigger.addEventListener('mouseenter', function(event) {
+                if (window.matchMedia('(hover: hover)').matches) {
+                    openFromEdge(event);
+                }
+            });
+            edgeTrigger.addEventListener('click', openFromEdge);
+            edgeTrigger.addEventListener('touchstart', openFromEdge, { passive: false });
+
+            document.addEventListener('click', function(event) {
+                openFromEdge(event);
+            }, true);
+
+            document.addEventListener('mousemove', function(event) {
+                if (!window.matchMedia('(hover: hover)').matches) {
+                    return;
+                }
+                openFromEdge(event);
+            });
+        })();
+
+        (function setupViewportStability() {
+            document.addEventListener('gesturechange', function(event) {
+                if (event.scale && event.scale < 1) {
+                    event.preventDefault();
+                }
+            }, { passive: false });
+        })();
+
+        (function setupDetailUrlClickTargets() {
+            document.addEventListener('click', function(event) {
+                const target = event.target;
+                if (!target || !target.closest) {
+                    return;
+                }
+                if (target.closest('a, button, input, textarea, select, label, summary, [role="button"], .no-row-click')) {
+                    return;
+                }
+                const detailTarget = target.closest('[data-detail-url]');
+                if (!detailTarget) {
+                    return;
+                }
+                const detailUrl = detailTarget.dataset.detailUrl;
+                if (detailUrl) {
+                    window.location.href = detailUrl;
+                }
+            });
+        })();
+        
+        // カテゴリトグル
+        function toggleCategory(btn) {
+            const items = btn.nextElementSibling;
+            if (items) {
+                btn.classList.toggle('open');
+                items.classList.toggle('open');
+            }
+        }
+        window.toggleCategory = toggleCategory;
+        
+        // ページ読み込み時にアクティブなカテゴリを開く
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.sidebar-category-items.open').forEach(function(items) {
+                const toggle = items.previousElementSibling;
+                if (toggle) {
+                    toggle.classList.add('open');
+                }
+            });
+
+            const sidebar = document.getElementById('sidebar');
+            if (sidebar) {
+                sidebar.addEventListener('click', function(event) {
+                    const link = event.target instanceof Element ? event.target.closest('a[href]') : null;
+                    if (!link || event.defaultPrevented) {
+                        return;
+                    }
+
+                    const href = link.getAttribute('href') || '';
+                    if (!href || href.startsWith('#') || href.startsWith('javascript:') || link.target === '_blank' || link.hasAttribute('download')) {
+                        return;
+                    }
+
+                    const targetUrl = link.href;
+                    const currentUrl = window.location.href.split('#')[0];
+                    const nextUrl = targetUrl.split('#')[0];
+                    if (currentUrl === nextUrl) {
+                        setSidebarOpen(false);
+                        return;
+                    }
+
+                    event.preventDefault();
+                    document.body.classList.add('sidebar-navigating');
+                    setSidebarOpen(false);
+                    requestAnimationFrame(function() {
+                        window.location.href = targetUrl;
+                    });
+                });
+            }
+        });
+
+        (function setupCsvDownloadLinks() {
+            function filenameFromDisposition(disposition) {
+                if (!disposition) {
+                    return '';
+                }
+                const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+                if (encoded) {
+                    try {
+                        return decodeURIComponent(encoded[1]);
+                    } catch (error) {
+                        return encoded[1];
+                    }
+                }
+                const plain = disposition.match(/filename="?([^";]+)"?/i);
+                return plain ? plain[1] : '';
+            }
+
+            function fallbackIframeDownload(url) {
+                let frame = document.getElementById('csvDownloadFrame');
+                if (!frame) {
+                    frame = document.createElement('iframe');
+                    frame.id = 'csvDownloadFrame';
+                    frame.name = 'csvDownloadFrame';
+                    frame.style.display = 'none';
+                    document.body.appendChild(frame);
+                }
+                frame.src = url;
+            }
+
+            document.addEventListener('click', async function(event) {
+                const link = event.target instanceof Element ? event.target.closest('a.js-csv-download[href]') : null;
+                if (!link || event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+                    return;
+                }
+
+                const href = link.href;
+                const isAppleMobile = /iP(ad|hone|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+                if (isAppleMobile) {
+                    event.preventDefault();
+                    fallbackIframeDownload(href);
+                }
+            });
+        })();
+        
+        // ユーザーメニュートグル（スマホ対応）
+        function toggleUserMenu(e) {
+            e.stopPropagation();
+            document.getElementById('navUser').classList.toggle('open');
+        }
+        window.toggleUserMenu = toggleUserMenu;
+        
+        // メニュー外をタップしたら閉じる
+        document.addEventListener('click', function(e) {
+            const navUser = document.getElementById('navUser');
+            if (navUser && !navUser.contains(e.target)) {
+                navUser.classList.remove('open');
+            }
+        });
+        
+        // 利益計算モーダル開閉
+        function openProfitCalculator() {
+            document.getElementById('profitCalcModal').classList.add('open');
+            document.body.style.overflow = 'hidden';
+        }
+        
+        function closeProfitCalculator() {
+            document.getElementById('profitCalcModal').classList.remove('open');
+            document.body.style.overflow = '';
+        }
+        
+        // ESCキーでモーダルを閉じる
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeProfitCalculator();
+            }
+        });
+        
+        // DB設定から動的に手数料を反映（form.htmlと同じ方式）
+        const _fs = {{ fee_settings | default({}) | tojson }};
+        const _commNormal = parseFloat(_fs.commission_normal) || 10;
+        
+        // 媒体手数料率（DB設定に連動）
+        const platformRates = {
+            'mercari': _commNormal,
+            'rakuma': _commNormal,
+            'yahuoku': _commNormal,
+            'yahoo_fleamarket': _commNormal,
+            'buyma': _commNormal,
+            'other': null
+        };
+        
+        // 段階別固定額の計算ヘルパー
+        function _tierCalc(tiers, price) {
+            for (const t of tiers) {
+                if (t.max === null || price <= t.max) return t.fee;
+            }
+            return tiers[tiers.length - 1].fee;
+        }
+        
+        // 段階別ティア定義（DB設定から動的生成）
+        const _ppTiers = [
+            {max: parseInt(_fs.photo_packing_t1_max)||19999, fee: parseInt(_fs.photo_packing_t1_fee)||500},
+            {max: parseInt(_fs.photo_packing_t2_max)||49999, fee: parseInt(_fs.photo_packing_t2_fee)||650},
+            {max: parseInt(_fs.photo_packing_t3_max)||99999, fee: parseInt(_fs.photo_packing_t3_fee)||800},
+            {max: null, fee: parseInt(_fs.photo_packing_t4_fee)||1000}
+        ];
+        const _wsTiers = [
+            {max: parseInt(_fs.wholesale_t1_max)||19999, fee: parseInt(_fs.wholesale_t1_fee)||500},
+            {max: parseInt(_fs.wholesale_t2_max)||49999, fee: parseInt(_fs.wholesale_t2_fee)||1000},
+            {max: parseInt(_fs.wholesale_t3_max)||99999, fee: parseInt(_fs.wholesale_t3_fee)||1500},
+            {max: parseInt(_fs.wholesale_t4_max)||199999, fee: parseInt(_fs.wholesale_t4_fee)||2000},
+            {max: null, fee: parseInt(_fs.wholesale_t5_fee)||3000}
+        ];
+        const _mlTiers = [
+            {max: parseInt(_fs.multi_listing_t1_max)||19999, fee: parseInt(_fs.multi_listing_t1_fee)||300},
+            {max: parseInt(_fs.multi_listing_t2_max)||49999, fee: parseInt(_fs.multi_listing_t2_fee)||400},
+            {max: null, fee: parseInt(_fs.multi_listing_t3_fee)||500}
+        ];
+        const _aucTiers = [
+            {max: parseInt(_fs.auction_t1_max)||19999, fee: parseInt(_fs.auction_t1_fee)||300},
+            {max: parseInt(_fs.auction_t2_max)||49999, fee: parseInt(_fs.auction_t2_fee)||400},
+            {max: parseInt(_fs.auction_t3_max)||99999, fee: parseInt(_fs.auction_t3_fee)||500},
+            {max: null, fee: parseInt(_fs.auction_t4_fee)||700}
+        ];
+        
+        // 販売タイプ別の手数料計算ルール
+        const saleTypeCalcRules = {
+            'photo_packing': { name: '撮影梱包発送', tiers: _ppTiers },
+            'wholesale':     { name: '業者販売',     tiers: _wsTiers },
+            'multi_listing': { name: '同時出品',     tiers: _mlTiers },
+            'auction':       { name: 'オークション', tiers: _aucTiers }
+        };
+        
+        // 共通：媒体変更ハンドラー
+        function handlePlatformChange(selectId, feeInputId, callback) {
+            const platform = document.getElementById(selectId).value;
+            const feeInput = document.getElementById(feeInputId);
+            if (platformRates[platform] !== null) {
+                feeInput.value = platformRates[platform];
+                feeInput.readOnly = true;
+                feeInput.style.backgroundColor = '#f1f5f9';
+            } else {
+                feeInput.readOnly = false;
+                feeInput.style.backgroundColor = '';
+            }
+            callback();
+        }
+        
+        function onPlatformChange() { handlePlatformChange('calcPlatform', 'calcPlatformFeeRate', calculateProfit); }
+        function onReversePlatformChange() { handlePlatformChange('calcReversePlatform', 'calcReversePlatformFeeRate', calculateReversePrice); }
+        function onRateReversePlatformChange() { handlePlatformChange('calcRateReversePlatform', 'calcRateReversePlatformFeeRate', calculateRateReversePrice); }
+        
+        // 共通：販売タイプ変更ハンドラー
+        function onSaleTypeChange() { calculateProfit(); }
+        function onReverseSaleTypeChange() { calculateReversePrice(); }
+        function onRateReverseSaleTypeChange() { calculateRateReversePrice(); }
+        
+        // 利益計算
+        function calculateProfit() {
+            const saleType = document.getElementById('calcSaleType').value;
+            const salePrice = parseFloat(document.getElementById('calcSalePrice').value) || 0;
+            const purchasePrice = parseFloat(document.getElementById('calcPurchasePrice').value) || 0;
+            const platformFeeRate = parseFloat(document.getElementById('calcPlatformFeeRate').value) || 0;
+            let shipping = parseFloat(document.getElementById('calcShipping').value) || 0;
+            
+            const platformFee = Math.floor(salePrice * (platformFeeRate / 100));
+            
+            let saleTypeFee = 0;
+            let saleTypeFeeLabel = '';
+            if (saleType !== 'none' && saleTypeCalcRules[saleType]) {
+                const rule = saleTypeCalcRules[saleType];
+                saleTypeFee = _tierCalc(rule.tiers, salePrice);
+                saleTypeFeeLabel = rule.name;
+            }
+            
+            const profit = salePrice - purchasePrice - platformFee - saleTypeFee - shipping;
+            const profitRate = purchasePrice > 0 ? (profit / purchasePrice * 100) : 0;
+            
+            document.getElementById('resultPlatformFee').textContent = '¥' + platformFee.toLocaleString();
+            
+            const saleTypeFeeRow = document.getElementById('resultSaleTypeFeeRow');
+            if (saleType !== 'none' && saleTypeFee > 0) {
+                saleTypeFeeRow.style.display = 'flex';
+                document.getElementById('resultSaleTypeFeeLabel').textContent = saleTypeFeeLabel;
+                document.getElementById('resultSaleTypeFee').textContent = '¥' + saleTypeFee.toLocaleString();
+            } else {
+                saleTypeFeeRow.style.display = 'none';
+            }
+            
+            const profitEl = document.getElementById('resultProfit');
+            profitEl.textContent = '¥' + profit.toLocaleString();
+            profitEl.classList.toggle('negative', profit < 0);
+            
+            const profitRateEl = document.getElementById('resultProfitRate');
+            profitRateEl.textContent = profitRate.toFixed(1) + '%';
+            profitRateEl.classList.toggle('negative', profitRate < 0);
+        }
+        
+        // 逆算計算（目標利益から必要な売上を計算）
+        function calculateReversePrice() {
+            const saleType = document.getElementById('calcReverseSaleType').value;
+            const targetProfit = parseFloat(document.getElementById('calcTargetProfit').value) || 0;
+            const purchasePrice = parseFloat(document.getElementById('calcReversePurchase').value) || 0;
+            const platformFeeRate = parseFloat(document.getElementById('calcReversePlatformFeeRate').value) || 0;
+            let shipping = parseFloat(document.getElementById('calcReverseShipping').value) || 0;
+            
+            // 段階別固定額の場合、反復法で必要売上を求める
+            const totalNeeded = purchasePrice + targetProfit + shipping;
+            let requiredPrice = 0;
+            
+            if (platformFeeRate >= 100) {
+                requiredPrice = 0;
+            } else {
+                // まず媒体手数料のみで概算
+                requiredPrice = Math.ceil(totalNeeded / (1 - platformFeeRate / 100));
+                
+                // 販売タイプ手数料がある場合、反復で収束させる
+                if (saleType !== 'none' && saleTypeCalcRules[saleType]) {
+                    for (let i = 0; i < 10; i++) {
+                        const pFee = Math.floor(requiredPrice * (platformFeeRate / 100));
+                        const sFee = _tierCalc(saleTypeCalcRules[saleType].tiers, requiredPrice);
+                        const newPrice = Math.ceil(totalNeeded + pFee + sFee);
+                        if (newPrice === requiredPrice) break;
+                        requiredPrice = newPrice;
+                    }
+                }
+            }
+            
+            // 販売タイプ手数料の表示
+            const feeRow = document.getElementById('resultReverseSaleTypeFeeRow');
+            if (saleType !== 'none' && saleTypeCalcRules[saleType]) {
+                const fee = _tierCalc(saleTypeCalcRules[saleType].tiers, requiredPrice);
+                feeRow.style.display = 'flex';
+                document.getElementById('resultReverseSaleTypeFeeLabel').textContent = saleTypeCalcRules[saleType].name;
+                document.getElementById('resultReverseSaleTypeFee').textContent = '¥' + fee.toLocaleString();
+            } else {
+                feeRow.style.display = 'none';
+            }
+            
+            const profitRate = purchasePrice > 0 ? (targetProfit / purchasePrice * 100) : 0;
+            
+            document.getElementById('resultRequiredPrice').textContent = '¥' + requiredPrice.toLocaleString();
+            const profitRateEl = document.getElementById('resultReverseProfitRate');
+            profitRateEl.textContent = profitRate.toFixed(1) + '%';
+            profitRateEl.classList.toggle('negative', profitRate < 0);
+        }
+        
+        // ========== 目標利益率から逆算 ==========
+        
+        function calculateRateReversePrice() {
+            const saleType = document.getElementById('calcRateReverseSaleType').value;
+            const targetProfitRate = parseFloat(document.getElementById('calcTargetProfitRate').value) || 0;
+            const purchasePrice = parseFloat(document.getElementById('calcRateReversePurchase').value) || 0;
+            const platformFeeRate = parseFloat(document.getElementById('calcRateReversePlatformFeeRate').value) || 0;
+            let shipping = parseFloat(document.getElementById('calcRateReverseShipping').value) || 0;
+            
+            const targetProfit = Math.floor(purchasePrice * targetProfitRate / 100);
+            const totalNeeded = purchasePrice + targetProfit + shipping;
+            let requiredPrice = 0;
+            
+            if (platformFeeRate >= 100) {
+                requiredPrice = 0;
+            } else {
+                requiredPrice = Math.ceil(totalNeeded / (1 - platformFeeRate / 100));
+                
+                if (saleType !== 'none' && saleTypeCalcRules[saleType]) {
+                    for (let i = 0; i < 10; i++) {
+                        const pFee = Math.floor(requiredPrice * (platformFeeRate / 100));
+                        const sFee = _tierCalc(saleTypeCalcRules[saleType].tiers, requiredPrice);
+                        const newPrice = Math.ceil(totalNeeded + pFee + sFee);
+                        if (newPrice === requiredPrice) break;
+                        requiredPrice = newPrice;
+                    }
+                }
+            }
+            
+            // 販売タイプ手数料の表示
+            const feeRow = document.getElementById('resultRateReverseSaleTypeFeeRow');
+            if (saleType !== 'none' && saleTypeCalcRules[saleType]) {
+                const fee = _tierCalc(saleTypeCalcRules[saleType].tiers, requiredPrice);
+                feeRow.style.display = 'flex';
+                document.getElementById('resultRateReverseSaleTypeFeeLabel').textContent = saleTypeCalcRules[saleType].name;
+                document.getElementById('resultRateReverseSaleTypeFee').textContent = '¥' + fee.toLocaleString();
+            } else {
+                feeRow.style.display = 'none';
+            }
+            
+            document.getElementById('resultRateRequiredPrice').textContent = '¥' + requiredPrice.toLocaleString();
+            document.getElementById('resultRateProfit').textContent = '¥' + targetProfit.toLocaleString();
+        }
+
+        (function setupEdgeHoverTableScroll() {
+            if (window.innerWidth <= 768) return;
+            if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) return;
+
+            const scrollContainerSelector = [
+                '.js-edge-hover-scroll',
+                '.table-scroll',
+                '.table-container',
+                '.admin-table-container',
+                '.client-table-wrap',
+                '.recent-sales-table-wrap',
+                '.master-table-container',
+                '.cashflow-table-container',
+                '.results-table-container',
+                '.bids-table-container',
+                '.inquiry-table-container',
+                '.logs-table-container',
+                '.proxy-doc-table-wrap',
+                '.keisan-items-wrap',
+                '.report-table-wrapper'
+            ].join(', ');
+            const nestedScrollableSelector = [
+                ':scope > .js-edge-hover-scroll',
+                ':scope > .table-scroll',
+                ':scope > .table-container',
+                ':scope > .admin-table-container',
+                ':scope > .client-table-wrap',
+                ':scope > .recent-sales-table-wrap',
+                ':scope > .master-table-container',
+                ':scope > .cashflow-table-container',
+                ':scope > .results-table-container',
+                ':scope > .bids-table-container',
+                ':scope > .inquiry-table-container',
+                ':scope > .logs-table-container',
+                ':scope > .proxy-doc-table-wrap',
+                ':scope > .keisan-items-wrap',
+                ':scope > .report-table-wrapper'
+            ].join(', ');
+            let activeTarget = null;
+            let activeDirection = 0;
+            let hoverStrength = 0;
+            let rafId = null;
+            let lastTimestamp = 0;
+
+            function canScroll(target) {
+                return target && target.scrollWidth > target.clientWidth + 12;
+            }
+
+            function canUseAsScrollTarget(target) {
+                return canScroll(target) && getComputedStyle(target).overflowX !== 'visible';
+            }
+
+            function resolveScrollTarget(container) {
+                if (!container) return null;
+
+                const nestedScroll = container.querySelector(nestedScrollableSelector);
+                if (nestedScroll && canUseAsScrollTarget(nestedScroll)) {
+                    return nestedScroll;
+                }
+
+                if (canUseAsScrollTarget(container)) {
+                    return container;
+                }
+
+                const parentContainer = container.parentElement
+                    ? container.parentElement.closest(scrollContainerSelector)
+                    : null;
+                if (parentContainer && canUseAsScrollTarget(parentContainer)) {
+                    return parentContainer;
+                }
+
+                return canScroll(container) ? container : null;
+            }
+
+            function stopAutoScroll() {
+                activeDirection = 0;
+                hoverStrength = 0;
+                if (activeTarget) {
+                    activeTarget.classList.remove('table-edge-scrollable');
+                }
+                if (rafId) {
+                    cancelAnimationFrame(rafId);
+                    rafId = null;
+                }
+                lastTimestamp = 0;
+            }
+
+            function stepAutoScroll(timestamp) {
+                if (!activeTarget || !activeDirection || !canScroll(activeTarget)) {
+                    stopAutoScroll();
+                    return;
+                }
+
+                if (!lastTimestamp) {
+                    lastTimestamp = timestamp;
+                }
+
+                const delta = timestamp - lastTimestamp;
+                lastTimestamp = timestamp;
+                const pixelsPerSecond = 300 + (1250 * hoverStrength);
+                activeTarget.scrollLeft += activeDirection * pixelsPerSecond * (delta / 1000);
+
+                const atLeftEdge = activeDirection < 0 && activeTarget.scrollLeft <= 0;
+                const atRightEdge = activeDirection > 0 && (
+                    activeTarget.scrollLeft + activeTarget.clientWidth >= activeTarget.scrollWidth - 1
+                );
+                if (atLeftEdge || atRightEdge) {
+                    stopAutoScroll();
+                    return;
+                }
+
+                rafId = requestAnimationFrame(stepAutoScroll);
+            }
+
+            function startAutoScroll(target, direction, strength) {
+                activeTarget = target;
+                activeDirection = direction;
+                hoverStrength = strength;
+                if (!rafId) {
+                    lastTimestamp = 0;
+                    rafId = requestAnimationFrame(stepAutoScroll);
+                }
+            }
+
+            function updatePointerScroll(target, event) {
+                if (!canScroll(target)) {
+                    target.classList.remove('table-edge-scrollable');
+                    if (activeTarget === target) {
+                        stopAutoScroll();
+                    }
+                    return;
+                }
+
+                const rect = target.getBoundingClientRect();
+                const threshold = Math.min(140, Math.max(72, rect.width * 0.16));
+                const offsetX = event.clientX - rect.left;
+                const leftRatio = 1 - Math.min(1, offsetX / threshold);
+                const rightRatio = Math.min(1, Math.max(0, (offsetX - (rect.width - threshold)) / threshold));
+
+                if (offsetX <= threshold && target.scrollLeft > 0) {
+                    target.classList.add('table-edge-scrollable');
+                    startAutoScroll(target, -1, Math.max(0.2, leftRatio));
+                    return;
+                }
+
+                if (offsetX >= rect.width - threshold && target.scrollLeft + target.clientWidth < target.scrollWidth - 1) {
+                    target.classList.add('table-edge-scrollable');
+                    startAutoScroll(target, 1, Math.max(0.2, rightRatio));
+                    return;
+                }
+
+                target.classList.remove('table-edge-scrollable');
+                if (activeTarget === target) {
+                    stopAutoScroll();
+                }
+            }
+
+            document.addEventListener('mousemove', function (event) {
+                const hoverContainer = event.target.closest(scrollContainerSelector);
+                const target = resolveScrollTarget(hoverContainer);
+
+                if (!target) {
+                    stopAutoScroll();
+                    return;
+                }
+
+                const rect = target.getBoundingClientRect();
+                if (event.clientY < rect.top || event.clientY > rect.bottom) {
+                    target.classList.remove('table-edge-scrollable');
+                    if (activeTarget === target) {
+                        stopAutoScroll();
+                    }
+                    return;
+                }
+
+                updatePointerScroll(target, event);
+            }, { passive: true });
+
+            document.addEventListener('mouseout', function (event) {
+                if (!event.relatedTarget) {
+                    stopAutoScroll();
+                }
+            });
+
+            document.addEventListener('scroll', function () {
+                if (!activeTarget) return;
+                if (
+                    !canScroll(activeTarget) ||
+                    (activeDirection < 0 && activeTarget.scrollLeft <= 0) ||
+                    (activeDirection > 0 && activeTarget.scrollLeft + activeTarget.clientWidth >= activeTarget.scrollWidth - 1)
+                ) {
+                    stopAutoScroll();
+                }
+            }, { passive: true, capture: true });
+
+            window.addEventListener('blur', stopAutoScroll);
+            window.addEventListener('resize', stopAutoScroll, { passive: true });
+            document.addEventListener('visibilitychange', function () {
+                if (document.hidden) {
+                    stopAutoScroll();
+                }
+            });
+        })();
+
+        (function setupMissingImageFallback() {
+            const fallbackSvg = encodeURIComponent(
+                `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240" viewBox="0 0 320 240">
+                    <rect width="320" height="240" rx="18" fill="#f1f5f9"/>
+                    <rect x="24" y="24" width="272" height="192" rx="14" fill="#e2e8f0" stroke="#cbd5e1" stroke-width="2"/>
+                    <path d="M92 158l34-42 26 30 38-50 38 62H92z" fill="#94a3b8"/>
+                    <circle cx="118" cy="92" r="14" fill="#cbd5e1"/>
+                    <text x="160" y="198" text-anchor="middle" fill="#475569" font-family="sans-serif" font-size="20" font-weight="600">画像なし</text>
+                </svg>`
+            );
+            const fallbackSrc = `data:image/svg+xml;charset=UTF-8,${fallbackSvg}`;
+
+            document.addEventListener('error', function (event) {
+                const target = event.target;
+                if (!(target instanceof HTMLImageElement)) return;
+                if (target.dataset.fallbackApplied === 'true') return;
+
+                const currentSrc = target.getAttribute('src') || '';
+                if (!currentSrc.includes('/static/uploads/')) return;
+
+                target.dataset.fallbackApplied = 'true';
+                target.dataset.originalSrc = currentSrc;
+                target.src = fallbackSrc;
+                target.alt = '画像が見つかりません';
+                target.classList.add('image-fallback');
+                if (!target.title) {
+                    target.title = '検証コピーに画像ファイルが無いため、代替画像を表示しています';
+                }
+            }, true);
+        })();
+
+        window.openAnalyticsDetail = function (modalId) {
+            const modal = document.getElementById(modalId);
+            if (!modal) return;
+            modal.classList.add('is-open');
+            document.body.style.overflow = 'hidden';
+        };
+
+        window.closeAnalyticsDetail = function (modalId) {
+            const modal = document.getElementById(modalId);
+            if (!modal) return;
+            modal.classList.remove('is-open');
+            document.body.style.overflow = '';
+        };
+
+        document.addEventListener('click', function (event) {
+            const modal = event.target.closest('.analytics-detail-modal');
+            if (modal && event.target === modal) {
+                modal.classList.remove('is-open');
+                document.body.style.overflow = '';
+            }
+        });
+
+        (function setupAnnouncementToast() {
+            const toast = document.getElementById('announcementToast');
+            if (!toast) return;
+
+            const badge = document.getElementById('announcementToastBadge');
+            const title = document.getElementById('announcementToastTitle');
+            const content = document.getElementById('announcementToastContent');
+            const meta = document.getElementById('announcementToastMeta');
+            const closeButton = document.getElementById('announcementToastClose');
+            const pollUrl = "{{ url_for('user_announcements_api') }}";
+            const storageKey = "kaika:announcement-seen:v1:{{ current_user.id if current_user.is_authenticated else 0 }}";
+            const badgeLabels = {
+                info: '\u304a\u77e5\u3089\u305b',
+                important: '\u91cd\u8981',
+                warning: '\u6ce8\u610f',
+                success: '\u66f4\u65b0',
+            };
+
+            let audioContext = null;
+            let hideTimerId = null;
+
+            function readSeenMap() {
+                try {
+                    return JSON.parse(window.localStorage.getItem(storageKey) || '{}');
+                } catch (error) {
+                    return {};
+                }
+            }
+
+            function writeSeenMap(seenMap) {
+                try {
+                    window.localStorage.setItem(storageKey, JSON.stringify(seenMap));
+                } catch (error) {
+                    // localStorage が使えない場合は通知表示のみ継続
+                }
+            }
+
+            function buildAnnouncementVersion(announcement) {
+                return [
+                    announcement.id || '',
+                    announcement.announcement_type || '',
+                    announcement.title || '',
+                    announcement.content || '',
+                    announcement.publish_at || '',
+                    announcement.created_at || '',
+                ].join('||');
+            }
+
+            function getUnseenAnnouncements(announcements) {
+                const seenMap = readSeenMap();
+                return (announcements || []).filter((announcement) => {
+                    const id = String(announcement.id || '');
+                    return seenMap[id] !== buildAnnouncementVersion(announcement);
+                });
+            }
+
+            function markAnnouncementsSeen(announcements) {
+                const seenMap = readSeenMap();
+                (announcements || []).forEach((announcement) => {
+                    const id = String(announcement.id || '');
+                    seenMap[id] = buildAnnouncementVersion(announcement);
+                });
+                writeSeenMap(seenMap);
+            }
+
+            function hideToast() {
+                toast.classList.remove('is-visible');
+                if (hideTimerId) {
+                    window.clearTimeout(hideTimerId);
+                    hideTimerId = null;
+                }
+            }
+
+            function formatAnnouncementTime(value) {
+                if (!value) return '';
+                const date = new Date(value);
+                if (Number.isNaN(date.getTime())) {
+                    return '';
+                }
+                return date.toLocaleString('ja-JP', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                });
+            }
+
+            function playAnnouncementTone() {
+                try {
+                    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                    if (!AudioContextClass) return;
+                    if (!audioContext) {
+                        audioContext = new AudioContextClass();
+                    }
+                    if (audioContext.state === 'suspended') {
+                        audioContext.resume().catch(() => {});
+                    }
+
+                    [0, 0.18].forEach((offset, index) => {
+                        const oscillator = audioContext.createOscillator();
+                        const gain = audioContext.createGain();
+                        oscillator.type = 'sine';
+                        oscillator.frequency.value = index === 0 ? 880 : 1174;
+                        gain.gain.setValueAtTime(0.0001, audioContext.currentTime + offset);
+                        gain.gain.exponentialRampToValueAtTime(0.08, audioContext.currentTime + offset + 0.02);
+                        gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + offset + 0.16);
+                        oscillator.connect(gain);
+                        gain.connect(audioContext.destination);
+                        oscillator.start(audioContext.currentTime + offset);
+                        oscillator.stop(audioContext.currentTime + offset + 0.18);
+                    });
+                } catch (error) {
+                    // ブラウザ制限で再生できない場合は無音で継続
+                }
+            }
+
+            function notifyBrowser(announcement, extraCount) {
+                if (!('Notification' in window) || Notification.permission !== 'granted') {
+                    return;
+                }
+
+                const bodySuffix = extraCount > 0 ? `\n\u307b\u304b${extraCount}\u4ef6\u306e\u65b0\u7740\u304c\u3042\u308a\u307e\u3059\u3002` : '';
+                try {
+                    new Notification(`\u958b\u82b1\u304b\u3089\u304a\u77e5\u3089\u305b: ${announcement.title || '\u65b0\u7740\u901a\u77e5'}`, {
+                        body: `${announcement.content || ''}${bodySuffix}`.trim(),
+                    });
+                } catch (error) {
+                    // Notification API が使えない場合はトーストのみ表示
+                }
+            }
+
+            function showAnnouncementToast(announcement, extraCount, playSound) {
+                const announcementType = announcement.announcement_type || 'info';
+                const timestamp = formatAnnouncementTime(announcement.publish_at || announcement.created_at);
+                const metaParts = [];
+
+                toast.dataset.type = announcementType;
+                badge.textContent = badgeLabels[announcementType] || badgeLabels.info;
+                title.textContent = announcement.title || '\u958b\u82b1\u304b\u3089\u304a\u77e5\u3089\u305b';
+                content.textContent = announcement.content || '';
+
+                if (timestamp) {
+                    metaParts.push(timestamp);
+                }
+                if (extraCount > 0) {
+                    metaParts.push(`\u307b\u304b${extraCount}\u4ef6\u306e\u65b0\u3057\u3044\u304a\u77e5\u3089\u305b\u304c\u3042\u308a\u307e\u3059`);
+                }
+                meta.textContent = metaParts.join(' | ');
+
+                toast.classList.add('is-visible');
+                if (hideTimerId) {
+                    window.clearTimeout(hideTimerId);
+                }
+                hideTimerId = window.setTimeout(hideToast, 12000);
+
+                if (playSound) {
+                    playAnnouncementTone();
+                }
+                notifyBrowser(announcement, extraCount);
+            }
+
+            async function fetchAnnouncements() {
+                try {
+                    const response = await fetch(`${pollUrl}?_=${Date.now()}`, {
+                        credentials: 'same-origin',
+                        cache: 'no-store',
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                    });
+                    if (!response.ok) {
+                        return [];
+                    }
+                    const data = await response.json();
+                    return Array.isArray(data.announcements) ? data.announcements : [];
+                } catch (error) {
+                    return [];
+                }
+            }
+
+            async function refreshAnnouncements(options = {}) {
+                const playSound = options.playSound !== false;
+                const announcements = await fetchAnnouncements();
+                window.dispatchEvent(new CustomEvent('kaika:announcements-updated', {
+                    detail: {
+                        announcements: announcements,
+                    },
+                }));
+                const unseenAnnouncements = getUnseenAnnouncements(announcements);
+                if (!unseenAnnouncements.length) {
+                    return;
+                }
+
+                markAnnouncementsSeen(unseenAnnouncements);
+                showAnnouncementToast(unseenAnnouncements[0], unseenAnnouncements.length - 1, playSound);
+            }
+
+            closeButton.addEventListener('click', hideToast);
+
+            document.addEventListener('visibilitychange', function () {
+                if (!document.hidden) {
+                    refreshAnnouncements();
+                }
+            });
+
+            refreshAnnouncements();
+            window.setInterval(refreshAnnouncements, 60000);
+        })();
+    </script>
+    <script>
+        document.addEventListener('click', function (event) {
+            const target = event.target.closest('[data-detail-url]');
+            if (!target || event.target.closest('a, button, input, select, textarea, form, label')) {
+                return;
+            }
+            const url = target.dataset.detailUrl;
+            if (url) {
+                window.location.assign(url);
+            }
+        });
+
+        document.addEventListener('keydown', function (event) {
+            if (!['Enter', ' '].includes(event.key)) {
+                return;
+            }
+            const target = event.target.closest('[data-detail-url]');
+            if (!target || event.target.closest('a, button, input, select, textarea, form, label')) {
+                return;
+            }
+            const url = target.dataset.detailUrl;
+            if (url) {
+                event.preventDefault();
+                window.location.assign(url);
+            }
+        });
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

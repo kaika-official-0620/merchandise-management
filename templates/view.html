@@ -1,0 +1,2033 @@
+{% extends "base.html" %}
+{% block title %}{{ item.product_name|clean_display('商品名未登録') }} - 株式会社 開花{% endblock %}
+
+{% block content %}
+{% set detail_is_user_product = (item.scope == 'user') or not (current_user.is_admin() or current_user.is_owner()) or ((item.wholesale_price or 0) and item.user_id and item.user_id != current_user.id) %}
+{% set detail_purchase_price = (item.wholesale_price or item.purchase_price or 0) if detail_is_user_product else (item.display_purchase_price or item.purchase_price or 0) %}
+{% set detail_sale_price = item.display_sale_price or item.sale_price or 0 %}
+{% set detail_profit = detail_sale_price - detail_purchase_price - (item.shipping_cost or 0) - (item.commission or 0) - (item.other_cost or 0) %}
+{% set detail_profit_rate = ((detail_profit / detail_purchase_price * 100)|round(1)) if detail_purchase_price else 0 %}
+<style>
+.condition-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    margin-right: 8px;
+}
+.condition-N { background: #dbeafe; color: #1d4ed8; }
+.condition-S { background: #d1fae5; color: #059669; }
+.condition-A { background: #fef3c7; color: #d97706; }
+.condition-AB { background: #fed7aa; color: #c2410c; }
+.condition-B { background: #fecaca; color: #dc2626; }
+
+.request-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.28rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.request-pill.type {
+    background: #e0f2fe;
+    color: #0f766e;
+}
+
+.request-pill.status {
+    background: #fff7ed;
+    color: #c2410c;
+}
+
+.request-pill.status.processing {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.request-pill.status.completed {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.request-pill.status.rejected {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.long-term-detail-actions {
+    margin-top: 1rem;
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.header-actions .btn,
+.detail-section .btn,
+.detail-section .btn-sm,
+.long-term-detail-actions .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+.long-term-detail-actions .btn,
+.long-term-detail-actions form .btn {
+    min-width: 160px;
+}
+
+.sales-agency-detail-panel {
+    margin: 0 0 1rem;
+    padding: 1rem;
+    border: 1px solid #bfdbfe;
+    border-radius: 12px;
+    background: #f8fbff;
+}
+
+.sales-agency-detail-panel h3 {
+    margin: 0 0 0.35rem;
+    color: #0f172a;
+    font-size: 1rem;
+}
+
+.sales-agency-detail-panel p {
+    margin: 0 0 0.85rem;
+    color: #475569;
+    font-size: 0.9rem;
+    line-height: 1.7;
+}
+
+.sales-agency-detail-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 0.75rem;
+}
+
+.sales-agency-detail-form label {
+    display: grid;
+    gap: 0.25rem;
+    flex: 1 1 320px;
+    min-width: 0;
+    color: #334155;
+    font-size: 0.85rem;
+    font-weight: 700;
+}
+
+.sales-agency-detail-form select,
+.sales-agency-detail-form textarea {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    min-height: 40px;
+    padding: 0.5rem 0.7rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #ffffff;
+    color: #0f172a;
+    font-size: 0.95rem;
+    font: inherit;
+}
+
+.sales-agency-detail-form textarea {
+    min-height: 78px;
+    resize: vertical;
+}
+
+.sales-agency-status-note {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
+    color: #475569;
+}
+
+.page-actions {
+    margin: -0.35rem 0 0.75rem;
+}
+
+.page-actions .header-actions {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+}
+
+.page-actions .header-actions .btn {
+    width: auto;
+    min-width: 0;
+    min-height: 34px;
+    padding: 0.42rem 0.8rem;
+    border-radius: 6px;
+    font-size: 0.84rem;
+    line-height: 1.3;
+}
+
+.item-detail-action-panel {
+    margin: 0 0 1rem;
+    padding: 0.9rem 1rem;
+    border: 1px solid #d7dfeb;
+    border-radius: 8px;
+    background: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.85rem;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+}
+
+.item-detail-action-summary {
+    display: grid;
+    gap: 0.25rem;
+    min-width: 0;
+}
+
+.item-detail-action-label {
+    color: #64748b;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.item-detail-action-status {
+    color: #0f172a;
+    font-size: 0.98rem;
+    font-weight: 800;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.item-detail-action-buttons {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.detail-action-btn,
+.detail-action-state {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    padding: 0.6rem 0.9rem;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    font-weight: 800;
+    line-height: 1.2;
+    text-decoration: none;
+}
+
+.detail-action-btn {
+    cursor: pointer;
+}
+
+.detail-action-state {
+    background: #f1f5f9;
+    border-color: #e2e8f0;
+    color: #475569;
+}
+
+.detail-action-note {
+    display: inline-flex;
+    align-items: center;
+    max-width: min(100%, 520px);
+    min-height: 40px;
+    padding: 0.55rem 0.75rem;
+    border: 1px solid #fed7aa;
+    border-radius: 6px;
+    background: #fff7ed;
+    color: #9a3412;
+    font-size: 0.85rem;
+    line-height: 1.35;
+}
+
+.detail-action-note.warning {
+    border-color: #facc15;
+    background: #fefce8;
+    color: #713f12;
+}
+
+.detail-action-btn.shipping {
+    background: #f59e0b;
+    color: #fff;
+}
+
+.detail-action-btn.completion {
+    background: #0f766e;
+    color: #fff;
+}
+
+.detail-action-btn.edit-request {
+    background: #7c3aed;
+    color: #fff;
+}
+
+.detail-action-btn.admin-check {
+    background: #2563eb;
+    color: #fff;
+}
+
+.sale-request-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 23, 42, 0.55);
+    padding: 1rem;
+}
+
+.sale-request-modal.open {
+    display: flex;
+}
+
+.sale-request-content {
+    width: min(100%, 500px);
+    max-height: 92vh;
+    overflow-y: auto;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 20px 60px rgba(15, 23, 42, 0.25);
+}
+
+.sale-request-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 1.1rem;
+    background: #f59e0b;
+    color: #fff;
+}
+
+.sale-request-header.edit {
+    background: #7c3aed;
+}
+
+.sale-request-header h3 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.sale-request-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.2);
+    color: #fff;
+    font-size: 1.2rem;
+    cursor: pointer;
+}
+
+.sale-request-body {
+    padding: 1.1rem;
+}
+
+.sale-request-product {
+    margin-bottom: 1rem;
+    padding: 0.8rem;
+    border-radius: 6px;
+    background: #f8fafc;
+    color: #1e293b;
+    font-weight: 700;
+}
+
+.sale-request-help,
+.form-hint {
+    color: #475569;
+    font-size: 0.88rem;
+    line-height: 1.6;
+}
+
+.sale-request-inline-message {
+    display: none;
+    margin: 0 0 1rem;
+    padding: 0.75rem 0.9rem;
+    border-radius: 6px;
+    font-size: 0.88rem;
+    font-weight: 700;
+    line-height: 1.6;
+}
+
+.sale-request-inline-message.show {
+    display: block;
+}
+
+.sale-request-inline-message.error {
+    background: #fef2f2;
+    border: 1px solid #fca5a5;
+    color: #b91c1c;
+}
+
+.sale-request-form .form-group {
+    margin-bottom: 1rem;
+}
+
+.sale-request-form label {
+    display: block;
+    margin-bottom: 0.45rem;
+    color: #334155;
+    font-weight: 700;
+}
+
+.sale-request-form input[type="number"],
+.sale-request-form input[type="file"] {
+    width: 100%;
+    padding: 0.7rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 1rem;
+}
+
+.file-upload-area {
+    padding: 1rem;
+    border: 2px dashed #cbd5e1;
+    border-radius: 6px;
+    background: #f8fafc;
+    text-align: center;
+    cursor: pointer;
+}
+
+.file-upload-area.has-file {
+    border-color: #10b981;
+    background: #ecfdf5;
+}
+
+.file-upload-icon {
+    font-size: 1.7rem;
+    margin-bottom: 0.35rem;
+}
+
+.file-upload-text {
+    color: #64748b;
+    font-size: 0.88rem;
+}
+
+.file-upload-name {
+    margin-top: 0.35rem;
+    color: #047857;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.sale-request-footer {
+    display: flex;
+    gap: 0.75rem;
+    padding: 1rem 1.1rem;
+    border-top: 1px solid #e2e8f0;
+}
+
+.sale-request-footer .btn {
+    flex: 1;
+    min-height: 42px;
+    border-radius: 6px;
+    font-weight: 800;
+}
+
+.sale-request-footer .btn-cancel {
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    color: #475569;
+}
+
+.sale-request-footer .btn-submit {
+    background: #f59e0b;
+    border: 1px solid #f59e0b;
+    color: #fff;
+}
+
+.sale-request-footer .btn-submit.edit {
+    background: #7c3aed;
+    border-color: #7c3aed;
+}
+
+/* コピーボタン */
+.copy-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    margin-left: 8px;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    color: #64748b;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    vertical-align: middle;
+}
+
+.copy-btn:hover {
+    background: #e2e8f0;
+    color: #334155;
+}
+
+.copy-btn.copied {
+    background: #d1fae5;
+    border-color: #10b981;
+    color: #059669;
+}
+
+.copy-btn svg {
+    width: 12px;
+    height: 12px;
+}
+
+.copy-value-wrapper {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.product-title-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.product-title-wrapper h2 {
+    margin: 0;
+}
+
+/* コピー成功トースト */
+.copy-toast {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: #1e293b;
+    color: white;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    z-index: 9999;
+    opacity: 0;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+.copy-toast.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+}
+
+/* 画像保存ボタン */
+.image-download-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin: 10px 0;
+    flex-wrap: wrap;
+}
+
+.download-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    color: #475569;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.download-btn:hover {
+    background: #e2e8f0;
+    color: #1e293b;
+    border-color: #cbd5e1;
+}
+
+.download-btn:active {
+    transform: scale(0.98);
+}
+
+.download-btn.downloading {
+    background: #dbeafe;
+    border-color: #3b82f6;
+    color: #1d4ed8;
+}
+
+/* ギャラリー表示 */
+.gallery-container {
+    margin-bottom: 20px;
+}
+
+/* 横スクロール形式のメイン画像 */
+.main-photo-scroll {
+    position: relative;
+    width: 100%;
+    max-width: 500px;
+    margin: 0 auto 15px;
+}
+
+.main-photo-scroll-container {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+
+.main-photo-scroll-container::-webkit-scrollbar {
+    display: none;
+}
+
+.main-photo-slide {
+    flex: 0 0 100%;
+    width: 100%;
+    scroll-snap-align: start;
+    cursor: pointer;
+}
+
+.main-photo-slide img {
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    display: block;
+}
+
+.photo-counter {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    background: rgba(0,0,0,0.6);
+    color: white;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    z-index: 5;
+}
+
+.thumbnail-strip {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 10px 0;
+    -webkit-overflow-scrolling: touch;
+}
+
+.thumbnail-strip::-webkit-scrollbar {
+    height: 6px;
+}
+
+.thumbnail-strip::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 3px;
+}
+
+.thumbnail-strip::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 3px;
+}
+
+.thumbnail-item {
+    flex-shrink: 0;
+    width: 60px;
+    height: 60px;
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: all 0.2s;
+}
+
+.thumbnail-item:hover {
+    border-color: #667eea;
+}
+
+.thumbnail-item.active {
+    border-color: #667eea;
+    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.3);
+}
+
+.thumbnail-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* ライトボックス - 横スクロール形式 */
+.lightbox {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.95);
+    z-index: 1000;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+.lightbox.active {
+    display: flex;
+}
+
+.lightbox-content {
+    position: relative;
+    width: 100%;
+    max-width: 800px;
+    height: 80vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.lightbox-scroll-container {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    width: 100%;
+    height: 100%;
+}
+
+.lightbox-scroll-container::-webkit-scrollbar {
+    display: none;
+}
+
+.lightbox-slide {
+    flex: 0 0 100%;
+    width: 100%;
+    height: 100%;
+    scroll-snap-align: start;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.lightbox-slide img {
+    max-width: 90%;
+    max-height: 100%;
+    border-radius: 8px;
+    object-fit: contain;
+}
+
+.lightbox-close {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: rgba(255,255,255,0.2);
+    border: none;
+    color: white;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    font-size: 1.5rem;
+    cursor: pointer;
+    z-index: 1001;
+    transition: background 0.2s;
+}
+
+.lightbox-close:hover {
+    background: rgba(255,255,255,0.3);
+}
+
+.lightbox-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(255,255,255,0.2);
+    border: none;
+    color: white;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    font-size: 1.5rem;
+    cursor: pointer;
+    transition: background 0.2s;
+    z-index: 1001;
+}
+
+.lightbox-nav:hover {
+    background: rgba(255,255,255,0.3);
+}
+
+.lightbox-prev {
+    left: 20px;
+}
+
+.lightbox-next {
+    right: 20px;
+}
+
+.lightbox-counter {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: white;
+    font-size: 0.9rem;
+    background: rgba(0,0,0,0.5);
+    padding: 6px 15px;
+    border-radius: 20px;
+    z-index: 1001;
+}
+
+.no-image-large {
+    width: 100%;
+    height: 200px;
+    background: #f1f5f9;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #94a3b8;
+    font-size: 1.5rem;
+}
+
+/* スマホ用レイアウト */
+@media (max-width: 768px) {
+    .item-detail-action-panel {
+        align-items: stretch;
+        flex-direction: column;
+        padding: 0.8rem;
+    }
+
+    .item-detail-action-buttons {
+        justify-content: stretch;
+    }
+
+    .detail-action-btn,
+    .detail-action-state {
+        width: 100%;
+        min-height: 42px;
+    }
+
+    .view-container {
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .view-image {
+        order: 1;
+        margin-bottom: 15px;
+        margin-top: 10px;
+    }
+    
+    .view-details {
+        order: 2;
+    }
+    
+    .gallery-container {
+        margin-bottom: 10px;
+    }
+    
+    .main-photo-scroll {
+        max-width: 250px;
+        margin: 0 auto 10px;
+    }
+    
+    .main-photo-scroll-container {
+        border-radius: 8px;
+    }
+    
+    .photo-counter {
+        padding: 2px 8px;
+        font-size: 0.7rem;
+        bottom: 5px;
+        right: 5px;
+    }
+    
+    .thumbnail-strip {
+        gap: 6px;
+        padding: 8px 0;
+        justify-content: center;
+    }
+    
+    .thumbnail-item {
+        width: 45px;
+        height: 45px;
+        border-radius: 6px;
+    }
+    
+    .no-image-large {
+        height: 120px;
+        font-size: 1.2rem;
+        max-width: 200px;
+        margin: 0 auto;
+    }
+    
+    /* ライトボックス調整 */
+    .lightbox-nav {
+        width: 40px;
+        height: 40px;
+        font-size: 1.2rem;
+    }
+    
+    .lightbox-prev {
+        left: 10px;
+    }
+    
+    .lightbox-next {
+        right: 10px;
+    }
+    
+    .lightbox-close {
+        width: 36px;
+        height: 36px;
+        font-size: 1.2rem;
+        top: 10px;
+        right: 10px;
+    }
+}
+
+/* さらに小さい画面用 */
+@media (max-width: 480px) {
+    .main-photo-scroll {
+        max-width: 200px;
+    }
+    
+    .thumbnail-item {
+        width: 40px;
+        height: 40px;
+    }
+}
+</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/sale_request_image_picker.css') }}">
+<div class="page-actions">
+    <div class="header-actions context-back-inline-source">
+        {% if feature_plans_enabled and not current_user.is_admin() and can_edit_self_inventory_item(item) %}
+        <a href="{{ url_for('self_inventory_edit', item_id=item.id) }}" class="btn btn-primary">編集</a>
+        {% endif %}
+        {% if current_user.is_admin() and custody_location(item) == 'kaika' %}
+        <a href="{{ url_for('edit_item', id=item.id, back_url=back_url) }}" class="btn btn-primary">編集</a>
+        {% endif %}
+        <a href="{{ back_url }}" class="btn btn-secondary context-back-inline">一覧へ戻る</a>
+    </div>
+</div>
+
+{% set is_admin_view = current_user.is_admin() or current_user.is_owner() %}
+{% set detail_status_label = item.long_term_result_label or (item.long_term_request.status_label if item.long_term_request else '') or item.mobile_status_label or '状態未設定' %}
+{% include '_inventory_custody_styles.html' %}
+<p><span class="custody-badge">{{ custody_label(item) }}</span></p>
+{% if custody_location(item) != 'kaika' %}
+<section class="item-detail-action-panel">
+  <div class="item-detail-action-summary"><span class="item-detail-action-label">現在の状態</span><strong>{{ item.mobile_status_label }}</strong></div>
+  <div class="item-detail-action-buttons">{% include '_inventory_custody_actions.html' %}</div>
+</section>
+<p class="custody-note">自己保管中の登録・販売・発送の記録はご本人が行います。開花に預ける場合は、預け入れの受付を作成してください。開花が受領を確認すると、開花で保管・記帳する商品に切り替わります。</p>
+{% else %}
+<section class="item-detail-action-panel">
+    <div class="item-detail-action-summary">
+        <span class="item-detail-action-label">現在の状態</span>
+        <strong class="item-detail-action-status">{{ detail_status_label }}</strong>
+    </div>
+    <div class="item-detail-action-buttons">
+        {% if is_admin_view %}
+            {% if item.pending_completion_request %}
+            <a href="{{ url_for('admin_completion_requests', q=item.id) }}" class="detail-action-btn admin-check">取引完了BOXで確認</a>
+            {% elif item.pending_shipping_request or item.approved_shipping_request %}
+            <a href="{{ url_for('admin_shipping_requests', q=item.id) }}" class="detail-action-btn admin-check">発送依頼BOXで確認</a>
+            {% elif item.shipment_marked %}
+            <span class="detail-action-state">発送済み</span>
+            {% elif item.is_sold or item.sale_date %}
+            <span class="detail-action-state">売却済み</span>
+            {% elif item.long_term_result_label %}
+            <span class="detail-action-state">{{ item.long_term_result_label }}</span>
+            {% elif item.long_term_request %}
+            <span class="detail-action-state">{{ item.long_term_request.status_label }}</span>
+            {% else %}
+            <span class="detail-action-state">管理者編集は上部の編集から行えます</span>
+            {% endif %}
+        {% else %}
+            {% if item.is_sold or item.sale_date %}
+            <span class="detail-action-state">売却済み</span>
+            {% elif item.long_term_result_label %}
+            <span class="detail-action-state">{{ item.long_term_result_label }}</span>
+            {% elif item.long_term_request %}
+            <span class="detail-action-state">{{ item.long_term_request.status_label }}</span>
+            {% elif item.pending_sales_agency %}
+            <span class="detail-action-state">{{ item.sales_agency_request.status_label if item.sales_agency_request and item.sales_agency_request.status_label else '申請中' }}</span>
+            {% elif item.completion_resend_requested %}
+            <span class="detail-action-state">再送依頼</span>
+            {% if item.rejected_completion_request and item.rejected_completion_request.admin_note %}
+            <span class="detail-action-note">{{ item.rejected_completion_request.admin_note }}</span>
+            {% endif %}
+            <button type="button"
+                class="detail-action-btn completion js-sale-request-trigger"
+                data-action="create-completion"
+                data-item-id="{{ item.id }}"
+                data-product-name="{{ item.product_name or '' }}"
+                data-listing-price="{{ item.listing_price or 0 }}">
+                再送する
+            </button>
+            {% elif item.pending_completion_request %}
+            <span class="detail-action-state">確認待ち</span>
+            <button type="button"
+                class="detail-action-btn edit-request js-sale-request-trigger"
+                data-action="edit"
+                data-request-id="{{ item.completion_request.id }}"
+                data-request-type="{{ item.completion_request.request_type }}"
+                data-product-name="{{ item.product_name or '' }}"
+                data-sale-price="{{ item.completion_request.sale_price or 0 }}"
+                data-shipping-cost="{{ item.completion_request.shipping_cost or 0 }}"
+                data-commission="{{ item.completion_request.commission or 0 }}"
+                data-other-cost="{{ item.completion_request.other_cost or 0 }}"
+                data-user-note="{{ item.completion_request.user_note or '' }}"
+                data-qr-image-path="{{ item.completion_request.qr_image_path or '' }}"
+                data-qr-image-path2="{{ item.completion_request.qr_image_path2 or '' }}"
+                data-additional-image-paths='{{ (item.completion_request.additional_image_paths_list or [])|tojson|forceescape }}'>
+                内容を編集
+            </button>
+            {% elif item.can_send_completion_report %}
+            <button type="button"
+                class="detail-action-btn completion js-sale-request-trigger"
+                data-action="create-completion"
+                data-item-id="{{ item.id }}"
+                data-product-name="{{ item.product_name or '' }}"
+                data-listing-price="{{ item.listing_price or 0 }}">
+                取引完了報告を送る
+            </button>
+            {% if item.completion_report_warning %}
+            <span class="detail-action-note warning">{{ item.completion_report_warning.message }}</span>
+            {% endif %}
+            {% elif item.approved_shipping_request %}
+            <span class="detail-action-state">発送依頼送付済み</span>
+            {% elif item.pending_shipping_request %}
+            <span class="detail-action-state">発送依頼中</span>
+            <button type="button"
+                class="detail-action-btn edit-request js-sale-request-trigger"
+                data-action="edit"
+                data-request-id="{{ item.shipping_request.id }}"
+                data-request-type="{{ item.shipping_request.request_type }}"
+                data-product-name="{{ item.product_name or '' }}"
+                data-sale-price="{{ item.shipping_request.sale_price or 0 }}"
+                data-shipping-cost="{{ item.shipping_request.shipping_cost or 0 }}"
+                data-commission="{{ item.shipping_request.commission or 0 }}"
+                data-other-cost="{{ item.shipping_request.other_cost or 0 }}"
+                data-user-note="{{ item.shipping_request.user_note or '' }}"
+                data-qr-image-path="{{ item.shipping_request.qr_image_path or '' }}"
+                data-qr-image-path2="{{ item.shipping_request.qr_image_path2 or '' }}"
+                data-additional-image-paths='{{ (item.shipping_request.additional_image_paths_list or [])|tojson|forceescape }}'>
+                内容を編集
+            </button>
+            {% else %}
+            <button type="button"
+                class="detail-action-btn shipping js-sale-request-trigger"
+                data-action="create-shipping"
+                data-item-id="{{ item.id }}"
+                data-product-name="{{ item.product_name or '' }}">
+                発送依頼を送る
+            </button>
+            {% endif %}
+        {% endif %}
+    </div>
+</section>
+
+{% endif %}
+{% if not current_user.is_admin() and custody_location(item) == 'kaika' %}
+<section class="sales-agency-detail-panel">
+    <h3>販売代行申請</h3>
+    {% if item.is_sold or item.sale_date %}
+    <p>売却済みの商品は販売代行を申請できません。</p>
+    {% elif item.pending_sales_agency and item.sales_agency_request %}
+    <p class="sales-agency-status-note">
+        <span>この商品は申請中です。</span>
+        <span class="request-pill type">{{ item.sales_agency_request.service_name }}</span>
+        <span class="request-pill status">{{ item.sales_agency_request.status_label }}</span>
+    </p>
+    <p>対応状況によってはキャンセルできない場合があります。</p>
+    {% if item.sales_agency_request.can_request_cancel %}
+    <form method="POST" action="{{ url_for('sales_agency_cancel_request', request_id=item.sales_agency_request.request_id) }}" class="sales-agency-detail-form">
+        <input type="hidden" name="next" value="{{ request.full_path[:-1] if request.full_path.endswith('?') else request.full_path }}">
+        <label>
+            キャンセル理由（任意）
+            <textarea name="cancel_note" rows="3" placeholder="理由があれば入力してください"></textarea>
+        </label>
+        <button type="submit" class="btn btn-secondary">キャンセル申請</button>
+    </form>
+    {% else %}
+    <p>対応中または処理完了のため、この画面からキャンセル申請はできません。</p>
+    {% endif %}
+    {% else %}
+    {% if item.sales_agency_terminal_request %}
+    <p class="sales-agency-status-note">
+        <span>直近の販売代行申請</span>
+        <span class="request-pill type">{{ item.sales_agency_terminal_request.service_name }}</span>
+        <span class="request-pill status {{ item.sales_agency_terminal_request.status }}">{{ item.sales_agency_terminal_request.status_label }}</span>
+    </p>
+    {% if item.sales_agency_terminal_request.reason %}
+    <p class="detail-action-note">{{ item.sales_agency_terminal_request.reason }}</p>
+    {% endif %}
+    {% endif %}
+    {% if not feature_plans_enabled or has_plan_feature('dealer_sales') %}
+    <p>この商品の詳細を確認したまま、業者卸販売・同時出品・業者オークション出品の申請ができます。</p>
+    {% include '_sales_agency_service_guide.html' %}
+    <form method="POST" action="{{ url_for('sales_agency_apply') }}" class="sales-agency-detail-form">
+        {% if feature_plans_enabled %}<input type="hidden" name="csrf_token" value="{{ feature_csrf_token() }}">{% endif %}
+        <input type="hidden" name="merchandise_ids" value="{{ item.id }}">
+        <input type="hidden" name="next" value="{{ request.full_path[:-1] if request.full_path.endswith('?') else request.full_path }}">
+        <label>
+            サービス種別
+            <select name="service_type" required>
+                <option value="">選択してください</option>
+                {% for key, label in sales_agency_service_types.items() %}
+                <option value="{{ key }}">{{ label }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <button type="submit" class="btn btn-primary">この商品で申請する</button>
+    </form>
+    {% else %}
+    <p>販売代行の新規申請は、対応する機能プランでご利用いただけます。</p>
+    <a class="btn btn-secondary" href="{{ url_for('feature_plans.plans') }}">利用プランを確認</a>
+    {% endif %}
+    {% endif %}
+</section>
+{% endif %}
+
+<div class="view-container">
+    <div class="view-image">
+        {% if item.all_photos and item.all_photos|length > 0 %}
+        <div class="gallery-container">
+            <div class="main-photo-scroll">
+                <div class="main-photo-scroll-container" id="mainPhotoScrollContainer">
+                    {% for photo in item.all_photos %}
+                    <div class="main-photo-slide" onclick="openLightbox({{ loop.index0 }})">
+                        <img src="{{ url_for('static', filename=photo) }}" alt="{{ item.product_name|clean_display('商品名未登録') }}">
+                    </div>
+                    {% endfor %}
+                </div>
+                {% if item.all_photos|length > 1 %}
+                <span class="photo-counter" id="photoCounter">1 / {{ item.all_photos|length }}</span>
+                {% endif %}
+            </div>
+            <div class="image-download-buttons">
+                <button class="download-btn" onclick="downloadCurrentImage(event)">この画像を保存</button>
+                {% if item.all_photos|length > 1 %}
+                <button class="download-btn" onclick="downloadAllImages(event)">すべて保存 ({{ item.all_photos|length }}枚)</button>
+                {% endif %}
+            </div>
+            {% if item.all_photos|length > 1 %}
+            <div class="thumbnail-strip">
+                {% for photo in item.all_photos %}
+                <div class="thumbnail-item {% if loop.first %}active{% endif %}" onclick="scrollToPhoto({{ loop.index0 }})">
+                    <img src="{{ url_for('static', filename=photo) }}" alt="写真{{ loop.index }}">
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        {% else %}
+        <div class="no-image-large">写真なし</div>
+        {% endif %}
+    </div>
+    
+    <div class="view-details">
+        <div class="product-title-wrapper">
+        <h2>{{ item.product_name|clean_display('商品名未登録') }}</h2>
+            <button class="copy-btn" onclick="copyToClipboard('{{ item.product_name }}', this)">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                コピー
+            </button>
+        </div>
+        
+        <div class="detail-section">
+            <h3>基本情報</h3>
+            <dl class="detail-list">
+                <dt>仕入価格</dt>
+                <dd>仕入 ¥{{ "{:,}".format(detail_purchase_price|int) }}</dd>
+                <dt>商品名</dt>
+                <dd>{{ item.product_name|clean_display('商品名未登録') }}</dd>
+                {% if current_user.is_admin() or current_user.is_owner() %}
+                <dt>登録者</dt>
+                <dd>{{ item.created_by_name or '既存データ' }}</dd>
+                <dt>最終更新者</dt>
+                <dd>{{ item.updated_by_name or '-' }}</dd>
+                {% endif %}
+                {% if custody_location(item) == 'kaika' %}
+                <dt>開花での保管開始日</dt>
+                <dd>{{ item.storage_started_at_display or ((item.created_at|string)[:10] if item.created_at else (item.purchase_date or '-')) }}</dd>
+                <dt>開花管理番号</dt>
+                <dd>{{ item.kaika_product_code or '-' }}</dd>
+                {% else %}
+                <dt>登録日</dt><dd>{{ (item.created_at|string)[:10] if item.created_at else '-' }}</dd>
+                <dt>商品番号</dt><dd>#{{ item.id }}</dd>
+                {% endif %}
+                <dt>ブランド</dt>
+                <dd>
+                    <span class="copy-value-wrapper">
+                        {{ item.brand_name|clean_display('-') }}
+                        {% if item.brand_name %}
+                        <button class="copy-btn" onclick="copyToClipboard('{{ item.brand_name }}', this)">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                            コピー
+                        </button>
+                        {% endif %}
+                    </span>
+                </dd>
+                <dt>型番</dt>
+                <dd>
+                    <span class="copy-value-wrapper">
+                        {{ item.model_number or '-' }}
+                        {% if item.model_number %}
+                        <button class="copy-btn" onclick="copyToClipboard('{{ item.model_number }}', this)">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                            コピー
+                        </button>
+                        {% endif %}
+                    </span>
+                </dd>
+                <dt>商品状態</dt>
+                <dd>
+                    {% if item.item_condition %}
+                    <span class="copy-value-wrapper">
+                    <span class="condition-badge condition-{{ item.item_condition }}">{{ item.item_condition }}</span>
+                    {% if item.item_condition == 'N' %}新品
+                    {% elif item.item_condition == 'S' %}新品ではないが傷なし
+                    {% elif item.item_condition == 'A' %}未使用に近い
+                    {% elif item.item_condition == 'AB' %}傷・汚れあり（小）
+                    {% elif item.item_condition == 'B' %}傷・汚れあり（大）
+                    {% endif %}
+                        <button class="copy-btn" onclick="copyCondition('{{ item.item_condition }}', this)">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                            コピー
+                        </button>
+                    </span>
+                    {% else %}-{% endif %}
+                </dd>
+                <dt>仕入先</dt>
+                <dd>{{ item.store_name|clean_display('-') }}</dd>
+                {% if item.store_name == '個人' %}
+                <dt>仕入先詳細</dt>
+                <dd>{{ item.supplier_detail|clean_display('-') }}</dd>
+                <dt>身分証</dt>
+                <dd>
+                    {% if item.id_document_path %}
+                    <a href="{{ url_for('static', filename=item.id_document_path) }}" target="_blank" class="btn btn-sm">表示</a>
+                    {% else %}-{% endif %}
+                </dd>
+                <dt>同意書</dt>
+                <dd>
+                    {% if item.consent_form_path %}
+                    <a href="{{ url_for('static', filename=item.consent_form_path) }}" target="_blank" class="btn btn-sm">表示</a>
+                    {% else %}-{% endif %}
+                </dd>
+                {% endif %}
+                <dt>支払方法</dt>
+                <dd>{{ item.payment_method|clean_display('-') }}</dd>
+                <dt>メモ</dt>
+                <dd style="white-space: pre-wrap;">{{ item.notes|clean_display('-') }}</dd>
+            </dl>
+        </div>
+
+        {% if item.long_term_request %}
+        <div class="detail-section">
+            <h3>長期保存申請</h3>
+            <dl class="detail-list">
+                <dt>申請内容</dt>
+                <dd><span class="request-pill type">{{ item.long_term_request.type_label }}</span></dd>
+                <dt>処理状況</dt>
+                <dd><span class="request-pill status {{ item.long_term_request.status_stage or 'pending' }}">{{ item.long_term_request.status_label }}</span></dd>
+                <dt>次の対応</dt>
+                <dd>{{ item.long_term_request.next_action_label }}</dd>
+                <dt>申請日</dt>
+                <dd>{{ item.long_term_request.requested_at_display }}</dd>
+                {% if item.long_term_request.processed_at_display %}
+                <dt>更新日</dt>
+                <dd>{{ item.long_term_request.processed_at_display }}</dd>
+                {% endif %}
+                {% if item.storage_started_at_display %}
+                <dt>長期保存開始日</dt>
+                <dd>{{ item.storage_started_at_display }}</dd>
+                <dt>保管日数</dt>
+                <dd>{{ item.days_since_purchase or 0 }}日</dd>
+                {% endif %}
+                {% if item.long_term_request.shipping_name %}
+                <dt>宛名</dt>
+                <dd>{{ item.long_term_request.shipping_name }}</dd>
+                {% endif %}
+                {% if item.long_term_request.shipping_phone %}
+                <dt>電話番号</dt>
+                <dd>{{ item.long_term_request.shipping_phone }}</dd>
+                {% endif %}
+                {% if item.long_term_request.shipping_address %}
+                <dt>返送先住所</dt>
+                <dd style="white-space: pre-wrap;">{{ item.long_term_request.shipping_address }}</dd>
+                {% endif %}
+                {% if item.long_term_request.admin_note %}
+                <dt>管理メモ</dt>
+                <dd style="white-space: pre-wrap;">{{ item.long_term_request.admin_note }}</dd>
+                {% endif %}
+            </dl>
+            {% if current_user.is_admin() %}
+            <div class="long-term-detail-actions">
+                {% if item.long_term_request.show_sale_entry %}
+                <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-edit">{{ item.long_term_request.sale_entry_label }}</a>
+                {% endif %}
+                {% if item.long_term_request.finish_action %}
+                <form method="POST" action="{{ url_for('process_disposal_request', request_id=item.long_term_request.id) }}" style="display:inline-flex; margin: 0;">
+                    <input type="hidden" name="action" value="{{ item.long_term_request.finish_action }}">
+                    <button type="submit" class="btn btn-secondary" onclick='return confirm({{ item.long_term_request.finish_confirm_message|default("", true)|tojson }})'>{{ item.long_term_request.finish_action_label }}</button>
+                </form>
+                {% endif %}
+                {% if item.long_term_request.other_action %}
+                <form method="POST" action="{{ url_for('process_disposal_request', request_id=item.long_term_request.id) }}" style="display:inline-flex; margin: 0;">
+                    <input type="hidden" name="action" value="{{ item.long_term_request.other_action }}">
+                    <button type="submit" class="btn btn-secondary" onclick='return confirm({{ item.long_term_request.other_confirm_message|default("", true)|tojson }})'>{{ item.long_term_request.other_action_label }}</button>
+                </form>
+                {% endif %}
+                <a href="{{ url_for('admin_disposal_requests', reason='long_term', user_id=item.user_id, merchandise_id=item.id) }}" class="btn btn-secondary">申請一覧で確認</a>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+        
+        {% if item.is_sold or item.sale_date %}
+        <div class="detail-section">
+            <h3>売却情報</h3>
+            <dl class="detail-list">
+                <dt>売却価格</dt>
+                <dd>売却 ¥{{ "{:,}".format(detail_sale_price|int) }}</dd>
+                <dt>売却日</dt>
+                <dd>{{ item.sale_date }}</dd>
+                <dt>販売先/販売方法</dt>
+                <dd>{{ item.sales_destination_display|clean_display('-') }}{% if item.sale_type_summary and item.sale_type_summary != '-' %} / {{ item.sale_type_summary }}{% endif %}</dd>
+                <dt>送料</dt>
+                <dd>¥{{ "{:,}".format(item.shipping_cost or 0) }}</dd>
+                <dt>手数料</dt>
+                <dd>¥{{ "{:,}".format(item.commission or 0) }}</dd>
+                <dt>その他費用</dt>
+                <dd>¥{{ "{:,}".format(item.other_cost or 0) }}</dd>
+                <dt>利益額</dt>
+                <dd class="{% if detail_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}" style="font-weight: bold; font-size: 1.2em;">
+                    ¥{{ "{:,}".format(detail_profit|int) }}
+                </dd>
+                <dt>利益率</dt>
+                <dd>{{ detail_profit_rate }}%</dd>
+                <dt>備考</dt>
+                <dd style="white-space: pre-wrap;">{{ item.notes|clean_display('-') }}</dd>
+            </dl>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- ライトボックス -->
+{% if item.all_photos and item.all_photos|length > 0 %}
+<div class="lightbox" id="lightbox" onclick="closeLightboxOnBackground(event)">
+    <button class="lightbox-close" onclick="closeLightbox()">×</button>
+    {% if item.all_photos|length > 1 %}
+    <button class="lightbox-nav lightbox-prev" onclick="lightboxPrev()">‹</button>
+    <button class="lightbox-nav lightbox-next" onclick="lightboxNext()">›</button>
+    {% endif %}
+    <div class="lightbox-content">
+        <div class="lightbox-scroll-container" id="lightboxScrollContainer">
+            {% for photo in item.all_photos %}
+            <div class="lightbox-slide">
+                <img src="{{ url_for('static', filename=photo) }}" alt="{{ item.product_name|clean_display('商品名未登録') }}">
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% if item.all_photos|length > 1 %}
+    <div class="lightbox-counter" id="lightboxCounter"></div>
+    {% endif %}
+</div>
+
+<script>
+const photos = {{ item.all_photos | tojson }};
+let currentPhotoIndex = 0;
+
+// メイン画像のスクロールコンテナ
+const mainPhotoScrollContainer = document.getElementById('mainPhotoScrollContainer');
+
+// スクロール位置から現在のインデックスを更新
+if (mainPhotoScrollContainer) {
+    mainPhotoScrollContainer.addEventListener('scroll', function() {
+        const slideWidth = mainPhotoScrollContainer.offsetWidth;
+        const newIndex = Math.round(mainPhotoScrollContainer.scrollLeft / slideWidth);
+        if (newIndex !== currentPhotoIndex && newIndex >= 0 && newIndex < photos.length) {
+            currentPhotoIndex = newIndex;
+            updatePhotoCounter();
+            updateThumbnails();
+        }
+    });
+}
+
+// 特定の写真にスクロール
+function scrollToPhoto(index) {
+    currentPhotoIndex = index;
+    const slideWidth = mainPhotoScrollContainer.offsetWidth;
+    mainPhotoScrollContainer.scrollTo({ left: slideWidth * index, behavior: 'smooth' });
+    updatePhotoCounter();
+    updateThumbnails();
+}
+
+// カウンターを更新
+function updatePhotoCounter() {
+    const counter = document.getElementById('photoCounter');
+    if (counter) {
+        counter.textContent = (currentPhotoIndex + 1) + ' / ' + photos.length;
+    }
+}
+
+// サムネイルのアクティブ状態を更新
+function updateThumbnails() {
+    document.querySelectorAll('.thumbnail-item').forEach((thumb, i) => {
+        thumb.classList.toggle('active', i === currentPhotoIndex);
+    });
+}
+
+// ライトボックス
+function openLightbox(index) {
+    currentPhotoIndex = index;
+    const lightbox = document.getElementById('lightbox');
+    const scrollContainer = document.getElementById('lightboxScrollContainer');
+    const lightboxCounter = document.getElementById('lightboxCounter');
+    
+    // 指定インデックスにスクロール
+    const slideWidth = scrollContainer.offsetWidth;
+    scrollContainer.scrollTo({ left: slideWidth * index, behavior: 'instant' });
+    
+    if (lightboxCounter) {
+        lightboxCounter.textContent = (index + 1) + ' / ' + photos.length;
+    }
+    
+    lightbox.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    
+    // 表示後にスクロール位置を再調整
+    setTimeout(() => {
+        const containerWidth = scrollContainer.offsetWidth;
+        scrollContainer.scrollTo({ left: containerWidth * index, behavior: 'instant' });
+    }, 10);
+}
+
+function closeLightbox() {
+    document.getElementById('lightbox').classList.remove('active');
+    document.body.style.overflow = '';
+}
+
+function closeLightboxOnBackground(event) {
+    if (event.target.classList.contains('lightbox')) {
+        closeLightbox();
+    }
+}
+
+function lightboxPrev() {
+    const scrollContainer = document.getElementById('lightboxScrollContainer');
+    currentPhotoIndex = (currentPhotoIndex - 1 + photos.length) % photos.length;
+    const slideWidth = scrollContainer.offsetWidth;
+    scrollContainer.scrollTo({ left: slideWidth * currentPhotoIndex, behavior: 'smooth' });
+    updateLightboxCounter();
+    // メイン画像も同期
+    scrollToPhoto(currentPhotoIndex);
+}
+
+function lightboxNext() {
+    const scrollContainer = document.getElementById('lightboxScrollContainer');
+    currentPhotoIndex = (currentPhotoIndex + 1) % photos.length;
+    const slideWidth = scrollContainer.offsetWidth;
+    scrollContainer.scrollTo({ left: slideWidth * currentPhotoIndex, behavior: 'smooth' });
+    updateLightboxCounter();
+    // メイン画像も同期
+    scrollToPhoto(currentPhotoIndex);
+}
+
+function updateLightboxCounter() {
+    const lightboxCounter = document.getElementById('lightboxCounter');
+    if (lightboxCounter) {
+        lightboxCounter.textContent = (currentPhotoIndex + 1) + ' / ' + photos.length;
+    }
+}
+
+// ライトボックスのスクロール監視
+const lightboxScrollContainer = document.getElementById('lightboxScrollContainer');
+if (lightboxScrollContainer) {
+    lightboxScrollContainer.addEventListener('scroll', function() {
+        const slideWidth = lightboxScrollContainer.offsetWidth;
+        const newIndex = Math.round(lightboxScrollContainer.scrollLeft / slideWidth);
+        if (newIndex !== currentPhotoIndex && newIndex >= 0 && newIndex < photos.length) {
+            currentPhotoIndex = newIndex;
+            updateLightboxCounter();
+            // メイン画像も同期
+            if (mainPhotoScrollContainer) {
+                const mainSlideWidth = mainPhotoScrollContainer.offsetWidth;
+                mainPhotoScrollContainer.scrollTo({ left: mainSlideWidth * currentPhotoIndex, behavior: 'instant' });
+                updateThumbnails();
+            }
+        }
+    });
+}
+
+// キーボードナビゲーション
+document.addEventListener('keydown', function(e) {
+    const lightbox = document.getElementById('lightbox');
+    if (!lightbox.classList.contains('active')) return;
+    
+    if (e.key === 'Escape') closeLightbox();
+    if (e.key === 'ArrowLeft') lightboxPrev();
+    if (e.key === 'ArrowRight') lightboxNext();
+});
+</script>
+{% endif %}
+
+{% if not current_user.is_admin() and not current_user.is_owner() %}
+<div class="sale-request-modal" id="saleRequestModal">
+    <div class="sale-request-content">
+        <div class="sale-request-header">
+            <h3 id="saleRequestTitle">発送依頼を送る</h3>
+            <button type="button" class="sale-request-close" onclick="closeSaleRequestModal()">&times;</button>
+        </div>
+        <form action="" method="POST" enctype="multipart/form-data" id="saleRequestForm">
+            <input type="hidden" id="saleRequestItemId" name="item_id" value="">
+            <input type="hidden" id="saleRequestType" name="request_type" value="shipping_request">
+            <div class="sale-request-body">
+                <div class="sale-request-product" id="saleRequestProductName"></div>
+                <p class="sale-request-help" id="saleRequestHelp">発送依頼を送信します。画像がある場合は任意で添付できます。</p>
+                <div class="sale-request-inline-message" id="saleRequestInlineMessage"></div>
+                <div class="sale-request-form">
+                    <div class="form-group" id="saleRequestPriceGroup" style="display: none;">
+                        <label>売上金額（税込）</label>
+                        <input type="number" id="saleRequestPrice" name="sale_price" required min="1" placeholder="販売価格を入力" disabled>
+                    </div>
+                    <div class="form-group" id="saleRequestShippingGroup" style="display: none;">
+                        <label>送料</label>
+                        <input type="number" id="saleRequestShipping" name="shipping_cost" min="0" value="0" placeholder="送料を入力" disabled>
+                    </div>
+                    <div class="form-group" id="saleRequestOtherCostGroup" style="display: none;">
+                        <label>その他費用</label>
+                        <input type="number" id="saleRequestOtherCost" name="other_cost" min="0" value="0" placeholder="その他費用を入力" disabled>
+                    </div>
+                    <div class="form-group" id="saleRequestUserNoteGroup" style="display: none;">
+                        <label>備考</label>
+                        <textarea id="saleRequestUserNote" name="user_note" rows="3" placeholder="補足があれば入力してください" disabled></textarea>
+                    </div>
+                    <div class="form-group" id="saleRequestCommissionGroup" style="display: none;">
+                        <label>手数料</label>
+                        <input type="number" id="saleRequestCommission" name="commission" min="0" value="0" placeholder="手数料を入力" disabled>
+                    </div>
+                    <div class="form-group">
+                        <label id="saleRequestImageLabel1" for="saleRequestQrImage">添付画像</label>
+                        <div class="sale-request-image-picker" data-sale-request-image-picker>
+                            <input type="file" id="saleRequestQrImage" name="qr_image" accept="image/*"
+                                class="sale-request-file-input">
+                            <label for="saleRequestQrImage" class="sale-request-picker-button">
+                                <span class="sale-request-picker-icon" aria-hidden="true">📷</span>
+                                <span>PC・スマホから画像を1枚選択</span>
+                            </label>
+                            <p class="sale-request-file-count" data-sale-request-file-count aria-live="polite">0枚選択中</p>
+                            <div class="sale-request-file-list" data-sale-request-file-list></div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label id="saleRequestImageLabel2" for="saleRequestAdditionalImages">追加画像（複数選択可）</label>
+                        <div class="sale-request-image-picker" data-sale-request-image-picker>
+                            <input type="file" id="saleRequestAdditionalImages" name="additional_images" accept="image/*"
+                                class="sale-request-file-input" multiple>
+                            <label for="saleRequestAdditionalImages" class="sale-request-picker-button">
+                                <span class="sale-request-picker-icon" aria-hidden="true">🖼️</span>
+                                <span>PC・スマホから複数画像を選択</span>
+                            </label>
+                            <p class="sale-request-file-count" data-sale-request-file-count aria-live="polite">0枚選択中</p>
+                            <div class="sale-request-file-list" data-sale-request-file-list></div>
+                        </div>
+                    </div>
+                    <p class="form-hint" id="saleRequestImageHint">発送依頼の画像添付は任意です。</p>
+                </div>
+            </div>
+            <div class="sale-request-footer">
+                <button type="button" class="btn btn-cancel" onclick="closeSaleRequestModal()">キャンセル</button>
+                <button type="submit" class="btn btn-submit" id="saleRequestSubmitLabel">発送依頼を送信</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="sale-request-modal" id="editRequestModal">
+    <div class="sale-request-content">
+        <div class="sale-request-header edit">
+            <h3 id="editRequestTitle">発送依頼の修正</h3>
+            <button type="button" class="sale-request-close" onclick="closeEditRequestModal()">&times;</button>
+        </div>
+        <form action="" method="POST" enctype="multipart/form-data" id="editRequestForm">
+            <input type="hidden" id="editRequestId" name="request_id" value="">
+            <input type="hidden" id="editRequestType" value="shipping_request">
+            <div class="sale-request-body">
+                <div class="sale-request-product" id="editRequestProductName"></div>
+                <p class="sale-request-help" id="editRequestHelp">送信した画像を差し替えできます。</p>
+                <div class="sale-request-inline-message" id="editRequestInlineMessage"></div>
+                <div class="sale-request-form">
+                    <div class="form-group" id="editRequestPriceGroup" style="display: none;">
+                        <label>売上金額（税込）</label>
+                        <input type="number" id="editRequestPrice" name="sale_price" required min="1" placeholder="販売価格を入力" disabled>
+                    </div>
+                    <div class="form-group" id="editRequestShippingGroup" style="display: none;">
+                        <label>送料</label>
+                        <input type="number" id="editRequestShipping" name="shipping_cost" min="0" value="0" placeholder="送料を入力" disabled>
+                    </div>
+                    <div class="form-group" id="editRequestOtherCostGroup" style="display: none;">
+                        <label>その他費用</label>
+                        <input type="number" id="editRequestOtherCost" name="other_cost" min="0" value="0" placeholder="その他費用を入力" disabled>
+                    </div>
+                    <div class="form-group" id="editRequestUserNoteGroup" style="display: none;">
+                        <label>備考</label>
+                        <textarea id="editRequestUserNote" name="user_note" rows="3" placeholder="補足があれば入力してください" disabled></textarea>
+                    </div>
+                    <div class="form-group" id="editRequestCommissionGroup" style="display: none;">
+                        <label>手数料</label>
+                        <input type="number" id="editRequestCommission" name="commission" min="0" value="0" placeholder="手数料を入力" disabled>
+                    </div>
+                    <div class="form-group" id="editCurrentImagesGroup" hidden>
+                        <label>現在の画像</label>
+                        <div id="editCurrentImages" class="sale-request-existing-images" data-has-image="false" hidden></div>
+                    </div>
+                    <div class="form-group">
+                        <label id="editRequestImageLabel1" for="editRequestQrImage">新しい添付画像</label>
+                        <div class="sale-request-image-picker" data-sale-request-image-picker>
+                            <input type="file" id="editRequestQrImage" name="qr_image" accept="image/*"
+                                class="sale-request-file-input">
+                            <label for="editRequestQrImage" class="sale-request-picker-button">
+                                <span class="sale-request-picker-icon" aria-hidden="true">📷</span>
+                                <span>差し替える画像を1枚選択</span>
+                            </label>
+                            <p class="sale-request-file-count" data-sale-request-file-count aria-live="polite">0枚選択中</p>
+                            <div class="sale-request-file-list" data-sale-request-file-list></div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label id="editRequestImageLabel2" for="editRequestAdditionalImages">新しい追加画像（複数選択可）</label>
+                        <div class="sale-request-image-picker" data-sale-request-image-picker>
+                            <input type="file" id="editRequestAdditionalImages" name="additional_images" accept="image/*"
+                                class="sale-request-file-input" multiple>
+                            <label for="editRequestAdditionalImages" class="sale-request-picker-button">
+                                <span class="sale-request-picker-icon" aria-hidden="true">🖼️</span>
+                                <span>追加する画像を複数選択</span>
+                            </label>
+                            <p class="sale-request-file-count" data-sale-request-file-count aria-live="polite">0枚選択中</p>
+                            <div class="sale-request-file-list" data-sale-request-file-list></div>
+                        </div>
+                    </div>
+                    <p class="form-hint" id="editRequestImageHint">発送依頼の画像添付は任意です。</p>
+                </div>
+            </div>
+            <div class="sale-request-footer">
+                <button type="button" class="btn btn-cancel" onclick="closeEditRequestModal()">キャンセル</button>
+                <button type="submit" class="btn btn-submit edit" id="editRequestSubmitLabel">発送依頼を保存</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/sale_request_image_picker.js') }}"></script>
+<script>
+const detailSaleRequestModeConfig = {
+    shipping_request: {
+        title: '発送依頼を送る',
+        editTitle: '発送依頼の修正',
+        submit: '発送依頼を送信',
+        editSubmit: '発送依頼を保存',
+        help: '発送依頼を送信します。画像がある場合は任意で添付できます。',
+        image1: '添付画像',
+        image2: '追加画像',
+        imageHint: '発送依頼の画像添付は任意です。',
+        requireSecondImage: false,
+        primaryRequired: false,
+        showFinancials: false,
+        showUserNote: false
+    },
+    completion_report: {
+        title: '取引完了報告を送る',
+        editTitle: '取引完了報告の修正',
+        submit: '取引完了報告を送信',
+        editSubmit: '取引完了報告を保存',
+        help: '取引完了画面の画像を送ってください。売上・送料・手数料は開花側で確認します。',
+        image1: '取引完了画面',
+        image2: '補足画像（任意）',
+        imageHint: '取引完了画面のスクリーンショットを1枚以上選択してください。複数枚選択できます。',
+        requireSecondImage: false,
+        showFinancials: false,
+        showUserNote: true
+    }
+};
+
+function getDetailSaleRequestConfig(requestType) {
+    return detailSaleRequestModeConfig[requestType] || detailSaleRequestModeConfig.shipping_request;
+}
+
+function setDetailSaleRequestMessage(prefix, message) {
+    const messageEl = document.getElementById(prefix + 'InlineMessage');
+    if (!messageEl) return;
+    messageEl.textContent = message || '';
+    messageEl.className = message ? 'sale-request-inline-message show error' : 'sale-request-inline-message';
+}
+
+function resetDetailSaleRequestImagePickers(prefix) {
+    KaikaSaleRequestImagePicker.reset(prefix + 'QrImage');
+    KaikaSaleRequestImagePicker.reset(prefix + 'AdditionalImages');
+}
+
+function setDetailSaleRequestSubmitting(prefix, isSubmitting) {
+    const submit = document.getElementById(prefix + 'SubmitLabel');
+    const form = document.getElementById(prefix + 'Form');
+    if (!submit) return;
+    if (!submit.dataset.defaultLabel) submit.dataset.defaultLabel = submit.textContent;
+    submit.disabled = isSubmitting;
+    submit.textContent = isSubmitting ? (prefix === 'editRequest' ? '保存中...' : '送信中...') : submit.dataset.defaultLabel;
+    if (form && !isSubmitting) form.dataset.submitting = 'false';
+}
+
+function applyDetailSaleRequestMode(prefix, requestType) {
+    const config = getDetailSaleRequestConfig(requestType);
+    const isEdit = prefix === 'editRequest';
+    document.getElementById(prefix + 'Title').textContent = isEdit ? config.editTitle : config.title;
+    document.getElementById(prefix + 'Help').textContent = config.help;
+    document.getElementById(prefix + 'Type').value = requestType;
+    const submit = document.getElementById(prefix + 'SubmitLabel');
+    submit.textContent = isEdit ? config.editSubmit : config.submit;
+    submit.dataset.defaultLabel = submit.textContent;
+    document.getElementById(prefix + 'ImageLabel1').textContent = (isEdit ? '新しい' : '') + config.image1;
+    document.getElementById(prefix + 'ImageLabel2').textContent = (isEdit ? '新しい' : '') + config.image2 + '（複数選択可）';
+    document.getElementById(prefix + 'ImageHint').textContent = config.imageHint;
+    const primaryImageInput = document.getElementById(prefix + 'QrImage');
+    const additionalImageInput = document.getElementById(prefix + 'AdditionalImages');
+    primaryImageInput.multiple = false;
+    // Completion reports require at least one image across both pickers.
+    // The submit handler validates the combined selection (and existing files
+    // during edit), so the primary picker itself must not be natively required.
+    primaryImageInput.required = false;
+    additionalImageInput.multiple = true;
+    additionalImageInput.required = false;
+    ['Price', 'Shipping', 'Commission', 'OtherCost'].forEach((fieldName) => {
+        const group = document.getElementById(prefix + fieldName + 'Group');
+        const input = document.getElementById(prefix + fieldName);
+        if (!group || !input) return;
+        group.style.display = config.showFinancials ? '' : 'none';
+        input.disabled = !config.showFinancials;
+        input.required = config.showFinancials && fieldName === 'Price';
+        if (!config.showFinancials) {
+            input.value = '';
+        } else if (!input.value) {
+            input.value = fieldName === 'Price' ? '' : 0;
+        }
+    });
+    const noteGroup = document.getElementById(prefix + 'UserNoteGroup');
+    const noteInput = document.getElementById(prefix + 'UserNote');
+    if (noteGroup && noteInput) {
+        noteGroup.style.display = config.showUserNote ? '' : 'none';
+        noteInput.disabled = !config.showUserNote;
+        if (!config.showUserNote) noteInput.value = '';
+    }
+    setDetailSaleRequestMessage(prefix, '');
+}
+
+function validateDetailSaleRequest(prefix) {
+    const requestType = document.getElementById(prefix + 'Type').value || 'shipping_request';
+    const input1 = document.getElementById(prefix + 'QrImage');
+    const additionalInput = document.getElementById(prefix + 'AdditionalImages');
+    const currentImages = document.getElementById(prefix === 'editRequest' ? 'editCurrentImages' : '');
+    const hasAnyImage = !!(input1 && input1.files && input1.files.length)
+        || !!(additionalInput && additionalInput.files && additionalInput.files.length)
+        || !!(currentImages && currentImages.dataset.hasImage === 'true');
+    if (requestType === 'completion_report' && !hasAnyImage) {
+        setDetailSaleRequestMessage(prefix, '取引完了報告では画像を1枚以上選択してください。');
+        return false;
+    }
+    setDetailSaleRequestMessage(prefix, '');
+    return true;
+}
+
+function openShippingRequestModal(itemId, productName) {
+    document.getElementById('saleRequestForm').action = '/sale-request/submit/' + itemId;
+    document.getElementById('saleRequestItemId').value = itemId;
+    document.getElementById('saleRequestProductName').textContent = productName;
+    resetDetailSaleRequestImagePickers('saleRequest');
+    document.getElementById('saleRequestOtherCost').value = 0;
+    document.getElementById('saleRequestUserNote').value = '';
+    applyDetailSaleRequestMode('saleRequest', 'shipping_request');
+    document.getElementById('saleRequestModal').classList.add('open');
+}
+
+function openCompletionRequestModal(itemId, productName) {
+    document.getElementById('saleRequestForm').action = '/sale-request/submit/' + itemId;
+    document.getElementById('saleRequestItemId').value = itemId;
+    document.getElementById('saleRequestProductName').textContent = productName;
+    resetDetailSaleRequestImagePickers('saleRequest');
+    document.getElementById('saleRequestOtherCost').value = 0;
+    document.getElementById('saleRequestUserNote').value = '';
+    applyDetailSaleRequestMode('saleRequest', 'completion_report');
+    document.getElementById('saleRequestModal').classList.add('open');
+}
+
+function closeSaleRequestModal() {
+    setDetailSaleRequestSubmitting('saleRequest', false);
+    setDetailSaleRequestMessage('saleRequest', '');
+    document.getElementById('saleRequestModal').classList.remove('open');
+}
+
+function parseDetailAdditionalImagePaths(value) {
+    if (!value) return [];
+    try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+        return [];
+    }
+}
+
+function openEditRequestModal(requestId, requestType, productName, salePrice, shippingCost, commission, otherCost, userNote, qrImagePath, qrImagePath2, additionalImagePaths) {
+    document.getElementById('editRequestForm').action = '/sale-request/edit/' + requestId;
+    document.getElementById('editRequestId').value = requestId;
+    document.getElementById('editRequestProductName').textContent = productName;
+    resetDetailSaleRequestImagePickers('editRequest');
+    document.getElementById('editRequestPrice').value = salePrice || '';
+    document.getElementById('editRequestShipping').value = shippingCost || 0;
+    document.getElementById('editRequestCommission').value = commission || 0;
+    document.getElementById('editRequestOtherCost').value = otherCost || 0;
+    document.getElementById('editRequestUserNote').value = userNote || '';
+    applyDetailSaleRequestMode('editRequest', requestType || 'shipping_request');
+
+    KaikaSaleRequestImagePicker.renderExisting(
+        'editCurrentImages',
+        [qrImagePath, qrImagePath2].concat(additionalImagePaths || [])
+    );
+    document.getElementById('editRequestModal').classList.add('open');
+}
+
+function closeEditRequestModal() {
+    setDetailSaleRequestSubmitting('editRequest', false);
+    setDetailSaleRequestMessage('editRequest', '');
+    document.getElementById('editRequestModal').classList.remove('open');
+}
+
+document.addEventListener('click', function(event) {
+    const trigger = event.target.closest('.js-sale-request-trigger');
+    if (!trigger) return;
+    event.preventDefault();
+    const action = trigger.dataset.action;
+    const productName = trigger.dataset.productName || '';
+    if (action === 'create-shipping') {
+        openShippingRequestModal(trigger.dataset.itemId, productName);
+    } else if (action === 'create-completion') {
+        openCompletionRequestModal(trigger.dataset.itemId, productName);
+    } else if (action === 'edit') {
+        openEditRequestModal(
+            trigger.dataset.requestId,
+            trigger.dataset.requestType,
+            productName,
+            Number(trigger.dataset.salePrice || 0),
+            Number(trigger.dataset.shippingCost || 0),
+            Number(trigger.dataset.commission || 0),
+            Number(trigger.dataset.otherCost || 0),
+            trigger.dataset.userNote || '',
+            trigger.dataset.qrImagePath || '',
+            trigger.dataset.qrImagePath2 || '',
+            parseDetailAdditionalImagePaths(trigger.dataset.additionalImagePaths)
+        );
+    }
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    [
+        'saleRequestQrImage',
+        'saleRequestAdditionalImages',
+        'editRequestQrImage',
+        'editRequestAdditionalImages'
+    ].forEach(function(inputId) {
+        const state = KaikaSaleRequestImagePicker.init(inputId);
+        if (!state) return;
+        state.input.addEventListener('sale-request-files-changed', function() {
+            setDetailSaleRequestMessage(inputId.startsWith('editRequest') ? 'editRequest' : 'saleRequest', '');
+        });
+    });
+
+    const saleRequestForm = document.getElementById('saleRequestForm');
+    if (saleRequestForm) saleRequestForm.dataset.submitting = 'false';
+    saleRequestForm?.addEventListener('submit', function(event) {
+        if (this.dataset.submitting === 'true') {
+            event.preventDefault();
+            return;
+        }
+        if (!validateDetailSaleRequest('saleRequest')) {
+            event.preventDefault();
+            return;
+        }
+        this.dataset.submitting = 'true';
+        setDetailSaleRequestSubmitting('saleRequest', true);
+    });
+
+    const editRequestForm = document.getElementById('editRequestForm');
+    if (editRequestForm) editRequestForm.dataset.submitting = 'false';
+    editRequestForm?.addEventListener('submit', function(event) {
+        if (this.dataset.submitting === 'true') {
+            event.preventDefault();
+            return;
+        }
+        if (!validateDetailSaleRequest('editRequest')) {
+            event.preventDefault();
+            return;
+        }
+        this.dataset.submitting = 'true';
+        setDetailSaleRequestSubmitting('editRequest', true);
+    });
+});
+</script>
+{% endif %}
+
+<!-- コピー機能 -->
+<div class="copy-toast" id="copyToast">コピーしました！</div>
+<script>
+// クリップボードにコピー
+function copyToClipboard(text, button) {
+    navigator.clipboard.writeText(text).then(() => {
+        showCopyFeedback(button);
+    }).catch(err => {
+        // フォールバック
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        showCopyFeedback(button);
+    });
+}
+
+// 商品状態をコピー（日本語テキストで）
+function copyCondition(condition, button) {
+    const conditionTexts = {
+        'N': '新品',
+        'S': '新品ではないが傷なし',
+        'A': '未使用に近い',
+        'AB': '傷・汚れあり（小）',
+        'B': '傷・汚れあり（大）'
+    };
+    const text = conditionTexts[condition] || condition;
+    copyToClipboard(text, button);
+}
+
+// コピー成功のフィードバック表示
+function showCopyFeedback(button) {
+    // ボタンの状態を変更
+    button.classList.add('copied');
+    const originalText = button.innerHTML;
+    button.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> コピー済';
+    
+    // トースト表示
+    const toast = document.getElementById('copyToast');
+    toast.classList.add('show');
+    
+    // 1.5秒後に元に戻す
+    setTimeout(() => {
+        button.classList.remove('copied');
+        button.innerHTML = originalText;
+        toast.classList.remove('show');
+    }, 1500);
+}
+
+// 画像ダウンロード用の写真配列（ライトボックスがない場合用）
+{% if item.all_photos and item.all_photos|length > 0 %}
+const downloadPhotos = {{ item.all_photos | tojson }};
+let downloadCurrentIndex = 0;
+
+// 現在の画像インデックスを更新（ライトボックスがある場合はそちらを使用）
+function updateDownloadIndex(index) {
+    downloadCurrentIndex = index;
+}
+{% endif %}
+
+// 現在表示中の画像をダウンロード
+function downloadCurrentImage(event) {
+    event.stopPropagation();
+    const button = event.target;
+    button.classList.add('downloading');
+    button.textContent = 'ダウンロード中...';
+    
+    {% if item.all_photos and item.all_photos|length > 0 %}
+    // currentPhotoIndexはライトボックス用の変数（存在すれば使用）
+    const index = typeof currentPhotoIndex !== 'undefined' ? currentPhotoIndex : downloadCurrentIndex;
+    const photoPath = downloadPhotos[index];
+    const filename = photoPath.split('/').pop();
+    
+    downloadImage('{{ url_for("static", filename="") }}' + photoPath, filename, button);
+    {% endif %}
+}
+
+// すべての画像をダウンロード
+// すべての画像をダウンロード（サーバーでZIP圧縮してダウンロード）
+function downloadAllImages(event) {
+    event.stopPropagation();
+    const button = event.target;
+    const originalText = button.textContent;
+    
+    // ボタンを一時的に無効化
+    button.disabled = true;
+    button.classList.add('downloading');
+    button.textContent = '準備中...';
+    
+    // ZIPダウンロードURLへ遷移
+    // iOSなどのスマホでも確実にダウンロードさせるため、直接遷移またはiframeを使用
+    const downloadUrl = "{{ url_for('download_all_images', id=item.id) }}";
+    
+    // 新しいタブで開くのではなく、現在のウィンドウで遷移させることでダウンロードダイアログを出す
+    // （iOS Safariでは window.location.href が最も安定している）
+    window.location.href = downloadUrl;
+    
+    // ダウンロード開始を検知できないため、タイマーでボタンを戻す
+    setTimeout(() => {
+        button.disabled = false;
+        button.classList.remove('downloading');
+        button.textContent = originalText;
+    }, 3000);
+}
+
+// 画像をダウンロードする共通関数
+function downloadImage(url, filename, button) {
+    fetch(url)
+        .then(response => response.blob())
+        .then(blob => {
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(link.href);
+            
+            if (button) {
+                button.classList.remove('downloading');
+                button.textContent = '保存完了！';
+                setTimeout(() => {
+                    button.textContent = 'この画像を保存';
+                }, 2000);
+            }
+        })
+        .catch(error => {
+            console.error('Download error:', error);
+            if (button) {
+                button.classList.remove('downloading');
+                button.textContent = 'エラー';
+                setTimeout(() => {
+                    button.textContent = 'この画像を保存';
+                }, 2000);
+            }
+        });
+}
+</script>
+{% endblock %}

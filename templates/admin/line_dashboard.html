@@ -1,0 +1,661 @@
+{% extends "base.html" %}
+{% block title %}LINE連携管理 - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>LINE公式アカウント連携</h1>
+</div>
+
+<div class="line-admin-container">
+    <!-- 設定カード -->
+    <div class="line-card settings-card">
+        <h2>API設定</h2>
+        <form method="POST" action="{{ url_for('admin_line_settings') }}">
+            <div class="form-group line-toggle-group">
+                <div class="toggle-info">
+                    <span class="toggle-text">LINE連携</span>
+                </div>
+                <div class="line-toggle-buttons">
+                    <button type="button" class="line-toggle-btn off {% if not settings.is_enabled %}active{% endif %}" onclick="setLineEnabled(false)">無効</button>
+                    <button type="button" class="line-toggle-btn on {% if settings.is_enabled %}active{% endif %}" onclick="setLineEnabled(true)">有効</button>
+                    <input type="hidden" name="is_enabled" id="is_enabled_input" value="{% if settings.is_enabled %}on{% endif %}">
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label>チャネルアクセストークン</label>
+                <input type="password" name="channel_access_token" class="form-control" 
+                       value="{{ settings.channel_access_token or '' }}" placeholder="LINE Developersで取得">
+            </div>
+            
+            <div class="form-group">
+                <label>チャネルシークレット</label>
+                <input type="password" name="channel_secret" class="form-control" 
+                       value="{{ settings.channel_secret or '' }}" placeholder="LINE Developersで取得">
+            </div>
+            
+            <div class="form-group">
+                <label>Webhook URL</label>
+                <div class="webhook-url">
+                    <input type="text" class="form-control" readonly 
+                           value="{{ request.host_url }}line/webhook" id="webhookUrl">
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="copyWebhookUrl()">コピー</button>
+                </div>
+                <p class="form-hint">このURLをLINE DevelopersのWebhook URLに設定してください</p>
+            </div>
+            
+            <button type="submit" class="btn btn-primary">設定を保存</button>
+        </form>
+    </div>
+    
+    <!-- 統計カード -->
+    <div class="line-card stats-card">
+        <h2>連携状況</h2>
+        <div class="stats-grid">
+            <div class="stat-item">
+                <span class="stat-value">{{ linked_users }}</span>
+                <span class="stat-label">LINE連携ユーザー</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-value">{{ scheduled_messages|length }}</span>
+                <span class="stat-label">定期送信設定</span>
+            </div>
+        </div>
+        
+        <div class="status-indicator {% if settings.is_enabled and settings.channel_access_token %}active{% else %}inactive{% endif %}">
+            {% if settings.is_enabled and settings.channel_access_token %}
+            <span class="status-dot"></span> 連携中
+            {% else %}
+            <span class="status-dot"></span> 未設定
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- 一斉送信カード -->
+    <div class="line-card broadcast-card">
+        <h2>一斉送信</h2>
+        <form method="POST" action="{{ url_for('admin_line_broadcast') }}">
+            <div class="form-group">
+                <label>メッセージ内容</label>
+                <textarea name="message" class="form-control" rows="4" placeholder="送信するメッセージを入力..." required></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary" {% if not settings.is_enabled %}disabled{% endif %}>
+                送信する
+            </button>
+            {% if not settings.is_enabled %}
+            <p class="form-hint warning">LINE連携を有効にしてください</p>
+            {% endif %}
+        </form>
+    </div>
+    
+    <!-- 定期送信カード -->
+    <div class="line-card scheduled-card">
+        <div class="card-header">
+            <h2>定期送信メッセージ</h2>
+            <a href="{{ url_for('admin_line_scheduled') }}" class="btn btn-primary btn-sm">+ 新規作成</a>
+        </div>
+        
+        {% if scheduled_messages %}
+        <div class="scheduled-list">
+            {% for msg in scheduled_messages %}
+            <div class="scheduled-item">
+                <div class="scheduled-info">
+                    <div class="scheduled-title">
+                        {{ msg.title }}
+                        {% if msg.report_type %}
+                        <span class="badge report-type {{ msg.report_type }}">
+                            {% if msg.report_type == 'weekly_report' %}週次レポート
+                            {% elif msg.report_type == 'monthly_report' %}月次レポート
+                            {% elif msg.report_type == 'monthly_fee' %}月謝料金
+                            {% endif %}
+                        </span>
+                        {% endif %}
+                    </div>
+                    <div class="scheduled-meta">
+                        {% if msg.schedule_type == 'daily' %}
+                        毎日 {{ msg.schedule_time }}
+                        {% elif msg.schedule_type == 'weekly' %}
+                        毎週 {{ ['月', '火', '水', '木', '金', '土', '日'][msg.schedule_day - 1] if msg.schedule_day else '' }}曜日 {{ msg.schedule_time }}
+                        {% elif msg.schedule_type == 'monthly' %}
+                        毎月 {{ msg.schedule_day }}日 {{ msg.schedule_time }}
+                        {% endif %}
+                    </div>
+                    <div class="scheduled-preview">{{ msg.message_content[:50] }}{% if msg.message_content|length > 50 %}...{% endif %}</div>
+                </div>
+                <div class="scheduled-actions">
+                    <label class="toggle-label small">
+                        <input type="checkbox" {% if msg.is_enabled %}checked{% endif %} 
+                               onchange="toggleScheduled({{ msg.id }})">
+                        <span class="toggle-switch small"></span>
+                    </label>
+                    <a href="{{ url_for('admin_line_scheduled_edit', id=msg.id) }}" class="btn btn-sm btn-secondary">編集</a>
+                    {% if not msg.report_type %}
+                    <button class="btn btn-sm btn-danger" onclick="deleteScheduled({{ msg.id }})">削除</button>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-message">定期送信メッセージがありません</div>
+        {% endif %}
+    </div>
+    
+    <!-- 送信履歴カード -->
+    <div class="line-card logs-card">
+        <h2>送信履歴</h2>
+        {% if logs %}
+        <div class="logs-table-container">
+            <table class="logs-table">
+                <thead>
+                    <tr>
+                        <th>日時</th>
+                        <th>種類</th>
+                        <th>内容</th>
+                        <th>送信者</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in logs %}
+                    <tr>
+                        <td class="log-time">{{ log.sent_at.strftime('%m/%d %H:%M') if log.sent_at else '-' }}</td>
+                        <td>
+                            {% if log.message_type == 'broadcast' %}
+                            <span class="badge broadcast">一斉送信</span>
+                            {% elif log.message_type == 'scheduled' %}
+                            <span class="badge scheduled">定期送信</span>
+                            {% else %}
+                            <span class="badge">{{ log.message_type }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="log-content">{{ log.message_content[:30] }}{% if log.message_content|length > 30 %}...{% endif %}</td>
+                        <td>{{ log.sent_by_name or 'システム' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-message">送信履歴がありません</div>
+        {% endif %}
+    </div>
+</div>
+
+<style>
+.line-admin-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+}
+
+.line-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.line-card h2 {
+    font-size: 1.1rem;
+    margin: 0 0 1.25rem 0;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.settings-card {
+    grid-row: span 2;
+}
+
+.logs-card {
+    grid-column: 1 / -1;
+}
+
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.form-group label {
+    display: block;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    color: #1e293b;
+}
+
+.form-control {
+    width: 100%;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 0.95rem;
+}
+
+.form-hint {
+    font-size: 0.8rem;
+    color: #64748b;
+    margin-top: 0.25rem;
+}
+
+.form-hint.warning {
+    color: #dc2626;
+}
+
+.webhook-url {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.webhook-url input {
+    flex: 1;
+    background: #f8fafc;
+}
+
+/* LINE有効/無効トグルボタン */
+.line-toggle-group {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem;
+    background: #f8fafc;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    margin-bottom: 1.25rem;
+}
+
+.line-toggle-group .toggle-info {
+    flex: 1;
+}
+
+.line-toggle-group .toggle-text {
+    font-weight: 600;
+    font-size: 1rem;
+    color: #1e293b;
+}
+
+.line-toggle-buttons {
+    display: flex;
+    gap: 0;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.line-toggle-btn {
+    padding: 10px 24px;
+    border: none;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.line-toggle-btn.off {
+    background: #e2e8f0;
+    color: #64748b;
+}
+
+.line-toggle-btn.off.active {
+    background: #ef4444;
+    color: white;
+}
+
+.line-toggle-btn.on {
+    background: #e2e8f0;
+    color: #64748b;
+}
+
+.line-toggle-btn.on.active {
+    background: #10b981;
+    color: white;
+}
+
+.line-toggle-btn:hover:not(.active) {
+    background: #cbd5e1;
+}
+
+/* トグルスイッチ */
+.toggle-group {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+}
+
+.toggle-label {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+.toggle-label input {
+    display: none;
+}
+
+.toggle-switch {
+    width: 48px;
+    height: 26px;
+    background: #d1d5db;
+    border-radius: 13px;
+    position: relative;
+    transition: background 0.2s;
+}
+
+.toggle-switch::after {
+    content: '';
+    position: absolute;
+    width: 22px;
+    height: 22px;
+    background: white;
+    border-radius: 50%;
+    top: 2px;
+    left: 2px;
+    transition: transform 0.2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.toggle-label input:checked + .toggle-switch {
+    background: #10b981;
+}
+
+.toggle-label input:checked + .toggle-switch::after {
+    transform: translateX(22px);
+}
+
+.toggle-switch.small {
+    width: 36px;
+    height: 20px;
+}
+
+.toggle-switch.small::after {
+    width: 16px;
+    height: 16px;
+}
+
+.toggle-label input:checked + .toggle-switch.small::after {
+    transform: translateX(16px);
+}
+
+.toggle-info .toggle-text {
+    font-weight: 500;
+}
+
+/* 統計 */
+.stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.stat-item {
+    text-align: center;
+    padding: 1rem;
+    background: #f8fafc;
+    border-radius: 8px;
+}
+
+.stat-value {
+    display: block;
+    font-size: 2rem;
+    font-weight: 700;
+    color: #06b6d4;
+}
+
+.stat-label {
+    font-size: 0.85rem;
+    color: #64748b;
+}
+
+.status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    border-radius: 6px;
+    font-weight: 500;
+}
+
+.status-indicator.active {
+    background: #f0fdf4;
+    color: #16a34a;
+}
+
+.status-indicator.inactive {
+    background: #fef2f2;
+    color: #dc2626;
+}
+
+.status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+/* カードヘッダー */
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.card-header h2 {
+    margin: 0;
+    padding: 0;
+    border: none;
+}
+
+/* 定期送信リスト */
+.scheduled-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.scheduled-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem;
+    background: #f8fafc;
+    border-radius: 8px;
+}
+
+.scheduled-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.scheduled-title {
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+.scheduled-meta {
+    font-size: 0.8rem;
+    color: #64748b;
+    margin-bottom: 0.25rem;
+}
+
+.scheduled-preview {
+    font-size: 0.85rem;
+    color: #94a3b8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.scheduled-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-left: 1rem;
+}
+
+/* ログテーブル */
+.logs-table-container {
+    overflow-x: auto;
+}
+
+.logs-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.logs-table th,
+.logs-table td {
+    padding: 0.6rem 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.logs-table th {
+    background: #f8fafc;
+    font-weight: 600;
+    color: #64748b;
+}
+
+.log-time {
+    color: #94a3b8;
+    white-space: nowrap;
+}
+
+.log-content {
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    background: #e2e8f0;
+    color: #64748b;
+}
+
+.badge.broadcast {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.badge.scheduled {
+    background: #f0fdf4;
+    color: #16a34a;
+}
+
+.badge.report-type {
+    font-size: 0.7rem;
+    margin-left: 0.5rem;
+    vertical-align: middle;
+}
+
+.badge.report-type.weekly_report {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.badge.report-type.monthly_report {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.badge.report-type.monthly_fee {
+    background: #f3e8ff;
+    color: #7c3aed;
+}
+
+.empty-message {
+    text-align: center;
+    color: #94a3b8;
+    padding: 2rem 1rem;
+}
+
+.btn-danger {
+    background: #dc2626;
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #b91c1c;
+}
+
+@media (max-width: 1024px) {
+    .line-admin-container {
+        grid-template-columns: 1fr;
+    }
+    
+    .settings-card {
+        grid-row: auto;
+    }
+}
+
+@media (max-width: 768px) {
+    .scheduled-item {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .scheduled-actions {
+        margin-left: 0;
+        margin-top: 0.75rem;
+    }
+}
+</style>
+
+<script>
+function copyWebhookUrl() {
+    const input = document.getElementById('webhookUrl');
+    input.select();
+    document.execCommand('copy');
+    alert('URLをコピーしました');
+}
+
+function setLineEnabled(isEnabled) {
+    const input = document.getElementById('is_enabled_input');
+    const buttons = document.querySelectorAll('.line-toggle-btn');
+    
+    // hidden inputの値を設定
+    input.value = isEnabled ? 'on' : '';
+    
+    // ボタンのactive状態を更新
+    buttons.forEach(btn => {
+        btn.classList.remove('active');
+        if (isEnabled && btn.classList.contains('on')) {
+            btn.classList.add('active');
+        } else if (!isEnabled && btn.classList.contains('off')) {
+            btn.classList.add('active');
+        }
+    });
+}
+
+function toggleScheduled(id) {
+    fetch(`/admin/line/scheduled/${id}/toggle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (!data.success) {
+            alert(data.error || 'エラーが発生しました');
+            location.reload();
+        }
+    });
+}
+
+function deleteScheduled(id) {
+    if (!confirm('この定期送信メッセージを削除しますか？')) return;
+    
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = `/admin/line/scheduled/${id}/delete`;
+    document.body.appendChild(form);
+    form.submit();
+}
+</script>
+{% endblock %}

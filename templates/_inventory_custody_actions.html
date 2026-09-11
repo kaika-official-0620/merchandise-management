@@ -1,0 +1,11 @@
+{% set custody = custody_context(item) %}
+{% if custody.intake %}
+<a class="custody-action btn btn-sm btn-secondary" style="min-height:44px;display:inline-flex;align-items:center;padding:8px 12px" href="{{ url_for('inventory_intake_detail', intake_id=custody.intake.id) }}">預け入れ状況を確認</a>
+{% elif custody.can_self_manage %}
+<a class="custody-action btn btn-sm btn-primary" style="min-height:44px;display:inline-flex;align-items:center;padding:8px 12px" href="{{ url_for('self_inventory_sale', item_id=item.id) }}">{{ '販売記録を確認・修正' if item.sale_date else '自分の販売を記録' }}</a>
+{% if not item.sale_date %}<a class="custody-action btn btn-sm btn-secondary" style="min-height:44px;display:inline-flex;align-items:center;padding:8px 12px" href="{{ url_for('inventory_intake_new', item_id=item.id) }}">開花へ預ける</a>{% endif %}
+{% elif current_user.is_admin() %}
+<span class="custody-meta">ご本人が登録・記録する商品です</span>
+{% else %}
+<a class="custody-action btn btn-sm btn-secondary" href="{{ url_for('feature_plans.plans') }}">利用プランを確認</a>
+{% endif %}

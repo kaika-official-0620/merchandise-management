@@ -1,0 +1,12 @@
+.env
+.env.*
+*.db
+*.sqlite*
+*.log
+__pycache__/
+*.py[cod]
+static/uploads/
+backups/
+*.age
+.render/
+node_modules/

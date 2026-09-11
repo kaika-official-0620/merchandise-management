@@ -1,0 +1,868 @@
+{% extends "base.html" %}
+{% block title %}プロフィール - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="profile-container">
+    {% if feature_plans_enabled %}
+    <div class="billing-section"><h2>機能プラン</h2><a class="btn btn-primary" href="{{ url_for('feature_plans.plans') }}">利用プランを確認</a></div>
+    {% endif %}
+    <form method="POST" class="profile-form">
+    <!-- 月額利用料情報 -->
+    <div class="billing-section">
+        <h2>在庫件数に応じた月額契約</h2>
+        <div class="billing-card">
+            <div class="billing-main">
+                <div class="billing-fee">
+                    <span class="fee-label">現在のプラン</span>
+                    <span class="fee-amount">{{ billing_info.current_plan_label or '未設定' }}</span>
+                </div>
+                <div class="billing-detail">
+                    <span class="detail-item">{% if billing_info.has_subscription %}契約料金の目安{% else %}料金表の目安（未契約）{% endif %}: <strong>¥{{ "{:,}".format(billing_info.current_plan_fee or billing_info.monthly_fee or 0) }}</strong></span>
+                    <span class="detail-item">今月の開花受領・登録数: <strong>{{ billing_info.item_count }}件</strong></span>
+                </div>
+            </div>
+            <div class="billing-status">
+                {% if billing_info.has_subscription %}
+                    {% if billing_info.subscription_status == 'active' %}
+                    <span class="status-badge status-active">自動引落し有効</span>
+                    {% elif billing_info.subscription_status == 'past_due' %}
+                    <span class="status-badge status-past-due">支払い遅延</span>
+                    {% elif billing_info.subscription_status == 'canceling' %}
+                    <span class="status-badge status-canceling">解約予定</span>
+                    {% else %}
+                    <span class="status-badge status-inactive">{{ billing_info.subscription_status or '確認中' }}</span>
+                    {% endif %}
+                {% else %}
+                <span class="status-badge status-none">未登録</span>
+                {% endif %}
+            </div>
+        </div>
+        
+        <p class="billing-note">自己保管・開花へ移動中の商品は、開花の在庫料金の件数に含みません。0件でも既存契約の最低料金が適用される場合があります。未契約の場合、この目安の表示だけで請求は開始されません。</p>
+        {% if billing_info.has_subscription and billing_info.subscription_status == 'active' %}
+        <div class="billing-dates">
+            {% if billing_info.last_payment_date %}
+            <span>最終支払日: {{ billing_info.last_payment_date.strftime('%Y年%m月%d日') }}</span>
+            {% endif %}
+            {% if billing_info.next_payment_date %}
+            <span>次回引落日: {{ billing_info.next_payment_date.strftime('%Y年%m月%d日') }}</span>
+            {% endif %}
+        </div>
+        {% endif %}
+        
+        {% if not feature_native_app %}
+        <details class="billing-note billing-plan-details">
+            <summary>プラン詳細・変更申請を開く</summary>
+            <p>現在のプランと料金表を確認し、必要な場合はここから変更申請できます。毎月10日までの変更は当月扱い、10日以降は翌月変更として管理側に反映されます。</p>
+            <div class="plan-option-grid">
+                {% for plan in plan_options %}
+                <label class="plan-option-card {% if billing_info.current_plan_key == plan.key %}is-current{% endif %}">
+                    <input type="radio" name="requested_monthly_plan" value="{{ plan.key }}" {% if profile_user.requested_monthly_plan == plan.key %}checked{% endif %}>
+                    <span class="plan-option-name">{{ plan.label }}</span>
+                    <strong>{% if plan.fee > 0 %}¥{{ "{:,}".format(plan.fee) }}{% else %}個別相談{% endif %}</strong>
+                    <small>
+                        {% if plan.key == 'monthly_plan_20' %}0〜20商品
+                        {% elif plan.key == 'monthly_plan_50' %}21〜50商品
+                        {% elif plan.key == 'monthly_plan_100' %}51〜100商品
+                        {% elif plan.key == 'monthly_plan_300' %}101〜300商品
+                        {% else %}300商品以上{% endif %}
+                    </small>
+                    {% if billing_info.current_plan_key == plan.key %}<em>現在のプラン</em>{% endif %}
+                </label>
+                {% endfor %}
+            </div>
+            <label class="plan-no-change">
+                <input type="radio" name="requested_monthly_plan" value="" {% if not profile_user.requested_monthly_plan %}checked{% endif %}>
+                今回は変更申請しない
+            </label>
+            {% if profile_user.requested_monthly_plan %}
+            <p class="plan-request-note">現在の変更希望: {{ profile_user.plan_change_effective_month or '-' }} 反映予定</p>
+            {% endif %}
+        </details>
+        {% endif %}
+    </div>
+    
+    <!-- 代行仕入れサービス残高 -->
+    {% if current_user.proxy_service_budget is not none %}
+    <div class="proxy-budget-section">
+        <h2>代行仕入れサービス</h2>
+        <div class="budget-card">
+            <div class="budget-main">
+                <div class="budget-remaining">
+                    <span class="budget-label">利用可能残高</span>
+                    <span class="budget-amount">¥{{ "{:,}".format(current_user.get_proxy_service_remaining_budget() or 0) }}</span>
+                </div>
+                <div class="budget-detail">
+                    <span class="detail-item">現在の入金残高: <strong>¥{{ "{:,}".format(current_user.proxy_service_budget) }}</strong></span>
+                    <span class="detail-item">過去の仕入れ利用額: <strong>¥{{ "{:,}".format(current_user.get_proxy_service_used_amount() or 0) }}</strong></span>
+                </div>
+            </div>
+        </div>
+        <details class="budget-history">
+            <summary>仕入れ利用履歴の詳細を見る</summary>
+            {% if proxy_service_monthly_usage %}
+            <div class="budget-month-filter">
+                <label for="proxy-month-filter">月別で確認</label>
+                <select id="proxy-month-filter">
+                    <option value="">すべての月</option>
+                    {% for month in proxy_service_monthly_usage %}
+                    <option value="{{ month.month }}">{{ month.month }}（¥{{ "{:,}".format(month.total_amount or 0) }} / {{ month.purchase_count }}件）</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="budget-monthly-list">
+                {% for month in proxy_service_monthly_usage %}
+                <div class="budget-month-row" data-proxy-month="{{ month.month }}">
+                    <strong>{{ month.month }}</strong>
+                    <span>{{ month.purchase_count }}件</span>
+                    <span>¥{{ "{:,}".format(month.total_amount or 0) }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if proxy_service_history %}
+            <div class="budget-history-list">
+                {% for row in proxy_service_history %}
+                <div class="budget-history-row" data-proxy-history-month="{{ (row.sale_date|string)[:7] }}">
+                    <span>{{ (row.sale_date|string)[:10] }}</span>
+                    <strong>{{ row.product_name or '代行仕入れ商品' }}</strong>
+                    <span>¥{{ "{:,}".format(row.sale_price or 0) }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="budget-history-empty">まだ代行仕入れの利用履歴はありません。</p>
+            {% endif %}
+        </details>
+    </div>
+    {% endif %}
+
+        <div class="form-section">
+            <h2>基本情報</h2>
+            
+            <div class="form-group">
+                <label for="display_name">表示名</label>
+                {% set profile_display_name_value = profile_user.display_name or current_user.display_name %}
+                <input type="text" id="display_name" name="display_name" 
+                       value="{% if is_placeholder_user_display_name(profile_display_name_value, current_user.username, current_user.role) %}{% else %}{{ profile_display_name_value }}{% endif %}"
+                       placeholder="例: 山田 太郎">
+                <small>右上メニューには表示名を優先して表示します。</small>
+            </div>
+
+            <div class="profile-name-grid">
+                <div class="form-group">
+                    <label for="last_name">苗字</label>
+                    <input type="text" id="last_name" name="last_name" value="{{ profile_user.last_name or current_user.last_name or '' }}" placeholder="例: 山田">
+                </div>
+                <div class="form-group">
+                    <label for="first_name">名前</label>
+                    <input type="text" id="first_name" name="first_name" value="{{ profile_user.first_name or current_user.first_name or '' }}" placeholder="例: 太郎">
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="email">メールアドレス <span class="required">*</span></label>
+                <input type="email" id="email" name="email" 
+                       value="{{ profile_user.email or current_user.email }}" required>
+            </div>
+
+            <div class="form-group">
+                <label for="phone">電話番号 <span class="required">*</span></label>
+                <input type="text" id="phone" name="phone" value="{{ profile_user.phone or '' }}" placeholder="未登録" required>
+            </div>
+
+            <div class="form-group">
+                <label for="postal_code">郵便番号 <span class="required">*</span></label>
+                <input type="text" id="postal_code" name="postal_code" value="{{ profile_user.postal_code or '' }}" placeholder="未登録" required>
+            </div>
+
+            <div class="form-group">
+                <label for="address">住所 <span class="required">*</span></label>
+                <textarea id="address" name="address" rows="3" placeholder="未登録" required>{{ profile_user.address or '' }}</textarea>
+                <small>管理側が発送先・返送先を確認するときに使用します。</small>
+            </div>
+
+            <div class="shipping-address-section">
+                <div class="shipping-address-header">
+                    <div>
+                        <h3>希望発送先</h3>
+                        <p>住所と同じ発送先、または別の発送先を複数登録できます。</p>
+                    </div>
+                    <button type="button" class="btn btn-secondary btn-sm" id="add-shipping-address">発送先を追加</button>
+                </div>
+                <label class="checkbox-inline">
+                    <input type="checkbox" name="shipping_same_as_address" value="1" {% if not profile_user.shipping_addresses_list or (profile_user.shipping_addresses_list[0].label == '住所と同じ') %}checked{% endif %}>
+                    住所と同じ発送先を使う
+                </label>
+                <div id="shipping-address-list" class="shipping-address-list">
+                    {% for shipping in profile_user.shipping_addresses_list %}
+                    {% if shipping.label != '住所と同じ' %}
+                    <div class="shipping-address-row">
+                        <label>
+                            表示名
+                            <input type="text" name="shipping_address_label[]" value="{{ shipping.label or '' }}" placeholder="例: 自宅 / 事務所">
+                        </label>
+                        <label>
+                            郵便番号
+                            <input type="text" name="shipping_postal_code[]" value="{{ shipping.postal_code or '' }}" placeholder="000-0000">
+                        </label>
+                        <label class="shipping-address-wide">
+                            発送先住所
+                            <textarea name="shipping_address[]" rows="2" placeholder="発送先住所">{{ shipping.address or '' }}</textarea>
+                        </label>
+                        <label class="preferred-radio">
+                            <input type="radio" name="preferred_shipping_address_index" value="{{ loop.index0 }}" {% if profile_user.preferred_shipping_address_index == loop.index0 %}checked{% endif %}>
+                            優先
+                        </label>
+                        <button type="button" class="btn btn-delete btn-sm remove-shipping-address">削除</button>
+                    </div>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="form-section">
+            <h2>パスワード変更</h2>
+            
+            <div class="form-group">
+                <label for="current_password">現在のパスワード</label>
+                <input type="password" id="current_password" name="current_password">
+            </div>
+            
+            <div class="form-group">
+                <label for="new_password">新しいパスワード</label>
+                <input type="password" id="new_password" name="new_password" minlength="6">
+                <small>変更する場合のみ入力</small>
+            </div>
+            <p class="password-help">パスワードを忘れた場合は、セキュリティ上、管理側でパスワードを確認することはできません。<a href="{{ url_for('inquiry_new') }}">問い合わせ</a>から再設定を依頼してください。</p>
+        </div>
+        
+        <div class="form-actions">
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">キャンセル</a>
+            <button type="submit" class="btn btn-primary">保存・プラン変更を申請</button>
+        </div>
+    </form>
+</div>
+
+<style>
+.billing-section {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.billing-section h2 {
+    margin: 0 0 1rem 0;
+    font-size: 1.1rem;
+    color: #1e293b;
+}
+
+.billing-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+    border: 1px solid #0ea5e9;
+    border-radius: 10px;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+}
+
+.billing-main {
+    flex: 1;
+}
+
+.billing-fee {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.fee-label {
+    font-size: 0.9rem;
+    color: #64748b;
+}
+
+.fee-amount {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #0369a1;
+    font-family: 'Consolas', monospace;
+}
+
+.billing-detail {
+    font-size: 0.9rem;
+    color: #475569;
+}
+
+.detail-item strong {
+    color: #1e293b;
+}
+
+.billing-status {
+    margin-left: 1rem;
+}
+
+.status-badge {
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.status-active {
+    background: #d1fae5;
+    color: #059669;
+}
+
+.status-past-due {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.status-canceling {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+.status-inactive {
+    background: #f1f5f9;
+    color: #64748b;
+}
+
+.status-none {
+    background: #f1f5f9;
+    color: #64748b;
+}
+
+.billing-dates {
+    display: flex;
+    gap: 1.5rem;
+    font-size: 0.85rem;
+    color: #64748b;
+    margin-bottom: 1rem;
+}
+
+.billing-note {
+    background: #f8fafc;
+    border-radius: 8px;
+    padding: 1rem;
+    font-size: 0.85rem;
+    color: #64748b;
+}
+
+.billing-note p {
+    margin: 0 0 0.75rem 0;
+}
+
+.billing-plan-details summary {
+    cursor: pointer;
+    color: #0f172a;
+    font-weight: 700;
+    font-size: 0.95rem;
+}
+
+.billing-plan-details[open] summary {
+    margin-bottom: 0.85rem;
+}
+
+.plan-option-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0.75rem;
+    margin: 0.85rem 0;
+}
+
+.plan-option-card {
+    position: relative;
+    display: grid;
+    gap: 0.28rem;
+    padding: 0.9rem;
+    border: 1px solid #dbeafe;
+    border-radius: 12px;
+    background: #ffffff;
+    color: #0f172a;
+    cursor: pointer;
+}
+
+.plan-option-card input {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+}
+
+.plan-option-card.is-current {
+    border-color: #2563eb;
+    background: #eff6ff;
+}
+
+.plan-option-name {
+    color: #475569;
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.plan-option-card strong {
+    font-size: 1.2rem;
+}
+
+.plan-option-card small,
+.plan-option-card em,
+.plan-request-note,
+.plan-no-change {
+    color: #64748b;
+    font-size: 0.82rem;
+    line-height: 1.6;
+}
+
+.plan-option-card em {
+    color: #1d4ed8;
+    font-style: normal;
+    font-weight: 700;
+}
+
+.plan-no-change {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin-top: 0.25rem;
+}
+
+.fee-table-mini {
+    width: 100%;
+    max-width: 280px;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+}
+
+.fee-table-mini td {
+    padding: 0.25rem 0.5rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.fee-table-mini td:last-child {
+    text-align: right;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+@media (max-width: 768px) {
+    .billing-card {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+    
+    .billing-status {
+        margin-left: 0;
+    }
+    
+    .billing-dates {
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+}
+
+/* 代行仕入れサービス残高セクション */
+.proxy-budget-section {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.proxy-budget-section h2 {
+    margin: 0 0 1rem 0;
+    font-size: 1.1rem;
+    color: #1e293b;
+}
+
+.budget-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    border: 1px solid #f59e0b;
+    border-radius: 10px;
+    padding: 1.25rem;
+}
+
+.budget-main {
+    flex: 1;
+}
+
+.budget-remaining {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.budget-label {
+    font-size: 0.9rem;
+    color: #92400e;
+}
+
+.budget-amount {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #d97706;
+    font-family: 'Consolas', monospace;
+}
+
+.budget-detail {
+    font-size: 0.9rem;
+    color: #78350f;
+}
+
+.budget-detail .detail-item {
+    margin-right: 1rem;
+}
+
+.budget-detail strong {
+    color: #92400e;
+}
+
+.budget-history {
+    margin-top: 1rem;
+    padding: 1rem;
+    border: 1px solid #fde68a;
+    border-radius: 10px;
+    background: #fffbeb;
+}
+
+.budget-history summary {
+    margin: 0;
+    color: #78350f;
+    font-size: 0.95rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.budget-history[open] summary {
+    margin-bottom: 0.75rem;
+}
+
+.budget-history summary::marker {
+    color: #d97706;
+}
+
+.budget-history summary::-webkit-details-marker {
+    color: #d97706;
+}
+
+.budget-history summary:focus-visible {
+    outline: 2px solid #f59e0b;
+    outline-offset: 4px;
+    border-radius: 6px;
+}
+
+.budget-history-list {
+    display: grid;
+    gap: 0.45rem;
+}
+
+.budget-month-filter {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    margin-bottom: 0.8rem;
+    color: #78350f;
+    font-size: 0.86rem;
+}
+
+.budget-month-filter select {
+    min-width: 220px;
+    padding: 0.5rem 0.65rem;
+    border: 1px solid #fcd34d;
+    border-radius: 8px;
+    background: #ffffff;
+    color: #78350f;
+}
+
+.budget-monthly-list {
+    display: grid;
+    gap: 0.35rem;
+    margin-bottom: 0.85rem;
+}
+
+.budget-month-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 0.65rem;
+    align-items: center;
+    padding: 0.5rem 0.65rem;
+    border-radius: 8px;
+    background: #ffffff;
+    color: #78350f;
+    font-size: 0.86rem;
+}
+
+.budget-history-row {
+    display: grid;
+    grid-template-columns: 100px minmax(0, 1fr) auto;
+    gap: 0.65rem;
+    align-items: center;
+    padding: 0.55rem 0;
+    border-bottom: 1px solid #fde68a;
+    color: #78350f;
+    font-size: 0.86rem;
+}
+
+.budget-history-row:last-child {
+    border-bottom: none;
+}
+
+.budget-history-row strong {
+    color: #1f2937;
+    overflow-wrap: anywhere;
+}
+
+.budget-history-empty {
+    margin: 0;
+    color: #92400e;
+    font-size: 0.9rem;
+}
+
+.profile-form textarea,
+.profile-form select,
+.profile-form input[type="text"],
+.profile-form input[type="email"],
+.profile-form input[type="password"],
+.profile-form input[type="number"] {
+    width: 100%;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #ffffff;
+    color: #0f172a;
+    font: inherit;
+}
+
+.profile-name-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+@media (max-width: 640px) {
+    .profile-name-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.required {
+    color: #dc2626;
+}
+
+.shipping-address-section {
+    margin-top: 1rem;
+    padding: 1rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #f8fafc;
+}
+
+.shipping-address-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: flex-start;
+    margin-bottom: 0.75rem;
+}
+
+.shipping-address-header h3 {
+    margin: 0 0 0.25rem;
+    color: #0f172a;
+    font-size: 1rem;
+}
+
+.shipping-address-header p,
+.password-help {
+    margin: 0;
+    color: #64748b;
+    font-size: 0.86rem;
+    line-height: 1.75;
+}
+
+.checkbox-inline {
+    display: inline-flex;
+    gap: 0.45rem;
+    align-items: center;
+    margin-bottom: 0.8rem;
+    color: #334155;
+    font-weight: 600;
+}
+
+.shipping-address-list {
+    display: grid;
+    gap: 0.8rem;
+}
+
+.shipping-address-row {
+    display: grid;
+    grid-template-columns: minmax(120px, 0.7fr) minmax(120px, 0.7fr) minmax(220px, 1.6fr) auto auto;
+    gap: 0.65rem;
+    align-items: end;
+    padding: 0.85rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #ffffff;
+}
+
+.shipping-address-row label {
+    display: grid;
+    gap: 0.3rem;
+    color: #475569;
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.preferred-radio {
+    justify-items: center;
+    white-space: nowrap;
+}
+
+.password-help {
+    margin-top: 0.75rem;
+}
+
+.password-help a {
+    color: #2563eb;
+    font-weight: 700;
+}
+
+.budget-progress {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.5rem;
+    min-width: 120px;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    background: rgba(255,255,255,0.5);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+.progress-text {
+    font-size: 0.75rem;
+    color: #92400e;
+}
+
+@media (max-width: 768px) {
+    .budget-card {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+    
+    .budget-progress {
+        width: 100%;
+        align-items: flex-start;
+    }
+
+    .budget-history-row {
+        grid-template-columns: 1fr;
+        gap: 0.2rem;
+    }
+
+    .shipping-address-header,
+    .shipping-address-row {
+        grid-template-columns: 1fr;
+        display: grid;
+    }
+}
+</style>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const shippingList = document.getElementById('shipping-address-list');
+    const addShippingButton = document.getElementById('add-shipping-address');
+
+    function createShippingRow() {
+        const row = document.createElement('div');
+        row.className = 'shipping-address-row';
+        row.innerHTML = `
+            <label>
+                表示名
+                <input type="text" name="shipping_address_label[]" placeholder="例: 自宅 / 事務所">
+            </label>
+            <label>
+                郵便番号
+                <input type="text" name="shipping_postal_code[]" placeholder="000-0000">
+            </label>
+            <label class="shipping-address-wide">
+                発送先住所
+                <textarea name="shipping_address[]" rows="2" placeholder="発送先住所"></textarea>
+            </label>
+            <label class="preferred-radio">
+                <input type="radio" name="preferred_shipping_address_index" value="0">
+                優先
+            </label>
+            <button type="button" class="btn btn-delete btn-sm remove-shipping-address">削除</button>
+        `;
+        return row;
+    }
+
+    function syncPreferredIndexes() {
+        if (!shippingList) return;
+        const usesPrimaryAddress = document.querySelector('input[name="shipping_same_as_address"]')?.checked;
+        const indexOffset = usesPrimaryAddress ? 1 : 0;
+        shippingList.querySelectorAll('.shipping-address-row').forEach((row, index) => {
+            const radio = row.querySelector('input[name="preferred_shipping_address_index"]');
+            if (radio) radio.value = String(index + indexOffset);
+        });
+    }
+
+    if (addShippingButton && shippingList) {
+        addShippingButton.addEventListener('click', function () {
+            shippingList.appendChild(createShippingRow());
+            syncPreferredIndexes();
+        });
+
+        shippingList.addEventListener('click', function (event) {
+            const removeButton = event.target.closest('.remove-shipping-address');
+            if (!removeButton) return;
+            removeButton.closest('.shipping-address-row')?.remove();
+            syncPreferredIndexes();
+        });
+        syncPreferredIndexes();
+    }
+
+    const sameAsAddressCheckbox = document.querySelector('input[name="shipping_same_as_address"]');
+    if (sameAsAddressCheckbox) {
+        sameAsAddressCheckbox.addEventListener('change', syncPreferredIndexes);
+    }
+
+    const proxyMonthFilter = document.getElementById('proxy-month-filter');
+    if (proxyMonthFilter) {
+        proxyMonthFilter.addEventListener('change', function () {
+            const selectedMonth = proxyMonthFilter.value;
+            document.querySelectorAll('[data-proxy-month], [data-proxy-history-month]').forEach((row) => {
+                const rowMonth = row.getAttribute('data-proxy-month') || row.getAttribute('data-proxy-history-month');
+                row.style.display = !selectedMonth || rowMonth === selectedMonth ? '' : 'none';
+            });
+        });
+    }
+});
+</script>
+{% endblock %}
+
+

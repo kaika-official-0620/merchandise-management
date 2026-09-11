@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+
+{% block title %}買取承諾書詳細 - 物販管理システム{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">買取承諾書詳細</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('documents') }}" class="btn btn-secondary context-back-inline">← 一覧に戻る</a>
+        {% if kaitori.can_user_edit %}
+        <a href="{{ url_for('user_kaitori_shoudaku_edit', id=kaitori.id) }}" class="btn btn-edit">入力画面で修正</a>
+        {% endif %}
+        <a href="{{ url_for('user_kaitori_shoudaku_download', id=kaitori.id) }}" class="btn btn-download js-csv-download" download>CSV</a>
+        <a href="{{ url_for('user_kaitori_shoudaku_pdf', id=kaitori.id) }}" class="btn btn-export" target="_blank">PDF</a>
+        {% if kaitori.can_user_delete %}
+        <form method="POST" action="{{ url_for('user_kaitori_shoudaku_delete', id=kaitori.id) }}" class="inline-delete-form" onsubmit="return confirm('この買取承諾書を削除しますか？')">
+            <input type="hidden" name="next" value="{{ url_for('documents') }}">
+            <button type="submit" class="btn btn-danger">削除</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="document-view">
+    <div class="document-header">
+        <div class="document-title">買取承諾書</div>
+        <div class="document-info">
+            <div class="info-row">
+                <span class="label">書類番号:</span>
+                <span class="value">{{ kaitori.document_no }}</span>
+            </div>
+            <div class="info-row">
+                <span class="label">発行日:</span>
+                <span class="value">{{ kaitori.issue_date }}</span>
+            </div>
+        </div>
+    </div>
+
+    {% if kaitori.status == 'cancelled' %}
+    <div class="cancelled-document-box">
+        <strong>&#21462;&#28040;&#28168;&#12415;</strong>
+        <span>{{ kaitori.cancel_reason or '-' }}</span>
+    </div>
+    {% endif %}
+
+    <div class="document-section">
+        <h3>顧客情報</h3>
+        <div class="info-grid">
+            <div class="info-item">
+                <span class="label">顧客名</span>
+                <span class="value">{{ kaitori.customer_name }}</span>
+            </div>
+            <div class="info-item">
+                <span class="label">住所</span>
+                <span class="value">{{ kaitori.customer_address or '-' }}</span>
+            </div>
+            <div class="info-item">
+                <span class="label">電話番号</span>
+                <span class="value">{{ kaitori.customer_phone or '-' }}</span>
+            </div>
+            <div class="info-item">
+                <span class="label">支払方法</span>
+                <span class="value">{{ kaitori.payment_method or '-' }}</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="document-section">
+        <h3>買取商品明細</h3>
+        <div class="document-table-scroll">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>No.</th>
+                    <th>商品名</th>
+                    <th>ブランド</th>
+                    <th>状態</th>
+                    <th>数量</th>
+                    <th>単価</th>
+                    <th>金額</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    <td>{{ item.item_no }}</td>
+                    <td>{{ item.product_name }}</td>
+                    <td>{{ item.brand_name or '-' }}</td>
+                    <td>{{ item.condition or '-' }}</td>
+                    <td>{{ item.quantity }}</td>
+                    <td>¥{{ "{:,}".format(item.unit_price or 0) }}</td>
+                    <td>¥{{ "{:,}".format(item.amount or 0) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td colspan="6" class="text-right"><strong>合計金額</strong></td>
+                    <td><strong>¥{{ "{:,}".format(kaitori.total_amount or 0) }}</strong></td>
+                </tr>
+            </tfoot>
+        </table>
+        </div>
+    </div>
+
+    {% if kaitori.notes %}
+    <div class="document-section">
+        <h3>備考</h3>
+        <p class="notes-text">{{ kaitori.notes }}</p>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.document-view {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    padding: 2rem;
+    max-width: 100%;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.document-table-scroll {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.document-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 2px solid var(--primary);
+}
+
+.document-title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.document-info .info-row {
+    margin-bottom: 0.5rem;
+}
+
+.document-info .label {
+    color: var(--text-secondary);
+    margin-right: 0.5rem;
+}
+
+.document-section {
+    margin-bottom: 2rem;
+}
+
+.document-section h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+}
+
+.info-item {
+    display: flex;
+    flex-direction: column;
+}
+
+.info-item .label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-bottom: 0.25rem;
+}
+
+.info-item .value {
+    font-weight: 500;
+}
+
+.notes-text {
+    white-space: pre-wrap;
+    background: var(--bg-main);
+    padding: 1rem;
+    border-radius: var(--radius-sm);
+}
+
+.text-right {
+    text-align: right;
+}
+
+@media (max-width: 768px) {
+    .document-view {
+        padding: 1rem;
+    }
+
+    .document-header {
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .info-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .data-table {
+        min-width: 720px;
+    }
+
+    .data-table th,
+    .data-table td {
+        word-break: normal;
+        overflow-wrap: anywhere;
+    }
+
+    .header-actions .btn {
+        width: auto;
+    }
+}
+
+.inline-delete-form {
+    margin: 0;
+    display: inline-flex;
+}
+
+.cancelled-document-box {
+    display: grid;
+    gap: 0.45rem;
+    margin-bottom: 1rem;
+    padding: 0.85rem 1rem;
+    border: 1px solid #d1d5db;
+    border-radius: 10px;
+    background: #f3f4f6;
+    color: #374151;
+}
+</style>
+{% endblock %}

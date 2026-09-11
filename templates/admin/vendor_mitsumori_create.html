@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+
+{% block title %}業者向け見積依頼書作成 - 株式会社開花{% endblock %}
+
+{% block content %}
+<style>
+.vendor-create-page {
+    display: grid;
+    gap: 1rem;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.vendor-create-page,
+.vendor-create-page * {
+    box-sizing: border-box;
+}
+
+.vendor-panel {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 1rem;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.vendor-header,
+.vendor-actions,
+.vendor-form-grid,
+.vendor-item-row,
+.vendor-item-title {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.vendor-header {
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.vendor-header h1,
+.vendor-panel h2 {
+    margin: 0;
+    color: #0f172a;
+}
+
+.vendor-header p,
+.vendor-muted,
+.vendor-meta {
+    color: #64748b;
+    line-height: 1.6;
+    margin: 0.35rem 0 0;
+}
+
+.vendor-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+}
+
+.vendor-field {
+    display: grid;
+    gap: 0.35rem;
+    min-width: 0;
+}
+
+.vendor-field label {
+    font-weight: 700;
+    color: #334155;
+}
+
+.vendor-field.full {
+    grid-column: 1 / -1;
+}
+
+.vendor-items {
+    display: grid;
+    gap: 0.65rem;
+}
+
+.vendor-item-row {
+    align-items: center;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 0.75rem;
+}
+
+.vendor-item-row input[type="checkbox"] {
+    width: 1.1rem;
+    height: 1.1rem;
+    flex: 0 0 auto;
+}
+
+.vendor-thumb {
+    width: 64px;
+    aspect-ratio: 1;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #f8fafc;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    color: #94a3b8;
+    font-size: 0.75rem;
+    text-align: center;
+}
+
+.vendor-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.vendor-item-body {
+    flex: 1 1 220px;
+    min-width: 0;
+}
+
+.vendor-item-title {
+    align-items: center;
+}
+
+.vendor-item-title strong {
+    color: #0f172a;
+    overflow-wrap: anywhere;
+}
+
+.vendor-pill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.55rem;
+    border-radius: 999px;
+    padding: 0.2rem 0.55rem;
+    background: #f1f5f9;
+    color: #334155;
+    font-size: 0.78rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.vendor-actions {
+    justify-content: flex-end;
+}
+
+@media (max-width: 720px) {
+    .vendor-panel {
+        padding: 0.85rem;
+    }
+
+    .vendor-form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .vendor-actions .btn,
+    .vendor-header .btn {
+        width: 100%;
+    }
+}
+</style>
+
+<div class="vendor-create-page">
+    <section class="vendor-panel vendor-header">
+        <div>
+            <h1>業者向け見積依頼書作成</h1>
+            <p>ユーザーID {{ user_id }} / {{ user_name }} の認証済み商品から、1社の業者へ流す商品だけを選択します。</p>
+        </div>
+        <div class="vendor-actions">
+            <a href="{{ back_url }}" class="btn btn-secondary">ステップ2へ戻る</a>
+        </div>
+    </section>
+
+    <form method="post" class="vendor-create-page">
+        <section class="vendor-panel">
+            <h2>作成情報</h2>
+            <p class="vendor-muted">見積依頼書番号は保存時に採番されます。表示中の番号は作成予定番号です。</p>
+            <div class="vendor-form-grid">
+                <div class="vendor-field">
+                    <label>作成予定番号</label>
+                    <input type="text" class="form-control" value="{{ document_no }}" readonly>
+                </div>
+                <div class="vendor-field">
+                    <label for="vendor_id">流し先業者</label>
+                    <select name="vendor_id" id="vendor_id" class="form-control" required>
+                        <option value="">業者を選択</option>
+                        {% for vendor in vendors %}
+                        <option value="{{ vendor.id }}">{{ vendor.display_name or vendor.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="vendor-field">
+                    <label for="issue_date">作成日</label>
+                    <input type="date" id="issue_date" name="issue_date" class="form-control" value="{{ today }}" required>
+                </div>
+                <div class="vendor-field">
+                    <label for="valid_until">回答期限</label>
+                    <input type="date" id="valid_until" name="valid_until" class="form-control" value="{{ default_valid_until }}">
+                </div>
+                <div class="vendor-field full">
+                    <label for="subject">件名</label>
+                    <input type="text" id="subject" name="subject" class="form-control" value="{{ subject_default }}" required>
+                </div>
+                <div class="vendor-field full">
+                    <label for="notes">備考</label>
+                    <textarea id="notes" name="notes" class="form-control" rows="3">{{ notes_default }}</textarea>
+                </div>
+            </div>
+        </section>
+
+        <section class="vendor-panel">
+            <h2>対象商品</h2>
+            <p class="vendor-muted">選択した商品だけがステップ2から消え、業者書類待ちへ移動します。</p>
+            <div class="vendor-items">
+                {% for item in items %}
+                <label class="vendor-item-row">
+                    <input type="checkbox" name="request_item_ids" value="{{ item.request_item_id }}">
+                    <span class="vendor-thumb">
+                        {% if item.photo_path %}
+                            {% if item.photo_path.startswith('http') %}
+                            <img src="{{ item.photo_path }}" alt="{{ item.product_name }}">
+                            {% else %}
+                            <img src="{{ url_for('static', filename=item.photo_path) }}" alt="{{ item.product_name }}">
+                            {% endif %}
+                        {% else %}
+                        <span>No Image</span>
+                        {% endif %}
+                    </span>
+                    <span class="vendor-item-body">
+                        <span class="vendor-item-title">
+                            <strong>{{ item.product_name }}</strong>
+                            <span class="vendor-pill">申請 #{{ item.request_id }}</span>
+                        </span>
+                        <span class="vendor-meta">{{ item.brand_name or '-' }} / {{ item.model_number or '-' }} / {{ item.service_name or '-' }}</span>
+                    </span>
+                </label>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section class="vendor-panel vendor-actions">
+            <button type="submit" class="btn btn-primary">選択商品で見積依頼書を作成</button>
+        </section>
+    </form>
+</div>
+{% endblock %}

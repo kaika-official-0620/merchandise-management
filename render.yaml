@@ -1,0 +1,64 @@
+# Separate Blueprint. Do not apply the production render.yaml to this service.
+# Select a reviewed staging branch when creating this Blueprint in Render.
+services:
+  - type: web
+    name: kaika-platform-staging
+    runtime: python
+    region: singapore
+    plan: 0.5c-512mb
+    autoDeployTrigger: "off"
+    buildCommand: bash scripts/install_tesseract_render.sh && pip install -r requirements.txt && python scripts/verify_render_build.py && python -m py_compile staging_environment.py staging_app.py scripts/seed_staging.py
+    startCommand: bash scripts/start_staging.sh
+    healthCheckPath: /healthz
+    numInstances: 1
+    disk:
+      name: kaika-staging-uploads
+      mountPath: /opt/render/project/src/static/uploads
+      sizeGB: 5
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: KAIKA_RUNTIME_ENV
+        value: staging
+      - key: KAIKA_STAGING_DATABASE_NAME
+        value: kaika_staging
+      - key: DATABASE_URL
+        fromDatabase:
+          name: kaika-platform-staging-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: STAGING_ADMIN_PASSWORD
+        generateValue: true
+      - key: STAGING_NORMAL_PASSWORD
+        generateValue: true
+      - key: STAGING_BUSINESS_PASSWORD
+        generateValue: true
+      - key: PRIMARY_DOMAIN_REDIRECT
+        value: "0"
+      - key: FEATURE_PLANS_ENABLED
+        value: "1"
+      - key: MOBILE_API_ENABLED
+        value: "1"
+      - key: AUTO_BACKUP_ENABLED
+        value: "0"
+      - key: GOOGLE_DRIVE_ENABLED
+        value: "0"
+      - key: PUSH_NOTIFICATIONS_ENABLED
+        value: "0"
+      - key: FEATURE_APPLE_BILLING_ENABLED
+        value: "0"
+      - key: FEATURE_GOOGLE_BILLING_ENABLED
+        value: "0"
+      - key: FEATURE_STORE_NEW_PURCHASES_ENABLED
+        value: "0"
+      - key: FEATURE_STORE_ENVIRONMENT
+        value: test
+databases:
+  - name: kaika-platform-staging-db
+    region: singapore
+    plan: 0.1c-256mb
+    databaseName: kaika_staging
+    user: kaika_staging
+    diskSizeGB: 5
+    ipAllowList: []

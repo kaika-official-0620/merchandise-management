@@ -1,0 +1,600 @@
+{% extends "base.html" %}
+
+{% block title %}書類履歴 - 株式会社 開花{% endblock %}
+
+{% block content %}
+{% set current_return_url = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path %}
+{% set pending_mitsumori_count = pending_mitsumori_from_invoices|default([])|length %}
+<div class="page-header">
+    <h1>書類履歴</h1>
+    <p class="page-subtitle">作成完了・送付済みの書類だけを種類ごとに確認できます。作成中の見積依頼書と買取承諾書は「書類一覧」に残ります。</p>
+</div>
+
+<div class="doc-tabs" id="document-history-tabs">
+    <button class="doc-tab {% if active_tab == 'kaitori' %}active{% endif %}" data-tab="kaitori">買取明細書</button>
+    <button class="doc-tab {% if active_tab == 'mitsumori' %}active{% endif %}" data-tab="mitsumori">見積依頼書</button>
+    <button class="doc-tab {% if active_tab == 'shoudaku' %}active{% endif %}" data-tab="shoudaku">買取承諾書</button>
+    <button class="doc-tab {% if active_tab == 'shikiri' %}active{% endif %}" data-tab="shikiri">精算書</button>
+    <button class="doc-tab {% if active_tab == 'keisan' %}active{% endif %}" data-tab="keisan">計算書</button>
+</div>
+
+
+<section class="tab-content {% if active_tab == 'kaitori' %}active{% endif %}" id="tab-kaitori">
+    <div class="tab-header">
+        <div>
+            <h2>買取明細書</h2>
+            <p class="tab-note">開花側で確定・送付された買取明細書を確認できます。</p>
+        </div>
+    </div>
+    {% if invoices %}
+    <div class="doc-cards">
+        {% for inv in invoices %}
+        {% set status = inv.status or 'sent' %}
+        <article class="doc-card status-{{ status }}" data-detail-url="{{ url_for('user_invoice_edit', id=inv.id) if inv.can_user_edit else url_for('user_invoice_view', id=inv.id) }}" tabindex="0" role="link">
+            <div class="card-header">
+                <span class="doc-no">{{ inv.invoice_no }}</span>
+                <span class="status-badge status-{{ status }}">
+                    {% if status == 'draft' %}下書き
+                    {% elif status == 'sent' %}送付済み
+                    {% elif status == 'replaced' %}差替え済み
+                    {% elif status == 'cancelled' %}取消済み
+                    {% elif status == 'approved' %}承認済み
+                    {% elif status == 'rejected' %}差し戻し
+                    {% else %}{{ status }}{% endif %}
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="info-row"><span>発行日</span><strong>{{ inv.issue_date or '-' }}</strong></div>
+                <div class="info-row"><span>支払期限</span><strong>{{ inv.payment_due_date or '-' }}</strong></div>
+                <div class="info-row total"><span>合計金額</span><strong>¥{{ "{:,}".format(inv.total_amount or 0) }}</strong></div>
+                {% if status == 'replaced' %}
+                <div class="info-row"><span>状態</span><strong>差替え済み</strong></div>
+                {% if inv.replacement_document_id %}
+                <div class="info-row"><span>最新版</span><strong><a href="{{ url_for('user_invoice_view', id=inv.replacement_document_id) }}">#{{ inv.replacement_document_id }}を確認</a></strong></div>
+                {% endif %}
+                {% endif %}
+            </div>
+            <div class="card-actions">
+                <a href="{{ url_for('user_invoice_edit', id=inv.id) if inv.can_user_edit else url_for('user_invoice_view', id=inv.id) }}" class="btn btn-info">内容を見る</a>
+                {% if inv.can_user_edit %}
+                <a href="{{ url_for('user_invoice_edit', id=inv.id) }}" class="btn btn-secondary">編集</a>
+                <a href="{{ url_for('user_invoice_send', id=inv.id) }}" class="btn btn-success" onclick="return confirm('この買取明細書を送信しますか？')">送信</a>
+                {% endif %}
+                <a href="{{ url_for('invoice_pdf', id=inv.id) }}" class="btn btn-secondary" target="_blank" rel="noopener">PDF</a>
+                {% if inv.can_user_delete %}
+                <form method="POST" action="{{ url_for('user_invoice_delete', id=inv.id) }}" class="inline-delete-form" onsubmit="return confirm('この買取明細書を削除しますか？')">
+                    <input type="hidden" name="next" value="{{ current_return_url }}">
+                    <button type="submit" class="btn btn-danger">削除</button>
+                </form>
+                {% endif %}
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">買取明細書の履歴はまだありません。</div>
+    {% endif %}
+</section>
+
+<section class="tab-content {% if active_tab == 'mitsumori' %}active{% endif %}" id="tab-mitsumori">
+    <div class="tab-header">
+        <div>
+            <h2>見積依頼書</h2>
+            <p class="tab-note">作成完了した見積依頼書の履歴です。下書きは書類一覧に表示されます。</p>
+        </div>
+    </div>
+    {% if user_mitsumori_list %}
+    <div class="doc-cards">
+        {% for doc in user_mitsumori_list %}
+        {% set status = doc.status or 'completed' %}
+        <article class="doc-card status-{{ status }}" data-detail-url="{{ url_for('user_mitsumori_view', id=doc.id) }}" tabindex="0" role="link">
+            <div class="card-header">
+                <span class="doc-no">{{ doc.document_no }}</span>
+                <span class="status-badge status-{{ status }}">
+                    {% if status == 'completed' %}作成済み
+                    {% elif status == 'draft' %}下書き
+                    {% elif status == 'in_progress' %}作成中
+                    {% elif status == 'submitted' or status == 'sent' %}送付済み
+                    {% elif status == 'replaced' %}差替え済み
+                    {% elif status == 'cancelled' %}取消済み
+                    {% elif status == 'approved' %}承認済み
+                    {% elif status == 'rejected' %}差し戻し
+                    {% else %}{{ status }}{% endif %}
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="info-row"><span>発行日</span><strong>{{ doc.issue_date or '-' }}</strong></div>
+                <div class="info-row"><span>宛先</span><strong>{{ doc.company_name|clean_display('株式会社 開花') }}</strong></div>
+                <div class="info-row"><span>件名</span><strong>{{ doc.subject|clean_display('見積依頼書') }}</strong></div>
+                <div class="info-row total"><span>合計金額</span><strong>¥{{ "{:,}".format(doc.total_amount or 0) }}</strong></div>
+                {% if status == 'replaced' %}
+                <div class="info-row"><span>状態</span><strong>差替え済み</strong></div>
+                {% if doc.replacement_document_id %}
+                <div class="info-row"><span>最新版</span><strong><a href="{{ url_for('user_mitsumori_view', id=doc.replacement_document_id) }}">#{{ doc.replacement_document_id }}を確認</a></strong></div>
+                {% endif %}
+                {% endif %}
+            </div>
+            <div class="card-actions">
+                <a href="{{ url_for('user_mitsumori_view', id=doc.id) }}" class="btn btn-info">内容を見る</a>
+                {% if doc.can_user_edit %}
+                <a href="{{ url_for('user_mitsumori_edit', id=doc.id) }}" class="btn btn-secondary">編集</a>
+                {% endif %}
+                <a href="{{ url_for('user_mitsumori_pdf', id=doc.id) }}" class="btn btn-secondary" target="_blank" rel="noopener">PDF</a>
+                {% if doc.can_user_delete %}
+                <form method="POST" action="{{ url_for('user_mitsumori_delete', id=doc.id) }}" class="inline-delete-form" onsubmit="return confirm('この見積依頼書を削除しますか？')">
+                    <input type="hidden" name="next" value="{{ current_return_url }}">
+                    <button type="submit" class="btn btn-danger">削除</button>
+                </form>
+                {% endif %}
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">見積依頼書の履歴はまだありません。</div>
+    {% endif %}
+</section>
+
+<section class="tab-content {% if active_tab == 'shoudaku' %}active{% endif %}" id="tab-shoudaku">
+    <div class="tab-header">
+        <div>
+            <h2>買取承諾書・個人買取</h2>
+            <p class="tab-note">作成完了した買取承諾書の履歴です。下書きは書類一覧に表示されます。</p>
+        </div>
+    </div>
+    {% if user_kaitori_shoudaku_list %}
+    <div class="doc-cards">
+        {% for doc in user_kaitori_shoudaku_list %}
+        {% set status = doc.status or 'completed' %}
+        <article class="doc-card status-{{ status }}" data-detail-url="{{ url_for('user_kaitori_shoudaku_view', id=doc.id) }}" tabindex="0" role="link">
+            <div class="card-header">
+                <span class="doc-no">{{ doc.document_no }}</span>
+                <span class="status-badge status-{{ status }}">
+                    {% if status == 'completed' %}作成済み
+                    {% elif status == 'draft' %}下書き
+                    {% elif status == 'in_progress' %}作成中
+                    {% elif status == 'sent' or status == 'submitted' %}送付済み
+                    {% elif status == 'approved' %}承認済み
+                    {% elif status == 'rejected' %}差し戻し
+                    {% else %}{{ status }}{% endif %}
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="info-row"><span>発行日</span><strong>{{ doc.issue_date or '-' }}</strong></div>
+                <div class="info-row"><span>顧客名</span><strong>{{ doc.customer_name|clean_display('-') }}</strong></div>
+                <div class="info-row"><span>支払方法</span><strong>{{ doc.payment_method|clean_display('-') }}</strong></div>
+                <div class="info-row total"><span>合計金額</span><strong>¥{{ "{:,}".format(doc.total_amount or 0) }}</strong></div>
+            </div>
+            <div class="card-actions">
+                <a href="{{ url_for('user_kaitori_shoudaku_view', id=doc.id) }}" class="btn btn-info">内容を見る</a>
+                {% if doc.can_user_edit %}
+                <a href="{{ url_for('user_kaitori_shoudaku_edit', id=doc.id) }}" class="btn btn-secondary">編集</a>
+                {% endif %}
+                <a href="{{ url_for('user_kaitori_shoudaku_pdf', id=doc.id) }}" class="btn btn-secondary" target="_blank" rel="noopener">PDF</a>
+                {% if doc.can_user_delete %}
+                <form method="POST" action="{{ url_for('user_kaitori_shoudaku_delete', id=doc.id) }}" class="inline-delete-form" onsubmit="return confirm('この買取承諾書を削除しますか？')">
+                    <input type="hidden" name="next" value="{{ current_return_url }}">
+                    <button type="submit" class="btn btn-danger">削除</button>
+                </form>
+                {% endif %}
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">買取承諾書の履歴はまだありません。</div>
+    {% endif %}
+</section>
+
+<section class="tab-content {% if active_tab == 'shikiri' %}active{% endif %}" id="tab-shikiri">
+    <div class="tab-header">
+        <div>
+            <h2>精算書</h2>
+            <p class="tab-note">開花側で作成・送付された精算書を確認できます。</p>
+        </div>
+    </div>
+    {% if shikiriosho_list %}
+    <div class="doc-cards">
+        {% for doc in shikiriosho_list %}
+        {% set status = doc.status or 'sent' %}
+        <article class="doc-card status-{{ status }}" data-detail-url="{{ url_for('user_shikiriosho_view', id=doc.id) }}" tabindex="0" role="link">
+            <div class="card-header">
+                <span class="doc-no">{{ doc.document_no }}</span>
+                <span class="status-badge status-sent">送付済み</span>
+            </div>
+            <div class="card-body">
+                <div class="info-row"><span>発行日</span><strong>{{ doc.issue_date or '-' }}</strong></div>
+                <div class="info-row"><span>送付元</span><strong>{{ doc.sender_display_name|clean_display('株式会社 開花') }}</strong></div>
+                <div class="info-row total"><span>合計金額</span><strong>¥{{ "{:,}".format(doc.total_amount or 0) }}</strong></div>
+            </div>
+            <div class="card-actions">
+                <a href="{{ url_for('user_shikiriosho_view', id=doc.id) }}" class="btn btn-info">内容を見る</a>
+                <a href="{{ url_for('shikiriosho_pdf', id=doc.id) }}" class="btn btn-secondary" target="_blank" rel="noopener">PDF</a>
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">精算書の履歴はまだありません。</div>
+    {% endif %}
+</section>
+
+<section class="tab-content {% if active_tab == 'keisan' %}active{% endif %}" id="tab-keisan">
+    <div class="tab-header">
+        <div>
+            <h2>計算書</h2>
+            <p class="tab-note">代行仕入れサービスなど、開花側で確認後に送付された計算書を確認できます。</p>
+        </div>
+    </div>
+    {% if user_keisan_list %}
+    <div class="doc-cards">
+        {% for doc in user_keisan_list %}
+        {% set status = doc.status or 'sent' %}
+        <article class="doc-card status-{{ status }}" data-detail-url="{{ url_for('user_keisan_view', id=doc.id) }}" tabindex="0" role="link">
+            <div class="card-header">
+                <span class="doc-no">{{ doc.document_no }}</span>
+                <span class="status-badge status-{{ status }}">
+                    {% if status == 'draft' %}下書き
+                    {% elif status == 'in_progress' %}作成中
+                    {% elif status == 'submitted' or status == 'sent' %}送付済み
+                    {% elif status == 'completed' %}完了
+                    {% else %}{{ status }}{% endif %}
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="info-row"><span>発行日</span><strong>{{ doc.issue_date or '-' }}</strong></div>
+                <div class="info-row"><span>宛先</span><strong>{{ doc.recipient_name|clean_display('-') }}</strong></div>
+                <div class="info-row"><span>件名</span><strong>{{ doc.subject|clean_display('計算書') }}</strong></div>
+                <div class="info-row total"><span>合計金額</span><strong>¥{{ "{:,}".format(doc.total_amount or 0) }}</strong></div>
+            </div>
+            <div class="card-actions">
+                <a href="{{ url_for('user_keisan_view', id=doc.id) }}" class="btn btn-info">内容を見る</a>
+                {% if doc.can_user_edit %}
+                <a href="{{ url_for('user_keisan_edit', id=doc.id) }}" class="btn btn-secondary">編集</a>
+                {% endif %}
+                <a href="{{ url_for('user_keisan_pdf', id=doc.id) }}" class="btn btn-secondary" target="_blank" rel="noopener">PDF</a>
+                {% if doc.can_user_delete %}
+                <form method="POST" action="{{ url_for('user_keisan_delete', id=doc.id) }}" class="inline-delete-form" onsubmit="return confirm('この計算書を削除しますか？')">
+                    <input type="hidden" name="next" value="{{ current_return_url }}">
+                    <button type="submit" class="btn btn-danger">削除</button>
+                </form>
+                {% endif %}
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">計算書の履歴はまだありません。</div>
+    {% endif %}
+</section>
+
+<style>
+.page-header {
+    margin-bottom: 1rem;
+}
+
+.page-header h1 {
+    margin: 0 0 0.35rem;
+    color: #0f172a;
+    font-size: 1.5rem;
+}
+
+.page-subtitle,
+.tab-note {
+    margin: 0;
+    color: #64748b;
+    line-height: 1.75;
+    font-size: 0.92rem;
+}
+
+.doc-tabs {
+    display: flex;
+    gap: 0;
+    overflow-x: auto;
+    border-radius: 14px 14px 0 0;
+    background: #eef2ff;
+    border: 1px solid #e2e8f0;
+    border-bottom: 0;
+}
+
+.doc-tab {
+    flex: 1 0 150px;
+    padding: 0.9rem 1rem;
+    border: 0;
+    background: transparent;
+    color: #475569;
+    font-size: 0.92rem;
+    font-weight: 800;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.doc-tab:hover,
+.doc-tab.active {
+    background: #ffffff;
+    color: #1d4ed8;
+}
+
+.pending-mitsumori-box {
+    display: grid;
+    gap: 0.55rem;
+    margin: 0.85rem 0;
+    padding: 0.9rem 1rem;
+    border: 1px solid #bfdbfe;
+    border-radius: 12px;
+    background: #eff6ff;
+    color: #1e3a8a;
+}
+
+.pending-mitsumori-links {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.doc-tab.active {
+    box-shadow: inset 0 -3px 0 #2563eb;
+}
+
+.tab-content {
+    display: none;
+    padding: 1.1rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 0 0 14px 14px;
+    background: #ffffff;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+}
+
+.tab-content.active {
+    display: block;
+}
+
+.tab-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.tab-header h2 {
+    margin: 0 0 0.35rem;
+    color: #0f172a;
+    font-size: 1.18rem;
+}
+
+.doc-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1rem;
+}
+
+.doc-card {
+    display: grid;
+    gap: 0;
+    overflow: hidden;
+    border: 1px solid #e2e8f0;
+    border-left: 4px solid #94a3b8;
+    border-radius: 16px;
+    background: #ffffff;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+    cursor: pointer;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.doc-card:hover,
+.doc-card:focus-visible {
+    border-color: #93c5fd;
+    box-shadow: 0 14px 28px rgba(37, 99, 235, 0.12);
+    outline: none;
+    transform: translateY(-1px);
+}
+
+.doc-card.status-completed,
+.doc-card.status-sent,
+.doc-card.status-submitted,
+.doc-card.status-approved {
+    border-left-color: #10b981;
+}
+
+.doc-card.status-draft,
+.doc-card.status-in_progress {
+    border-left-color: #f59e0b;
+}
+
+.doc-card.status-rejected {
+    border-left-color: #ef4444;
+}
+
+.doc-card.status-cancelled,
+.doc-card.status-replaced {
+    border-left-color: #6b7280;
+}
+
+.card-header,
+.card-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.85rem 1rem;
+    background: #f8fafc;
+}
+
+.card-header {
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.card-actions {
+    justify-content: flex-start;
+    border-top: 1px solid #e2e8f0;
+    flex-wrap: wrap;
+}
+
+.doc-no {
+    color: #1d4ed8;
+    font-family: Consolas, monospace;
+    font-weight: 800;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 0.28rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.76rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.status-badge.status-draft,
+.status-badge.status-in_progress {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.status-badge.status-completed,
+.status-badge.status-submitted,
+.status-badge.status-sent,
+.status-badge.status-approved {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.status-badge.status-rejected {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.status-badge.status-cancelled,
+.status-badge.status-replaced {
+    background: #e5e7eb;
+    color: #374151;
+}
+
+.card-body {
+    display: grid;
+    gap: 0.6rem;
+    padding: 1rem;
+}
+
+.info-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.8rem;
+    padding-bottom: 0.55rem;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.info-row span {
+    color: #64748b;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.info-row strong {
+    color: #0f172a;
+    text-align: right;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.info-row.total {
+    border-bottom: 0;
+    padding-bottom: 0;
+}
+
+.info-row.total strong {
+    color: #2563eb;
+    font-size: 1.12rem;
+}
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 36px;
+    padding: 0.5rem 0.85rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    color: #fff;
+    font-size: 0.82rem;
+    font-weight: 800;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.btn-info {
+    background: #0ea5e9;
+}
+
+.btn-secondary {
+    background: #ffffff;
+    color: #475569;
+    border-color: #cbd5e1;
+}
+
+.btn-success {
+    background: #16a34a;
+}
+
+.btn-danger {
+    background: #dc2626;
+}
+
+.inline-delete-form {
+    margin: 0;
+    display: inline-flex;
+}
+
+.empty-state {
+    padding: 3rem 1rem;
+    border: 1px dashed #cbd5e1;
+    border-radius: 16px;
+    color: #64748b;
+    text-align: center;
+    background: #f8fafc;
+}
+
+@media (max-width: 768px) {
+    .tab-content {
+        padding: 0.85rem;
+    }
+
+    .doc-tab {
+        flex-basis: 140px;
+    }
+
+    .card-header,
+    .info-row {
+        align-items: flex-start;
+    }
+}
+</style>
+
+<script>
+document.querySelectorAll('.doc-tab').forEach(function(tab) {
+    tab.addEventListener('click', function() {
+        document.querySelectorAll('.doc-tab').forEach(function(item) {
+            item.classList.remove('active');
+        });
+        document.querySelectorAll('.tab-content').forEach(function(content) {
+            content.classList.remove('active');
+        });
+        tab.classList.add('active');
+        const target = document.getElementById('tab-' + tab.dataset.tab);
+        if (target) {
+            target.classList.add('active');
+        }
+        const url = new URL(window.location.href);
+        url.searchParams.set('tab', tab.dataset.tab);
+        window.history.replaceState({}, '', url.toString());
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}機能プラン管理 - 株式会社 開花{% endblock %}
+{% block content %}
+{% include "_feature_plan_styles.html" %}
+<div class="fp-page">
+<h1>機能プラン管理</h1>
+<p class="fp-muted">名称・料金・受付状況を設定します。在庫件数に応じた従来の月額料金とは別の契約です。</p>
+{% if not billing_ready %}<p class="fp-note">決済接続の準備が完了していません。受付を有効にしても、決済設定が揃うまで申込ボタンは表示されません。</p>{% endif %}
+<div class="fp-grid">{% for plan in plans %}
+<form class="fp-card" method="post">
+<input type="hidden" name="csrf_token" value="{{ feature_csrf_token() }}"><input type="hidden" name="action" value="catalog"><input type="hidden" name="plan_code" value="{{ plan.code }}">
+<h2>{{ plan.name }}</h2>
+<label>プラン名<input name="name" value="{{ plan.name }}" maxlength="60" required></label>
+<label>月額料金（税込・円）<input type="number" min="50" max="1000000" step="1" name="monthly_amount" value="{{ plan.monthly_amount or '' }}" placeholder="未設定"></label>
+<label>Stripe Price ID<input name="stripe_price_id" value="{{ plan.stripe_price_id }}" placeholder="price_…" autocomplete="off"></label>
+<p class="fp-muted">JPY・毎月・固定額・税込のPriceを設定します。申込時にStripeの料金と照合します。既存契約の金額は、この画面の変更だけでは変わりません。</p>
+<ul class="fp-features">{% for feature in plan.features %}<li>{{ feature_labels[feature] }}</li>{% endfor %}</ul>
+<label><input type="checkbox" name="selling" value="1" {% if plan.selling %}checked{% endif %}>新規申込を受け付ける</label>
+<button class="btn btn-primary" type="submit">プランを保存</button>
+</form>{% endfor %}</div>
+<section class="fp-panel">
+<h2>期限付きの利用権限</h2><p class="fp-muted">動作確認や個別対応用です。料金の請求・決済は行いません。最長90日で自動終了し、操作理由を記録します。</p>
+<form method="post">
+<input type="hidden" name="csrf_token" value="{{ feature_csrf_token() }}">
+<div class="fp-grid"><label>利用者<select name="user_id" required>{% for user in users %}<option value="{{ user.id }}">{{ user.display_name or user.username }}（{{ user.username }}）</option>{% endfor %}</select></label>
+<label>プラン<select name="plan_code">{% for plan in plans %}<option value="{{ plan.code }}">{{ plan.name }}</option>{% endfor %}</select></label></div>
+<label>利用日数<input type="number" name="days" value="7" min="1" max="90" required></label>
+<label>理由<textarea name="reason" minlength="3" maxlength="300" required></textarea></label>
+<div class="fp-actions"><button class="btn btn-primary" name="action" value="grant">期限付きで付与</button><button class="btn btn-secondary" name="action" value="revoke">期限付き権限を解除</button></div>
+</form>
+<p class="fp-muted">解除の対象は期限付き権限だけです。決済済みの契約は解約されません。</p>
+</section>
+<section class="fp-panel"><h2>操作履歴</h2><div class="fp-scroll"><table><thead><tr><th>対象</th><th>操作</th><th>詳細</th><th>操作者ID</th></tr></thead><tbody>{% for entry in audit %}<tr><td>{{ entry.subject }}</td><td>{{ {'catalog':'プラン更新','grant':'期限付き付与','revoke':'期限付き解除'}.get(entry.action, entry.action) }}</td><td>{{ entry.detail }}</td><td>{{ entry.actor_id }}</td></tr>{% else %}<tr><td colspan="4">まだ操作履歴はありません。</td></tr>{% endfor %}</tbody></table></div></section>
+</div>
+{% endblock %}

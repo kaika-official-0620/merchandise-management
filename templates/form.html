@@ -1,0 +1,3050 @@
+{% extends "base.html" %}
+{% block title %}{{ '編集' if item else '新規登録' }} - 株式会社 開花{% endblock %}
+
+{% block content %}
+<style>
+/* ブランド名コンボボックス */
+.brand-combobox {
+    position: relative;
+    width: 100%;
+}
+.brand-combobox input[type="text"] {
+    width: 100%;
+    padding-right: 36px;
+    box-sizing: border-box;
+}
+.combobox-toggle {
+    position: absolute;
+    right: 1px;
+    top: 1px;
+    bottom: 1px;
+    width: 34px;
+    background: #f8fafc;
+    border: none;
+    border-left: 1px solid #e2e8f0;
+    border-radius: 0 6px 6px 0;
+    color: #64748b;
+    cursor: pointer;
+    font-size: 0.7rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+}
+.combobox-toggle:hover {
+    background: #e2e8f0;
+    color: #334155;
+}
+.brand-dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    max-height: 300px;
+    overflow-y: auto;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    z-index: 100;
+}
+.brand-dropdown.open {
+    display: block;
+}
+.brand-dropdown .dropdown-category {
+    padding: 6px 12px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #64748b;
+    background: #f8fafc;
+    border-top: 1px solid #f1f5f9;
+    position: sticky;
+    top: 0;
+}
+.brand-dropdown .dropdown-item {
+    padding: 8px 12px 8px 20px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background 0.15s;
+}
+.brand-dropdown .dropdown-item:hover,
+.brand-dropdown .dropdown-item.highlighted {
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+.brand-dropdown .dropdown-no-match {
+    padding: 12px;
+    text-align: center;
+    color: #94a3b8;
+    font-size: 0.85rem;
+}
+.brand-dropdown .dropdown-meta {
+    display: block;
+    margin-top: 0.2rem;
+    font-size: 0.75rem;
+    color: #64748b;
+    line-height: 1.4;
+}
+.brand-auto-detected {
+    background-color: #d1fae5 !important;
+    transition: background-color 0.3s;
+}
+
+/* Google Drive連携スタイル */
+.photo-upload-options {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.btn-google-drive {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 16px;
+    background: #fff;
+    border: 2px solid #4285f4;
+    border-radius: 6px;
+    color: #4285f4;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-google-drive:hover:not(:disabled) {
+    background: #4285f4;
+    color: #fff;
+}
+
+.btn-google-drive:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.google-drive-preview {
+    margin-top: 10px;
+    position: relative;
+    display: inline-block;
+    background: #e8f0fe;
+    padding: 10px;
+    border-radius: 8px;
+    border: 2px solid #4285f4;
+}
+
+.google-drive-preview img {
+    max-width: 200px;
+    max-height: 150px;
+    border-radius: 4px;
+}
+
+.google-drive-preview .photo-label {
+    display: block;
+    text-align: center;
+    font-size: 0.8rem;
+    color: #4285f4;
+    margin-top: 6px;
+}
+
+.remove-google-photo {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 24px;
+    height: 24px;
+    background: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+}
+
+.google-drive-additional-preview {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.google-drive-additional-preview .preview-item {
+    position: relative;
+    background: #e8f0fe;
+    padding: 8px;
+    border-radius: 6px;
+    border: 2px solid #4285f4;
+}
+
+.google-drive-additional-preview .preview-item img {
+    width: 80px;
+    height: 80px;
+    object-fit: cover;
+    border-radius: 4px;
+}
+
+.google-drive-additional-preview .preview-item .remove-btn {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    width: 20px;
+    height: 20px;
+    background: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1;
+}
+
+/* 写真関連スタイル */
+.current-photo {
+    margin-top: 10px;
+    position: relative;
+    display: inline-block;
+}
+
+.current-photo img {
+    max-width: 150px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.photo-label {
+    display: block;
+    font-size: 0.75rem;
+    color: #64748b;
+    margin-top: 4px;
+    text-align: center;
+}
+
+.local-photo-preview,
+.local-additional-preview {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.local-preview-item {
+    position: relative;
+    width: 120px;
+    padding: 8px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+}
+
+.local-preview-item img {
+    width: 100%;
+    height: 92px;
+    object-fit: cover;
+    border-radius: 6px;
+}
+
+.local-preview-item .preview-name {
+    display: block;
+    margin-top: 6px;
+    font-size: 0.72rem;
+    color: #475569;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.remove-local-photo {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: 50%;
+    background: #dc2626;
+    color: #fff;
+    cursor: pointer;
+    line-height: 1;
+    font-weight: 700;
+}
+
+.form-help {
+    display: block;
+    color: #64748b;
+    font-size: 0.8rem;
+    margin-top: 4px;
+}
+
+.current-file {
+    margin-top: 8px;
+    padding: 8px 12px;
+    background: #e8f5e9;
+    border-radius: 4px;
+}
+
+.current-file a {
+    color: #2e7d32;
+    text-decoration: none;
+    font-size: 0.85rem;
+}
+
+.current-file a:hover {
+    text-decoration: underline;
+}
+
+.additional-photos-grid {
+    margin-top: 15px;
+    padding: 15px;
+    background: #f8fafc;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+}
+
+.photos-count {
+    font-size: 0.85rem;
+    color: #475569;
+    margin-bottom: 12px;
+    font-weight: 500;
+}
+
+.additional-photos-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 12px;
+}
+
+.additional-photo-item {
+    position: relative;
+    background: white;
+    border-radius: 8px;
+    padding: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.additional-photo-item img {
+    width: 100%;
+    height: 80px;
+    object-fit: cover;
+    border-radius: 6px;
+}
+
+.photo-number {
+    display: block;
+    text-align: center;
+    font-size: 0.7rem;
+    color: #94a3b8;
+    margin-top: 4px;
+}
+
+.delete-checkbox {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    margin-top: 6px;
+    cursor: pointer;
+    font-size: 0.75rem;
+    color: #ef4444;
+}
+
+.delete-checkbox input[type="checkbox"] {
+    width: auto;
+    margin: 0;
+}
+
+.delete-checkbox span {
+    font-weight: 500;
+}
+
+@media (max-width: 768px) {
+    .additional-photos-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+/* 読み取り専用フィールドのスタイル */
+.basic-readonly-notice {
+    background: #fef3c7;
+    border: 1px solid #f59e0b;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    color: #92400e;
+    font-size: 0.85rem;
+}
+
+.basic-readonly-notice strong {
+    display: block;
+    margin-bottom: 4px;
+}
+
+input:disabled, select:disabled, textarea:disabled {
+    background-color: #f1f5f9 !important;
+    cursor: not-allowed;
+    color: #64748b;
+}
+
+.owner-only-label {
+    color: #ef4444;
+    font-size: 0.75rem;
+    font-weight: normal;
+    margin-left: 4px;
+}
+</style>
+
+{% set basic_readonly = not (current_user.is_owner() or current_user.is_admin()) and item %}
+{% set is_kaika_scope = is_kaika_scope | default(false) %}
+{% if item and is_kaika_scope %}
+{% set current_kaika_sale_type = 'normal' %}
+{% if item.sale_type %}
+{% if 'live_commerce' in item.sale_type %}
+{% set current_kaika_sale_type = 'live_commerce' %}
+{% elif 'multi_listing' in item.sale_type %}
+{% set current_kaika_sale_type = 'live_commerce' %}
+{% elif 'wholesale' in item.sale_type %}
+{% set current_kaika_sale_type = 'wholesale' %}
+{% elif 'auction' in item.sale_type %}
+{% set current_kaika_sale_type = 'auction' %}
+{% elif 'normal' in item.sale_type %}
+{% set current_kaika_sale_type = 'normal' %}
+{% endif %}
+{% endif %}
+{% else %}
+{% set current_kaika_sale_type = 'normal' %}
+{% endif %}
+{% if item and not is_kaika_scope %}
+{% set current_user_sale_type = 'normal' %}
+{% if item.sale_type %}
+{% if 'auction' in item.sale_type %}
+{% set current_user_sale_type = 'auction' %}
+{% elif 'multi_listing' in item.sale_type %}
+{% set current_user_sale_type = 'multi_listing' %}
+{% elif 'wholesale' in item.sale_type %}
+{% set current_user_sale_type = 'wholesale' %}
+{% elif 'normal' in item.sale_type %}
+{% set current_user_sale_type = 'normal' %}
+{% endif %}
+{% endif %}
+{% else %}
+{% set current_user_sale_type = 'normal' %}
+{% endif %}
+
+<form method="POST" enctype="multipart/form-data" class="item-form" id="item-form">
+    {% if is_kaika_scope %}
+    <input type="hidden" name="item_submission_token" value="{{ item_submission_token }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/kaika_product_image_picker.css') }}">
+    {% endif %}
+    {% if back_url %}
+    <input type="hidden" name="back_url" value="{{ back_url }}">
+    {% endif %}
+    <div class="form-grid">
+        <!-- 左カラム: 基本情報 -->
+        <div class="form-section">
+            <h2>基本情報{% if basic_readonly %}<span class="owner-only-label">（オーナーのみ編集可）</span>{% endif %}</h2>
+            
+            {% if basic_readonly %}
+            <div class="basic-readonly-notice">
+                <strong>⚠️ 基本情報は編集できません</strong>
+                仕入れ情報（仕入日〜支払方法）はオーナーのみ編集可能です。<br>
+                <span style="color: #10b981;">✓ スタッフ管理者は商品名のみ更新できます。</span>
+            </div>
+            {% endif %}
+            
+            <div class="form-group">
+                <label for="purchase_date">仕入日</label>
+                <input type="date" id="purchase_date" name="purchase_date" 
+                       value="{{ item.purchase_date if item else '' }}"
+                       {% if basic_readonly %}disabled{% endif %}>
+            </div>
+            <div class="form-group">
+                <label for="storage_start_date">保管開始日</label>
+                <input type="date" id="storage_start_date" name="storage_start_date"
+                       value="{{ item.storage_start_date if item and item.storage_start_date else '' }}"
+                       {% if basic_readonly %}disabled{% endif %}>
+                <small class="form-help">長期保存判定はこの日付から計算します。未設定の場合は登録日を基準にします。</small>
+            </div>
+            
+            <div class="form-group">
+                <label for="product_name">商品名</label>
+                <div class="brand-combobox">
+                    <input type="text" id="product_name" name="product_name"
+                           value="{{ item.product_name if item else '' }}" required autocomplete="off">
+                    <div class="brand-dropdown" id="product-suggestion-dropdown"></div>
+                </div>
+                <small class="form-help">ブランド名・検索名・名称候補から候補を表示します。候補がなくてもそのまま入力できます。</small>
+            </div>
+
+            <div class="form-group">
+                <label for="notes">メモ</label>
+                <textarea id="notes" name="notes" rows="4"
+                          placeholder="送料を抑えられるか、共有したい注意事項などを入力"
+                          {% if basic_readonly %}disabled{% endif %}>{{ item.notes if item and item.notes else '' }}</textarea>
+                <small class="form-help">管理画面と商品詳細で確認できます。</small>
+            </div>
+            
+            <div class="form-group">
+                <label for="kaika_product_code">開花管理番号</label>
+                <input type="text" id="kaika_product_code" name="kaika_product_code"
+                       value="{{ item.kaika_product_code if item else next_kaika_product_code|default('', true) }}"
+                       placeholder="年月+連番で自動採番"
+                       {% if basic_readonly or not item %}readonly{% endif %}>
+                {% if not item %}
+                <small class="form-help">登録時に年月+連番（例: 2606-001）で自動採番します。</small>
+                {% endif %}
+            </div>
+            
+            <div class="form-group">
+                <label for="brand_name">ブランド名</label>
+                <div class="brand-combobox">
+                    <input type="text" id="brand_name" name="brand_name" 
+                           value="{{ item.brand_name if item else '' }}"
+                           autocomplete="off" placeholder="選択または入力してください"
+                           {% if basic_readonly %}disabled{% endif %}>
+                    <button type="button" class="combobox-toggle" id="brand-toggle" {% if basic_readonly %}disabled{% endif %}>▼</button>
+                    <div class="brand-dropdown" id="brand-dropdown"></div>
+                </div>
+                <input type="hidden" id="master_brand_id" name="master_brand_id">
+                <input type="hidden" id="current_brand_name" value="{{ item.brand_name if item else '' }}">
+                <small class="form-help">ブランド名・検索名・キーワードから候補を表示します。</small>
+            </div>
+            <div class="form-group">
+                <label for="brand_category_name">ブランドカテゴリ</label>
+                <div class="brand-combobox">
+                    <input type="text" id="brand_category_name" name="brand_category_name"
+                           autocomplete="off" placeholder="カテゴリで候補を絞り込めます"
+                           {% if basic_readonly %}disabled{% endif %}>
+                    <button type="button" class="combobox-toggle" id="category-toggle" {% if basic_readonly %}disabled{% endif %}>▼</button>
+                    <div class="brand-dropdown" id="category-dropdown"></div>
+                </div>
+                <input type="hidden" id="master_category_id" name="master_category_id">
+                <small class="form-help">任意です。カテゴリでブランド候補と商品候補を絞り込めます。</small>
+            </div>
+            
+            <div class="form-group">
+                <label for="model_number">型番</label>
+                <input type="text" id="model_number" name="model_number" 
+                       value="{{ item.model_number if item else '' }}" placeholder="例: M44874, 116500LN"
+                       {% if basic_readonly %}disabled{% endif %}>
+            </div>
+            
+            <div class="form-group">
+                <label for="item_condition">商品状態</label>
+                <select id="item_condition" name="item_condition" {% if basic_readonly %}disabled{% endif %}>
+                    <option value="">選択してください</option>
+                    <!-- マスターデータから動的に生成 -->
+                </select>
+                <input type="hidden" id="current_item_condition" value="{{ item.item_condition if item else '' }}">
+            </div>
+            
+            <div class="form-group">
+                <label for="store_name">仕入先</label>
+                <select id="store_name" name="store_name" onchange="toggleSupplierDetail()" {% if basic_readonly %}disabled{% endif %}>
+                    <option value="">選択してください</option>
+                    <!-- マスターデータから動的に生成 -->
+                </select>
+                <input type="hidden" id="current_store_name" value="{{ item.store_name if item else '' }}">
+            </div>
+            
+            <!-- 個人選択時の追加フィールド -->
+            <div id="supplier-detail-section" style="display: none; padding: 1rem; background: #f8fafc; border: 1px solid #e2e8f0; margin-bottom: 1rem;">
+                <div class="form-group">
+                    <label for="supplier_detail">仕入先詳細</label>
+                    <select id="supplier_detail" name="supplier_detail" {% if basic_readonly %}disabled{% endif %}>
+                        <option value="">選択してください</option>
+                        <!-- マスターデータから動的に生成 -->
+                    </select>
+                    <input type="hidden" id="current_supplier_detail" value="{{ item.supplier_detail if item else '' }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="id_document">身分証</label>
+                    <input type="file" id="id_document" name="id_document" accept="image/*,.pdf"
+                           {% if basic_readonly %}disabled{% endif %}>
+                    {% if item and item.id_document_path %}
+                    <div class="current-file">
+                        <a href="{{ url_for('static', filename=item.id_document_path) }}" target="_blank">現在のファイルを表示</a>
+                    </div>
+                    {% endif %}
+                    <small class="form-help">画像またはPDF</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="consent_form">同意書</label>
+                    <input type="file" id="consent_form" name="consent_form" accept="image/*,.pdf"
+                           {% if basic_readonly %}disabled{% endif %}>
+                    {% if item and item.consent_form_path %}
+                    <div class="current-file">
+                        <a href="{{ url_for('static', filename=item.consent_form_path) }}" target="_blank">現在のファイルを表示</a>
+                    </div>
+                    {% endif %}
+                    <small class="form-help">画像またはPDF</small>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="purchase_price">仕入額</label>
+                <input type="number" id="purchase_price" name="purchase_price" 
+                       value="{{ item.purchase_price if item else 0 }}" min="0"
+                       oninput="if(typeof recalculateWholesalePrice==='function')recalculateWholesalePrice()"
+                       {% if basic_readonly %}disabled{% endif %}>
+            </div>
+
+            <div class="form-group">
+                <label for="wholesale_fee_rate">卸手数料（%）</label>
+                <input type="number" id="wholesale_fee_rate" name="wholesale_fee_rate" 
+                       value="{{ item.wholesale_fee_rate if item and item.wholesale_fee_rate else 0 }}" min="0" step="0.01"
+                       oninput="if(typeof recalculateWholesalePrice==='function')recalculateWholesalePrice()"
+                       {% if basic_readonly %}disabled{% endif %}>
+            </div>
+
+            <div class="form-group">
+                <label for="wholesale_price">卸価格</label>
+                <input type="number" id="wholesale_price" name="wholesale_price" 
+                       value="{{ item.wholesale_price if item and item.wholesale_price else 0 }}" min="0"
+                       oninput="if(typeof recalculateWholesalePrice==='function'){document.getElementById('wholesale_price_hint').textContent='手動入力中（仕入額・卸手数料を変更すると自動計算に戻ります）';calculateProfit()}"
+                       {% if basic_readonly %}disabled{% endif %}>
+                <small class="form-help" id="wholesale_price_hint">手動入力がなければ自動計算します（手動変更可）</small>
+            </div>
+            
+            <div class="form-group">
+                <label for="payment_method">支払方法</label>
+                <select id="payment_method" name="payment_method" {% if basic_readonly %}disabled{% endif %}>
+                    <option value="">選択してください</option>
+                    <!-- マスターデータから動的に生成 -->
+                </select>
+                <input type="hidden" id="current_payment_method" value="{{ item.payment_method if item else '' }}">
+            </div>
+            
+            {% if is_kaika_scope %}<div id="kaika-image-picker-root" class="kaika-image-picker">{% endif %}
+            <div class="form-group">
+                <label for="photo">メイン写真（1枚目）</label>
+                <div class="photo-upload-options">
+                <input type="file" id="photo" name="photo" accept="image/*" {% if basic_readonly %}disabled{% endif %}>
+                <div id="kaika-main-image-preview" class="local-photo-preview"></div>
+                    {% if is_kaika_scope %}<button type="button" id="google-drive-photo-btn" class="btn-google-drive" {% if basic_readonly %}disabled{% endif %}>
+                        <svg viewBox="0 0 87.3 78" width="18" height="16" style="margin-right: 6px;">
+                            <path d="M6.6 66.85l3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8H0c0 1.55.4 3.1 1.2 4.5l5.4 9.35z" fill="#0066DA"/>
+                            <path d="M43.65 25L29.9 0c-1.35.8-2.5 1.9-3.3 3.3L1.2 43.45C.4 44.85 0 46.4 0 48h27.5L43.65 25z" fill="#00AC47"/>
+                            <path d="M73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75l7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5H59.85L73.55 76.8z" fill="#EA4335"/>
+                            <path d="M43.65 25L57.4 1.2c-1.35-.8-2.9-1.2-4.5-1.2H34.4c-1.6 0-3.15.45-4.5 1.2L43.65 25z" fill="#00832D"/>
+                            <path d="M59.85 53H27.5L13.75 76.8c1.35.8 2.9 1.2 4.5 1.2h36.75c1.6 0 3.15-.45 4.5-1.2L59.85 53z" fill="#2684FC"/>
+                            <path d="M73.4 26.5l-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3L43.65 25l16.2 28h27.45c0-1.55-.4-3.1-1.2-4.5l-12.7-22z" fill="#FFBA00"/>
+                        </svg>
+                        Googleドライブから選択
+                    </button>{% endif %}
+                </div>
+                <input type="hidden" id="google-drive-photo-path" value="">
+                {% if is_kaika_scope %}<div id="google-drive-photo-preview" class="google-drive-preview" style="display: none;">
+                    <img id="google-drive-photo-img" src="" alt="選択した写真">
+                    <span class="photo-label">Googleドライブから選択</span>
+                    <button type="button" class="remove-google-photo" onclick="removeGoogleDrivePhoto()" {% if basic_readonly %}disabled{% endif %}>×</button>
+                </div>{% endif %}
+                {% if item and item.photo_path %}
+                <div class="current-photo">
+                    <img src="{{ url_for('static', filename=item.photo_path) }}" alt="現在の写真">
+                    <span class="photo-label">現在のメイン写真</span>
+                </div>
+                {% endif %}
+            </div>
+            
+            <div class="form-group">
+                <label for="additional_photos">追加写真（最大19枚）</label>
+                <div class="photo-upload-options">
+                <input type="file" id="additional_photos" name="additional_photos" accept="image/jpeg,image/png,image/webp" multiple {% if basic_readonly %}disabled{% endif %}>
+                <div id="kaika-additional-image-preview" class="local-additional-preview"></div>
+                    {% if is_kaika_scope %}<button type="button" id="google-drive-additional-btn" class="btn-google-drive" {% if basic_readonly %}disabled{% endif %}>
+                        <svg viewBox="0 0 87.3 78" width="18" height="16" style="margin-right: 6px;">
+                            <path d="M6.6 66.85l3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8H0c0 1.55.4 3.1 1.2 4.5l5.4 9.35z" fill="#0066DA"/>
+                            <path d="M43.65 25L29.9 0c-1.35.8-2.5 1.9-3.3 3.3L1.2 43.45C.4 44.85 0 46.4 0 48h27.5L43.65 25z" fill="#00AC47"/>
+                            <path d="M73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75l7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5H59.85L73.55 76.8z" fill="#EA4335"/>
+                            <path d="M43.65 25L57.4 1.2c-1.35-.8-2.9-1.2-4.5-1.2H34.4c-1.6 0-3.15.45-4.5 1.2L43.65 25z" fill="#00832D"/>
+                            <path d="M59.85 53H27.5L13.75 76.8c1.35.8 2.9 1.2 4.5 1.2h36.75c1.6 0 3.15-.45 4.5-1.2L59.85 53z" fill="#2684FC"/>
+                            <path d="M73.4 26.5l-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3L43.65 25l16.2 28h27.45c0-1.55-.4-3.1-1.2-4.5l-12.7-22z" fill="#FFBA00"/>
+                        </svg>
+                        Googleドライブから選択
+                    </button>{% endif %}
+                </div>
+                <input type="hidden" id="google-drive-additional-paths" value="">
+                {% if is_kaika_scope %}<div id="google-drive-additional-preview" class="google-drive-additional-preview"></div>{% endif %}
+                <small class="form-help">複数選択可能です（Ctrl/Cmdを押しながらクリック）</small>
+                <small id="kaika-additional-image-count" class="kaika-image-picker__count"></small>
+                {% if is_kaika_scope %}<small id="google-drive-picker-status" class="kaika-image-picker__status" role="status" aria-live="polite">Google Drive設定を確認しています…</small>{% endif %}
+                
+                {% if item and item.additional_photos_list and item.additional_photos_list|length > 0 %}
+                <div class="additional-photos-grid">
+                    <p class="photos-count">現在の追加写真: {{ item.additional_photos_list|length }}枚</p>
+                    {% for photo in item.additional_photos_list %}
+                    <div class="additional-photo-item">
+                        <img src="{{ url_for('static', filename=photo) }}" alt="追加写真{{ loop.index }}">
+                        <span class="photo-number">{{ loop.index + 1 }}枚目</span>
+                        <label class="delete-checkbox">
+                            <input type="checkbox" name="delete_photos" value="{{ photo }}" {% if basic_readonly %}disabled{% endif %}>
+                            <span>削除</span>
+                        </label>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% if is_kaika_scope %}</div>{% endif %}
+        </div>
+        
+        <!-- 右カラム: 売却情報 -->
+        <div class="form-section">
+            <h2>売却情報</h2>
+            
+            <div class="form-group">
+                <label for="item_status">ステータス</label>
+                <select id="item_status" name="item_status" onchange="updateStatusFields()" {% if basic_readonly %}disabled{% endif %}>
+                    {% set current_status = 'sold' if item and (item.is_sold or item.sale_date) else ('appraisal_pending' if item and item.appraisal_status == 'waiting' else ('listed' if item and item.is_listed else 'unlisted')) %}
+                    <option value="unlisted" {% if current_status == 'unlisted' %}selected{% endif %}>未出品</option>
+                    <option value="appraisal_pending" {% if current_status == 'appraisal_pending' %}selected{% endif %}>査定待ち</option>
+                    <option value="listed" {% if current_status == 'listed' %}selected{% endif %}>出品中</option>
+                    <option value="sold" {% if current_status == 'sold' %}selected{% endif %}>売却済み</option>
+                </select>
+            </div>
+            
+            <!-- 出品中・売却済み時のみ表示 -->
+            <div id="listing-date-group" class="form-group" style="display: none;">
+                <label for="listing_date">出品日</label>
+                <input type="date" id="listing_date" name="listing_date" 
+                       value="{{ item.listing_date if item else '' }}" {% if basic_readonly %}disabled{% endif %}>
+            </div>
+            
+            <!-- 出品中・売却済み時のみ表示 -->
+            <div id="listing-price-group" class="form-group" style="display: none;">
+                <label for="listing_price">出品価格</label>
+                <input type="number" id="listing_price" name="listing_price" 
+                       value="{{ item.listing_price if item else 0 }}" min="0" {% if basic_readonly %}disabled{% endif %}>
+            </div>
+            
+            
+            <!-- 売却済み時のみ表示 -->
+            <div id="sale-date-group" class="form-group" style="display: none;">
+                <label for="sale_date">売却日</label>
+                <input type="date" id="sale_date" name="sale_date" 
+                       value="{{ item.sale_date if item else '' }}" {% if basic_readonly %}disabled{% endif %}>
+            </div>
+            
+            <!-- 売却済み時のみ表示するフィールド -->
+            <div id="sold-fields" style="display: none;">
+                <div class="form-group">
+                    <label>販売タイプ</label>
+                    <div class="sale-type-layout">
+                    <div class="sale-type-checkboxes">
+                        {% if is_kaika_scope %}
+                        <label class="sale-type-option">
+                            <input class="sale-type-control" type="radio" name="sale_type_choice" value="normal" {% if current_kaika_sale_type == 'normal' %}checked{% endif %} {% if basic_readonly %}disabled{% endif %}>
+                            <span class="sale-type-indicator" aria-hidden="true"></span>
+                            <span class="sale-type-label">通常販売</span>
+                        </label>
+                        <label class="sale-type-option">
+                            <input class="sale-type-control" type="radio" name="sale_type_choice" value="wholesale" {% if current_kaika_sale_type == 'wholesale' %}checked{% endif %} {% if basic_readonly %}disabled{% endif %}>
+                            <span class="sale-type-indicator" aria-hidden="true"></span>
+                            <span class="sale-type-label">業者販売</span>
+                        </label>
+                        <label class="sale-type-option">
+                            <input class="sale-type-control" type="radio" name="sale_type_choice" value="auction" {% if current_kaika_sale_type == 'auction' %}checked{% endif %} {% if basic_readonly %}disabled{% endif %}>
+                            <span class="sale-type-indicator" aria-hidden="true"></span>
+                            <span class="sale-type-label">オークション販売</span>
+                        </label>
+                        <label class="sale-type-option">
+                            <input class="sale-type-control" type="radio" name="sale_type_choice" value="live_commerce" {% if current_kaika_sale_type == 'live_commerce' %}checked{% endif %} {% if basic_readonly %}disabled{% endif %}>
+                            <span class="sale-type-indicator" aria-hidden="true"></span>
+                            <span class="sale-type-label">ライブコマース</span>
+                        </label>
+                        {% else %}
+                        <label class="sale-type-option fixed-option">
+                            <input class="sale-type-control" type="radio" checked disabled tabindex="-1" aria-hidden="true">
+                            <span class="sale-type-indicator" aria-hidden="true"></span>
+                            <span class="sale-type-label">撮影梱包発送代行<button type="button" class="sale-type-detail-link" data-fee-detail="photo_packing" onclick="event.stopPropagation()">詳細</button><span class="fixed-badge">固定</span></span>
+                        </label>
+                        <label class="sale-type-option">
+                            <input class="sale-type-control" type="radio" name="sale_type_choice_user" value="normal"
+                                   {% if current_user_sale_type == 'normal' %}checked{% endif %}
+                                   {% if basic_readonly %}disabled{% endif %}>
+                            <span class="sale-type-indicator" aria-hidden="true"></span>
+                            <span class="sale-type-label">通常販売<button type="button" class="sale-type-detail-link" data-fee-detail="normal" onclick="event.stopPropagation()">詳細</button></span>
+                        </label>
+                        <label class="sale-type-option">
+                            <input class="sale-type-control" type="radio" name="sale_type_choice_user" value="wholesale"
+                                   {% if current_user_sale_type == 'wholesale' %}checked{% endif %}
+                                   {% if basic_readonly %}disabled{% endif %}>
+                            <span class="sale-type-indicator" aria-hidden="true"></span>
+                            <span class="sale-type-label">業者販売<button type="button" class="sale-type-detail-link" data-fee-detail="wholesale" onclick="event.stopPropagation()">詳細</button></span>
+                        </label>
+                        <label class="sale-type-option">
+                            <input class="sale-type-control" type="radio" name="sale_type_choice_user" value="multi_listing"
+                                   {% if current_user_sale_type == 'multi_listing' %}checked{% endif %}
+                                   {% if basic_readonly %}disabled{% endif %}>
+                            <span class="sale-type-indicator" aria-hidden="true"></span>
+                            <span class="sale-type-label">同時出品サービス<button type="button" class="sale-type-detail-link" data-fee-detail="multi_listing" onclick="event.stopPropagation()">詳細</button></span>
+                        </label>
+                        <label class="sale-type-option">
+                            <input class="sale-type-control" type="radio" name="sale_type_choice_user" value="auction"
+                                   {% if current_user_sale_type == 'auction' %}checked{% endif %}
+                                   {% if basic_readonly %}disabled{% endif %}>
+                            <span class="sale-type-indicator" aria-hidden="true"></span>
+                            <span class="sale-type-label">オークション販売<button type="button" class="sale-type-detail-link" data-fee-detail="auction" onclick="event.stopPropagation()">詳細</button></span>
+                        </label>
+                        {% endif %}
+                    </div>
+                    </div>
+                    <small class="form-help">
+                        {% if is_kaika_scope %}
+                        開花商品の販売タイプを1つ選択してください。
+                        {% else %}
+                        ユーザー商品は撮影梱包発送代行を固定にしたうえで、販売方法を1つ選択してください。
+                        {% endif %}
+                    </small>
+                    <input type="hidden" id="sale_type" name="sale_type" value="{{ current_kaika_sale_type if is_kaika_scope else ('photo_packing,' ~ current_user_sale_type) }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="sale_price">売上金（税込販売価格）</label>
+                    <input type="number" id="sale_price" name="sale_price" 
+                           value="{{ item.sale_price if item else 0 }}" min="0" {% if basic_readonly %}disabled{% endif %}>
+                </div>
+                
+                <div class="form-group">
+                    <label for="shipping_cost">送料</label>
+                    <input type="number" id="shipping_cost" name="shipping_cost" 
+                           value="{{ item.shipping_cost if item else 0 }}" min="0" {% if basic_readonly %}disabled{% endif %}>
+                    <small class="form-help" id="shipping_hint"></small>
+                </div>
+                
+                <div class="form-group" id="sales-destination-group">
+                    <label for="sales_destination_choice">販売先</label>
+                    <div class="sales-destination-stack">
+                        <select id="sales_destination_choice" {% if basic_readonly %}disabled{% endif %}></select>
+                        <input type="text" id="sales_destination_other" placeholder="販売先を入力" value="" style="display: none;" {% if basic_readonly %}disabled{% endif %}>
+                    </div>
+                    <input type="hidden" id="sales_destination" name="sales_destination" value="{{ item.sales_destination if item else '' }}">
+                    <small class="form-help" id="sales_destination_hint"></small>
+                </div>
+
+                <div class="form-group" id="commission-rate-group">
+                    <label for="commission_rate">販売媒体手数料率（%）</label>
+                    <input type="number" id="commission_rate" name="commission_rate" value="10" min="0" step="0.1" {% if basic_readonly %}disabled{% endif %}>
+                    <small class="form-help" id="commission_rate_hint">通常販売のときだけ、販売媒体ごとの手数料率を入力できます。</small>
+                </div>
+                
+                <div class="form-group" id="commission-group">
+                    <label for="{{ 'commission' if is_kaika_scope else 'commission_display' }}">手数料</label>
+                    {% if is_kaika_scope %}
+                    <input type="number" id="commission" name="commission" 
+                           value="{{ item.commission if item else 0 }}" min="0" {% if basic_readonly %}disabled{% endif %}>
+                    {% else %}
+                    <input type="hidden" id="commission" name="commission" value="{{ item.commission if item else 0 }}">
+                    <input type="text" id="commission_display" value="" readonly class="readonly-money-field" {% if basic_readonly %}disabled{% endif %}>
+                    {% endif %}
+                    <small class="form-help" id="commission_hint">
+                        {% if is_kaika_scope %}
+                        通常販売のみ販売媒体手数料を自動計算します。
+                        {% else %}
+                        販売タイプに応じて自動計算されます。開花手数料と販売媒体手数料の内訳を表示します。
+                        {% endif %}
+                    </small>
+                    <div id="commission_breakdown" class="sale-type-breakdown"></div>
+                </div>
+                
+                <div class="form-group result-field">
+                    <label>実際の利益</label>
+                    <div class="calculated-value" id="actual_profit">¥0</div>
+                </div>
+            </div>
+            
+        </div>
+    </div>
+    
+    <div class="form-actions">
+        {% if back_url %}
+        <a href="{{ back_url }}" class="btn btn-secondary">キャンセル</a>
+        {% elif current_user.is_admin() or current_user.is_owner() %}
+        <a href="{{ url_for('admin_items') }}" class="btn btn-secondary">キャンセル</a>
+        {% else %}
+        <a href="{{ url_for('index') }}" class="btn btn-secondary">キャンセル</a>
+        {% endif %}
+        <button type="submit" class="btn btn-primary" id="submit-btn">
+            <span class="btn-text">{{ '更新' if item else '登録' }}</span>
+            <span class="btn-loading" style="display: none;">処理中...</span>
+        </button>
+    </div>
+</form>
+
+<div id="fee-detail-modal" class="fee-detail-modal" hidden>
+    <div class="fee-detail-modal__backdrop" data-fee-detail-close></div>
+    <div class="fee-detail-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="fee-detail-title">
+        <div class="fee-detail-modal__header">
+            <h3 id="fee-detail-title">手数料詳細</h3>
+            <button type="button" class="fee-detail-modal__close" data-fee-detail-close>&times;</button>
+        </div>
+        <p id="fee-detail-summary" class="fee-detail-modal__summary"></p>
+        <div class="fee-detail-modal__table-wrap">
+            <table class="fee-detail-modal__table">
+                <thead>
+                    <tr>
+                        <th>対象</th>
+                        <th>手数料</th>
+                    </tr>
+                </thead>
+                <tbody id="fee-detail-body"></tbody>
+            </table>
+        </div>
+        <ul id="fee-detail-notes" class="fee-detail-modal__notes"></ul>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if is_kaika_scope %}<script src="{{ url_for('static', filename='js/kaika_product_image_picker.js') }}"></script>{% endif %}
+<style>
+/* 販売タイプチェックボックス */
+.sale-type-checkboxes {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    background: #f8fafc;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+}
+
+.sale-type-layout {
+    display: block;
+}
+
+.form-group .sale-type-option {
+    position: relative;
+    display: grid !important;
+    grid-template-columns: 18px minmax(0, 1fr);
+    align-items: center !important;
+    column-gap: 10px !important;
+    padding: 8px 12px;
+    background: white;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 1px solid transparent;
+    margin: 0;
+    margin-bottom: 0 !important;
+}
+
+.form-group .sale-type-option:hover {
+    border-color: #3b82f6;
+    background: #eff6ff;
+}
+
+.form-group .sale-type-option .sale-type-control {
+    display: block !important;
+    position: static !important;
+    opacity: 1 !important;
+    pointer-events: auto;
+    width: 16px !important;
+    height: 16px !important;
+    min-width: 16px !important;
+    min-height: 16px !important;
+    max-width: none !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible;
+    clip: auto;
+    clip-path: none;
+    white-space: normal;
+    border: 0;
+    accent-color: #2563eb;
+    justify-self: start;
+    align-self: center;
+    cursor: pointer;
+    appearance: auto;
+    -webkit-appearance: radio;
+}
+
+.form-group .sale-type-option .sale-type-indicator {
+    display: none !important;
+}
+
+.form-group .sale-type-option .sale-type-label {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    min-width: 0;
+    align-self: center;
+    font-size: 0.9rem;
+    color: #374151;
+    line-height: 1.45;
+    margin: 0 !important;
+}
+
+.form-group .sale-type-option .sale-type-control:checked ~ .sale-type-label {
+    color: #1d4ed8;
+    font-weight: 600;
+}
+
+.sale-type-note {
+    display: block;
+    font-size: 0.75rem;
+    color: #6b7280;
+    margin-top: 2px;
+    font-weight: normal;
+}
+
+.form-group .sale-type-option.fixed-option {
+    background: #ecfdf5;
+    border: 1px solid #a7f3d0;
+    cursor: default;
+}
+
+.form-group .sale-type-option.fixed-option:hover {
+    border-color: #a7f3d0;
+    background: #ecfdf5;
+}
+
+.form-group .sale-type-option.fixed-option .sale-type-indicator {
+    display: none !important;
+}
+
+.form-group .sale-type-option.fixed-option .sale-type-control {
+    accent-color: #10b981;
+}
+
+.sale-type-option.fixed-option .sale-type-control {
+    accent-color: #10b981;
+}
+
+.fixed-badge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 8px;
+    background: #10b981;
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 600;
+    border-radius: 4px;
+}
+
+.selected-types-summary {
+    margin-top: 8px;
+    padding: 8px 12px;
+    background: #dbeafe;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    color: #1e40af;
+}
+
+.sale-type-detail-link {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 8px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: #2563eb;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-decoration: none;
+    vertical-align: middle;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.sale-type-detail-link:hover {
+    background: #dbeafe;
+}
+
+.sales-destination-stack {
+    display: grid;
+    gap: 8px;
+}
+
+.readonly-money-field {
+    background: #f8fafc;
+    color: #0f172a;
+    font-weight: 600;
+}
+
+.sale-type-breakdown {
+    margin-top: 10px;
+    padding: 10px 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    display: grid;
+    gap: 6px;
+}
+
+.sale-type-breakdown[hidden] {
+    display: none;
+}
+
+.sale-type-breakdown__item {
+    font-size: 0.83rem;
+    color: #475569;
+    line-height: 1.6;
+}
+
+.fee-detail-modal[hidden] {
+    display: none;
+}
+
+.fee-detail-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 2500;
+}
+
+.fee-detail-modal__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.58);
+}
+
+.fee-detail-modal__dialog {
+    position: relative;
+    width: min(720px, calc(100vw - 32px));
+    max-height: calc(100vh - 48px);
+    overflow: auto;
+    margin: 24px auto;
+    background: #fff;
+    border-radius: 18px;
+    padding: 20px;
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.24);
+}
+
+.fee-detail-modal__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.fee-detail-modal__header h3 {
+    margin: 0;
+    font-size: 1.15rem;
+    color: #0f172a;
+}
+
+.fee-detail-modal__close {
+    border: none;
+    background: transparent;
+    color: #64748b;
+    font-size: 1.6rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.fee-detail-modal__summary {
+    margin: 0 0 14px;
+    color: #475569;
+    line-height: 1.7;
+}
+
+.fee-detail-modal__table-wrap {
+    border: 1px solid #dbeafe;
+    border-radius: 14px;
+    overflow: hidden;
+}
+
+.fee-detail-modal__table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.fee-detail-modal__table th,
+.fee-detail-modal__table td {
+    padding: 12px 14px;
+    text-align: left;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.fee-detail-modal__table th {
+    background: #eff6ff;
+    color: #1e3a8a;
+    font-size: 0.83rem;
+}
+
+.fee-detail-modal__table tr:last-child td {
+    border-bottom: none;
+}
+
+.fee-detail-modal__notes {
+    margin: 14px 0 0;
+    padding-left: 18px;
+    color: #475569;
+}
+
+.fee-detail-modal__notes li + li {
+    margin-top: 6px;
+}
+
+</style>
+
+<script src="{{ url_for('static', filename='js/master_suggestions.js') }}?v=20260407-brand-master-search"></script>
+<script>
+(function() {
+const isKaikaScope = {{ (is_kaika_scope | default(false)) | tojson }};
+// 手数料の自動計算フラグ（手動変更されたらfalseに）
+let autoCalculateCommission = true;
+
+function normalizeKaikaSaleTypeValue(value) {
+    const rawValue = (value || '').split(',').map(part => part.trim()).find(Boolean) || '';
+    if (!rawValue || rawValue === 'photo_packing') return 'normal';
+    if (rawValue === 'multi_listing') return 'live_commerce';
+    if (['normal', 'wholesale', 'auction', 'live_commerce'].includes(rawValue)) return rawValue;
+    return 'normal';
+}
+
+// 販売タイプごとの手数料計算ルール（DB設定から動的生成・段階別固定額）
+const _fs = {{ fee_settings | default({}) | tojson }};
+const _commNormal = (parseFloat(_fs.commission_normal) || 10) / 100;
+
+function _tierCalc(tiers, price) {
+    for (const t of tiers) {
+        if (t.max === null || price <= t.max) return t.fee;
+    }
+    return tiers[tiers.length - 1].fee;
+}
+function _tierHint(name, tiers, price) {
+    for (const t of tiers) {
+        if (t.max === null || price <= t.max)
+            return `${name}: ¥${t.fee.toLocaleString()}`;
+    }
+    return `${name}: ¥${tiers[tiers.length-1].fee.toLocaleString()}`;
+}
+
+const _ppTiers = [
+    {max: parseInt(_fs.photo_packing_t1_max)||19999, fee: parseInt(_fs.photo_packing_t1_fee)||500},
+    {max: parseInt(_fs.photo_packing_t2_max)||49999, fee: parseInt(_fs.photo_packing_t2_fee)||650},
+    {max: parseInt(_fs.photo_packing_t3_max)||99999, fee: parseInt(_fs.photo_packing_t3_fee)||800},
+    {max: null, fee: parseInt(_fs.photo_packing_t4_fee)||1000}
+];
+const _wsTiers = [
+    {max: parseInt(_fs.wholesale_t1_max)||19999, fee: parseInt(_fs.wholesale_t1_fee)||500},
+    {max: parseInt(_fs.wholesale_t2_max)||49999, fee: parseInt(_fs.wholesale_t2_fee)||1000},
+    {max: parseInt(_fs.wholesale_t3_max)||99999, fee: parseInt(_fs.wholesale_t3_fee)||1500},
+    {max: parseInt(_fs.wholesale_t4_max)||199999, fee: parseInt(_fs.wholesale_t4_fee)||2000},
+    {max: null, fee: parseInt(_fs.wholesale_t5_fee)||3000}
+];
+const _mlTiers = [
+    {max: parseInt(_fs.multi_listing_t1_max)||19999, fee: parseInt(_fs.multi_listing_t1_fee)||300},
+    {max: parseInt(_fs.multi_listing_t2_max)||49999, fee: parseInt(_fs.multi_listing_t2_fee)||400},
+    {max: null, fee: parseInt(_fs.multi_listing_t3_fee)||500}
+];
+const _aucTiers = [
+    {max: parseInt(_fs.auction_t1_max)||19999, fee: parseInt(_fs.auction_t1_fee)||300},
+    {max: parseInt(_fs.auction_t2_max)||49999, fee: parseInt(_fs.auction_t2_fee)||400},
+    {max: parseInt(_fs.auction_t3_max)||99999, fee: parseInt(_fs.auction_t3_fee)||500},
+    {max: null, fee: parseInt(_fs.auction_t4_fee)||700}
+];
+
+function formatCurrency(value) {
+    return `¥${Number(value || 0).toLocaleString()}`;
+}
+
+function buildTierRows(tiers) {
+    let min = 0;
+    return tiers.map((tier) => {
+        const label = tier.max === null
+            ? `売上 ¥${min.toLocaleString()}以上`
+            : (min === 0
+                ? `売上 ¥0〜¥${tier.max.toLocaleString()}`
+                : `売上 ¥${min.toLocaleString()}〜¥${tier.max.toLocaleString()}`);
+        const row = { range: label, fee: formatCurrency(tier.fee) };
+        min = (tier.max || min) + 1;
+        return row;
+    });
+}
+
+const feeDetailMap = {
+    photo_packing: {
+        title: '撮影梱包発送代行の詳細',
+        summary: '撮影・梱包・発送代行の現在設定です。売上帯ごとの固定手数料を確認できます。',
+        rows: buildTierRows(_ppTiers),
+        notes: []
+    },
+    normal: {
+        title: '通常販売の詳細',
+        summary: '通常販売は販売媒体手数料のみを自動計算します。',
+        rows: [
+            {
+                range: 'メルカリ・ラクマ・ヤフオク等の販売媒体',
+                fee: `売上の${parseFloat(_fs.commission_normal) || 10}%`
+            }
+        ],
+        notes: ['販売媒体手数料率はマスター設定に連動しています。']
+    },
+    wholesale: {
+        title: '業者販売の詳細',
+        summary: '業者販売で適用される現在の固定手数料です。',
+        rows: buildTierRows(_wsTiers),
+        notes: []
+    },
+    multi_listing: {
+        title: '同時出品サービスの詳細',
+        summary: '同時出品サービスで適用される現在の固定手数料です。',
+        rows: buildTierRows(_mlTiers),
+        notes: []
+    },
+    auction: {
+        title: 'オークション販売の詳細',
+        summary: 'オークション販売で適用される現在の固定手数料です。',
+        rows: buildTierRows(_aucTiers),
+        notes: []
+    }
+};
+const kaikaSaleTypeLabels = {
+    normal: '通常販売',
+    wholesale: '業者販売',
+    auction: 'オークション販売',
+    live_commerce: 'ライブコマース'
+};
+
+function getKaikaSaleTypeMeta(saleType, salePrice) {
+    const normalizedType = normalizeKaikaSaleTypeValue(saleType);
+    if (normalizedType === 'normal') {
+        return {
+            commission: Math.floor(salePrice * _commNormal),
+            hint: `通常販売: 売上の${(_commNormal * 100)}%`
+        };
+    }
+    return {
+        commission: 0,
+        hint: `${kaikaSaleTypeLabels[normalizedType] || 'この販売タイプ'}: 手数料は自動で0円です`
+    };
+}
+
+const saleTypeRules = {
+    'photo_packing': {
+        name: '撮影梱包発送',
+        calculate: () => 0,
+        hint: '',
+        shippingHint: '',
+        isFixed: true
+    },
+    'normal': {
+        name: '通常',
+        calculate: (price) => Math.floor(price * _commNormal),
+        hint: `通常: 売上金の${(_commNormal*100)}%（メルカリ・ラクマ・ヤフオク等）`,
+        shippingHint: ''
+    },
+    'wholesale': {
+        name: '業者販売',
+        calculate: (price) => _tierCalc(_wsTiers, price),
+        hint: (price) => _tierHint('業者販売', _wsTiers, price),
+        shippingHint: ''
+    },
+    'multi_listing': {
+        name: '同時出品',
+        calculate: (price) => _tierCalc(_mlTiers, price),
+        hint: (price) => _tierHint('同時出品', _mlTiers, price),
+        shippingHint: ''
+    },
+    'auction': {
+        name: 'オークション出品代行',
+        calculate: (price) => _tierCalc(_aucTiers, price),
+        hint: (price) => _tierHint('オークション', _aucTiers, price),
+        shippingHint: ''
+    },
+    'live_commerce': {
+        name: 'ライブコマース',
+        calculate: () => 0,
+        hint: 'ライブコマース: 手数料は自動で0円です',
+        shippingHint: ''
+    }
+};
+
+// チェックボックスの選択状況をhiddenフィールドに反映
+function updateSaleTypeValue() {
+    if (isKaikaScope) {
+        const selected = document.querySelector('input[name="sale_type_choice"]:checked');
+        document.getElementById('sale_type').value = selected ? selected.value : 'normal';
+        if (autoCalculateCommission) {
+            calculateCommission();
+        }
+        return;
+    }
+    const checkboxes = document.querySelectorAll('input[name="sale_type[]"]:checked:not(:disabled)');
+    const values = Array.from(checkboxes).map(cb => cb.value);
+    // photo_packingは常に含める（固定）
+    if (!values.includes('photo_packing')) {
+        values.unshift('photo_packing');
+    }
+    document.getElementById('sale_type').value = values.join(',') || 'photo_packing';
+    
+    // 自動計算が有効なら手数料を再計算
+    if (autoCalculateCommission) {
+        calculateCommission();
+    }
+}
+
+function recalculateWholesalePrice() {
+    const purchasePrice = parseFloat(document.getElementById('purchase_price').value) || 0;
+    const wholesaleFeeRate = parseFloat(document.getElementById('wholesale_fee_rate').value) || 0;
+    const wholesalePrice = Math.round(purchasePrice * (1 + (wholesaleFeeRate / 100)));
+    document.getElementById('wholesale_price').value = wholesalePrice;
+    document.getElementById('wholesale_price_hint').textContent = '手動入力がなければ自動計算します（手動変更可）';
+    calculateProfit();
+}
+
+function calculateProfit() {
+    const purchasePrice = parseInt(document.getElementById('purchase_price').value) || 0;
+    const salePrice = parseInt(document.getElementById('sale_price').value) || 0;
+    const shippingCost = parseInt(document.getElementById('shipping_cost').value) || 0;
+    const commission = parseInt(document.getElementById('commission').value) || 0;
+    
+    const actualProfit = salePrice - purchasePrice - shippingCost - commission;
+    const actualEl = document.getElementById('actual_profit');
+    actualEl.textContent = '¥' + actualProfit.toLocaleString();
+    actualEl.className = 'calculated-value ' + (actualProfit >= 0 ? 'profit-positive' : 'profit-negative');
+}
+
+// 販売タイプと売上金に基づいて手数料を計算（複数選択対応）
+function calculateCommission() {
+    if (!autoCalculateCommission) return;
+    
+    const saleTypeValue = document.getElementById('sale_type').value;
+    const salePrice = parseInt(document.getElementById('sale_price').value) || 0;
+
+    if (isKaikaScope) {
+        const kaikaMeta = getKaikaSaleTypeMeta(saleTypeValue, salePrice);
+        document.getElementById('commission').value = kaikaMeta.commission;
+        document.getElementById('commission_hint').textContent = kaikaMeta.hint;
+        document.getElementById('shipping_hint').textContent = '';
+        calculateProfit();
+        return;
+    }
+
+    const selectedTypes = saleTypeValue ? saleTypeValue.split(',') : ['photo_packing'];
+    
+    // 複数タイプが選択されている場合、手数料を合計
+    let totalCommission = 0;
+    let hints = [];
+    let shippingHints = [];
+    
+    selectedTypes.forEach(saleType => {
+        const rule = saleTypeRules[saleType];
+        if (rule) {
+            totalCommission += rule.calculate(salePrice);
+            
+            // ヒント収集
+            if (typeof rule.hint === 'function') {
+                const hint = rule.hint(salePrice);
+                if (hint) {
+                    hints.push(hint);
+                }
+            } else {
+                if (rule.hint) {
+                    hints.push(rule.hint);
+                }
+            }
+            
+            // 送料ヒント収集
+            if (rule.shippingHint) {
+                if (typeof rule.shippingHint === 'function') {
+                    shippingHints.push(rule.shippingHint(salePrice));
+                } else {
+                    shippingHints.push(rule.shippingHint);
+                }
+            }
+        }
+    });
+    
+    document.getElementById('commission').value = totalCommission;
+    
+    // ヒント更新
+    const hintEl = document.getElementById('commission_hint');
+    hintEl.textContent = hints.length > 0 ? hints.join(' + ') : '販売タイプに応じて自動計算されます';
+    
+    // 送料ヒント更新
+    const shippingHintEl = document.getElementById('shipping_hint');
+    if (shippingHints.length > 0) {
+        shippingHintEl.textContent = shippingHints.join(' / ');
+        shippingHintEl.style.color = selectedTypes.includes('wholesale') && salePrice >= 30000 ? '#10b981' : '#64748b';
+    } else {
+        shippingHintEl.textContent = '';
+    }
+    
+    calculateProfit();
+}
+
+// チェックボックスにイベントリスナー設定
+document.querySelectorAll('input[name="sale_type[]"]').forEach(checkbox => {
+    checkbox.addEventListener('change', function() {
+        autoCalculateCommission = true;
+        updateSaleTypeValue();
+    });
+});
+
+document.querySelectorAll('input[name="sale_type_choice"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+        autoCalculateCommission = true;
+        updateSaleTypeValue();
+    });
+});
+
+const feeDetailModal = document.getElementById('fee-detail-modal');
+const feeDetailTitle = document.getElementById('fee-detail-title');
+const feeDetailSummary = document.getElementById('fee-detail-summary');
+const feeDetailBody = document.getElementById('fee-detail-body');
+const feeDetailNotes = document.getElementById('fee-detail-notes');
+
+function openFeeDetailModal(serviceType) {
+    const detail = feeDetailMap[serviceType];
+    if (!detail || !feeDetailModal) return;
+    feeDetailTitle.textContent = detail.title;
+    feeDetailSummary.textContent = detail.summary || '';
+    feeDetailBody.innerHTML = (detail.rows || []).map((row) => `
+        <tr>
+            <td>${row.range}</td>
+            <td>${row.fee}</td>
+        </tr>
+    `).join('');
+    feeDetailNotes.innerHTML = (detail.notes || []).map((note) => `<li>${note}</li>`).join('');
+    feeDetailNotes.style.display = (detail.notes && detail.notes.length) ? 'block' : 'none';
+    feeDetailModal.hidden = false;
+    document.body.style.overflow = 'hidden';
+}
+
+function closeFeeDetailModal() {
+    if (!feeDetailModal) return;
+    feeDetailModal.hidden = true;
+    document.body.style.overflow = '';
+}
+
+document.querySelectorAll('[data-fee-detail]').forEach((button) => {
+    button.addEventListener('click', function(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        openFeeDetailModal(this.dataset.feeDetail);
+    });
+});
+
+document.querySelectorAll('[data-fee-detail-close]').forEach((button) => {
+    button.addEventListener('click', closeFeeDetailModal);
+});
+
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape' && feeDetailModal && !feeDetailModal.hidden) {
+        closeFeeDetailModal();
+    }
+});
+
+document.getElementById('sale_price').addEventListener('input', function() {
+    calculateCommission();
+});
+
+// 手数料を手動で変更したら自動計算を無効化
+if (!isKaikaScope) {
+    document.getElementById('commission').addEventListener('input', function() {
+        autoCalculateCommission = false;
+        calculateProfit();
+    });
+}
+
+// 卸価格を手動変更した場合も利益を再計算
+document.getElementById('wholesale_price').addEventListener('input', function() {
+    document.getElementById('wholesale_price_hint').textContent = '手動入力中（仕入額・卸手数料を変更すると自動計算に戻ります）';
+    calculateProfit();
+});
+
+// 仕入額・卸手数料率の変更時に卸価格を自動再計算
+['input', 'change'].forEach(evt => {
+    document.getElementById('purchase_price').addEventListener(evt, recalculateWholesalePrice);
+    document.getElementById('wholesale_fee_rate').addEventListener(evt, recalculateWholesalePrice);
+});
+
+// 売上金以外の数値フィールドの変更時に利益を再計算
+document.querySelectorAll('input[type="number"]').forEach(input => {
+    if (input.id !== 'sale_price' && input.id !== 'commission') {
+        input.addEventListener('input', calculateProfit);
+    }
+});
+
+// 初期表示時：既存データで手動設定済みならヒント表示、それ以外は自動計算
+{
+    const existingWholesale = parseInt(document.getElementById('wholesale_price').value) || 0;
+    const existingPurchase = parseInt(document.getElementById('purchase_price').value) || 0;
+    const existingFeeRate = parseFloat(document.getElementById('wholesale_fee_rate').value) || 0;
+    const autoCalcWholesale = Math.round(existingPurchase * (1 + (existingFeeRate / 100)));
+    if (existingWholesale > 0 && existingWholesale !== autoCalcWholesale) {
+        document.getElementById('wholesale_price_hint').textContent = '手動入力中（仕入額・卸手数料を変更すると自動計算に戻ります）';
+    } else {
+        recalculateWholesalePrice();
+    }
+}
+
+// ステータスに応じてフィールドの表示を切り替え
+function updateStatusFields() {
+    const status = document.getElementById('item_status').value;
+    const listingDateGroup = document.getElementById('listing-date-group');
+    const listingPriceGroup = document.getElementById('listing-price-group');
+    const saleDateGroup = document.getElementById('sale-date-group');
+    const soldFields = document.getElementById('sold-fields');
+    
+    // 出品日・出品価格フィールド：出品中・売却済みで表示
+    if (status === 'listed' || status === 'sold') {
+        listingDateGroup.style.display = 'block';
+        listingPriceGroup.style.display = 'block';
+    } else {
+        listingDateGroup.style.display = 'none';
+        listingPriceGroup.style.display = 'none';
+    }
+    
+    // 売却日・売却関連フィールド：売却済みで表示
+    if (status === 'sold') {
+        saleDateGroup.style.display = 'block';
+        soldFields.style.display = 'block';
+    } else {
+        saleDateGroup.style.display = 'none';
+        soldFields.style.display = 'none';
+    }
+}
+
+// 仕入先詳細セクションの表示切替
+function toggleSupplierDetail() {
+    const storeType = document.getElementById('store_name').value;
+    const detailSection = document.getElementById('supplier-detail-section');
+    const detailTargetSuppliers = [
+        '個人',
+        '個人買取',
+        '個人からの仕入れ',
+        '個人業者仕入れ',
+        'クライアントからの買取'
+    ];
+    
+    if (detailTargetSuppliers.includes(storeType)) {
+        detailSection.style.display = 'block';
+    } else {
+        detailSection.style.display = 'none';
+    }
+}
+
+function getScopedSupplierOptions() {
+    if (isKaikaScope) {
+        return [
+            { value: 'オークション', label: 'オークション' },
+            { value: '他社取引先からの仕入れ', label: '他社取引先からの仕入れ' },
+            { value: '個人買取', label: '個人買取' },
+            { value: 'クライアントからの買取', label: 'クライアントからの買取' }
+        ];
+    }
+
+    return [
+        { value: '個人からの仕入れ', label: '個人からの仕入れ' },
+        { value: '個人業者仕入れ', label: '個人業者仕入れ' },
+        { value: '開花からの仕入れ（代行サービスなど）', label: '開花からの仕入れ（代行サービスなど）' }
+    ];
+}
+
+function populateSupplierSelectOptions(selectElement, currentValue) {
+    const options = [...getScopedSupplierOptions()];
+    const hasCurrentValue = currentValue && options.some(option => option.value === currentValue);
+    if (currentValue && !hasCurrentValue) {
+        options.push({ value: currentValue, label: currentValue });
+    }
+
+    selectElement.innerHTML = '<option value="">選択してください</option>';
+    options.forEach(optionData => {
+        const option = document.createElement('option');
+        option.value = optionData.value;
+        option.textContent = optionData.label;
+        if (optionData.value === currentValue) {
+            option.selected = true;
+        }
+        selectElement.appendChild(option);
+    });
+}
+
+// ブランド名自動判定マッピング
+const brandKeywords = {
+    'Louis Vuitton': ['ヴィトン', 'ビトン', 'LV', 'ルイヴィトン', 'ルイ・ヴィトン', 'LOUIS VUITTON', 'louis vuitton'],
+    'Hermes': ['エルメス', 'HERMES', 'hermes', 'バーキン', 'ケリー', 'ボリード', 'コンスタンス'],
+    'Chanel': ['シャネル', 'CHANEL', 'chanel', 'マトラッセ'],
+    'Gucci': ['グッチ', 'GUCCI', 'gucci'],
+    'Prada': ['プラダ', 'PRADA', 'prada'],
+    'Dior': ['ディオール', 'DIOR', 'dior', 'クリスチャンディオール'],
+    'Celine': ['セリーヌ', 'CELINE', 'celine'],
+    'Bottega Veneta': ['ボッテガ', 'ボッテガヴェネタ', 'BOTTEGA', 'bottega'],
+    'Balenciaga': ['バレンシアガ', 'BALENCIAGA', 'balenciaga'],
+    'Saint Laurent': ['サンローラン', 'イヴサンローラン', 'YSL', 'SAINT LAURENT', 'saint laurent'],
+    'Loewe': ['ロエベ', 'LOEWE', 'loewe'],
+    'Fendi': ['フェンディ', 'FENDI', 'fendi'],
+    'Burberry': ['バーバリー', 'BURBERRY', 'burberry'],
+    'Valentino': ['ヴァレンティノ', 'バレンティノ', 'VALENTINO', 'valentino'],
+    'Givenchy': ['ジバンシィ', 'ジバンシー', 'GIVENCHY', 'givenchy'],
+    'Miu Miu': ['ミュウミュウ', 'MIU MIU', 'miu miu'],
+    'Rolex': ['ロレックス', 'ROLEX', 'rolex', 'サブマリーナ', 'デイトナ', 'デイトジャスト', 'GMTマスター'],
+    'Cartier': ['カルティエ', 'CARTIER', 'cartier', 'タンク', 'パシャ', 'サントス'],
+    'Omega': ['オメガ', 'OMEGA', 'omega', 'スピードマスター', 'シーマスター'],
+    'Patek Philippe': ['パテック', 'パテックフィリップ', 'PATEK', 'patek'],
+    'Audemars Piguet': ['オーデマピゲ', 'オーデマ', 'AP', 'AUDEMARS', 'audemars', 'ロイヤルオーク'],
+    'Tiffany': ['ティファニー', 'TIFFANY', 'tiffany'],
+    'Bvlgari': ['ブルガリ', 'BVLGARI', 'bvlgari'],
+    'Van Cleef': ['ヴァンクリ', 'ヴァンクリーフ', 'VAN CLEEF', 'van cleef'],
+    'Nike': ['ナイキ', 'NIKE', 'nike', 'エアマックス', 'エアフォース', 'ダンク'],
+    'Adidas': ['アディダス', 'ADIDAS', 'adidas', 'イージー', 'YEEZY'],
+    'Supreme': ['シュプリーム', 'SUPREME', 'supreme'],
+    'Off-White': ['オフホワイト', 'OFF-WHITE', 'off-white', 'OFF WHITE'],
+    'A BATHING APE': ['ベイプ', 'BAPE', 'bape', 'エイプ', 'A BATHING APE'],
+    'Jordan': ['ジョーダン', 'JORDAN', 'jordan', 'AJ1', 'エアジョーダン'],
+    'New Balance': ['ニューバランス', 'NEW BALANCE', 'new balance', 'NB'],
+    'COMME des GARCONS': ['コムデギャルソン', 'ギャルソン', 'COMME DES GARCONS', 'CDG'],
+    'Yohji Yamamoto': ['ヨウジ', 'ヨウジヤマモト', 'YOHJI', 'yohji'],
+    'ISSEY MIYAKE': ['イッセイミヤケ', 'ミヤケ', 'ISSEY MIYAKE', 'issey miyake'],
+    'sacai': ['サカイ', 'SACAI', 'sacai'],
+    'UNDERCOVER': ['アンダーカバー', 'UNDERCOVER', 'undercover'],
+    'Apple': ['アップル', 'APPLE', 'apple', 'iPhone', 'iphone', 'iPad', 'ipad', 'MacBook', 'macbook', 'AirPods'],
+    'Sony': ['ソニー', 'SONY', 'sony', 'プレステ', 'PlayStation', 'PS5', 'PS4'],
+    'Nintendo': ['任天堂', 'ニンテンドー', 'NINTENDO', 'nintendo', 'Switch', 'スイッチ'],
+    'Dyson': ['ダイソン', 'DYSON', 'dyson'],
+    'Bose': ['ボーズ', 'BOSE', 'bose']
+};
+
+// 商品名からブランド名を自動判定
+function detectBrandFromProductName(productName) {
+    const input = productName.toLowerCase();
+    
+    for (const [brand, keywords] of Object.entries(brandKeywords)) {
+        for (const keyword of keywords) {
+            if (input.includes(keyword.toLowerCase())) {
+                return brand;
+            }
+        }
+    }
+    return null;
+}
+
+// ブランドドロップダウンを構築（フィルタ付き）
+function buildBrandDropdown(filter) {
+    const dropdown = document.getElementById('brand-dropdown');
+    if (!dropdown || !window.brandCategoryData) return;
+    
+    const { brandsByCategory, categoryMap } = window.brandCategoryData;
+    dropdown.innerHTML = '';
+    const filterLower = filter.toLowerCase();
+    let hasMatch = false;
+    
+    for (const [catId, brands] of Object.entries(brandsByCategory)) {
+        const filteredBrands = brands.filter(b => {
+            const name = (b.display_name || b.value).toLowerCase();
+            const val = b.value.toLowerCase();
+            return !filterLower || name.includes(filterLower) || val.includes(filterLower);
+        });
+        
+        if (filteredBrands.length === 0) continue;
+        hasMatch = true;
+        
+        const categoryName = categoryMap[catId] || 'その他';
+        const catDiv = document.createElement('div');
+        catDiv.className = 'dropdown-category';
+        catDiv.textContent = categoryName;
+        dropdown.appendChild(catDiv);
+        
+        filteredBrands.forEach(brand => {
+            const item = document.createElement('div');
+            item.className = 'dropdown-item';
+            item.textContent = brand.display_name || brand.value;
+            item.dataset.value = brand.value;
+            item.addEventListener('click', function() {
+                const brandInput = document.getElementById('brand_name');
+                brandInput.value = brand.value;
+                brandInput.dataset.autoDetected = 'false';
+                dropdown.classList.remove('open');
+            });
+            dropdown.appendChild(item);
+        });
+    }
+    
+    if (!hasMatch && filter) {
+        const noMatch = document.createElement('div');
+        noMatch.className = 'dropdown-no-match';
+        noMatch.textContent = '候補なし（手動入力のまま登録できます）';
+        dropdown.appendChild(noMatch);
+    }
+}
+
+// ブランドコンボボックスの初期化
+function setupBrandCombobox() {
+    const brandInput = document.getElementById('brand_name');
+    const brandToggle = document.getElementById('brand-toggle');
+    const dropdown = document.getElementById('brand-dropdown');
+    if (!brandInput || !dropdown) return;
+    
+    // 入力時にフィルタ
+    brandInput.addEventListener('input', function() {
+        this.dataset.autoDetected = 'false';
+        buildBrandDropdown(this.value);
+        dropdown.classList.add('open');
+    });
+    
+    // フォーカス時にドロップダウン表示
+    brandInput.addEventListener('focus', function() {
+        buildBrandDropdown(this.value);
+        dropdown.classList.add('open');
+    });
+    
+    // トグルボタン
+    if (brandToggle) {
+        brandToggle.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (dropdown.classList.contains('open')) {
+                dropdown.classList.remove('open');
+            } else {
+                buildBrandDropdown(brandInput.value);
+                dropdown.classList.add('open');
+                brandInput.focus();
+            }
+        });
+    }
+    
+    // 外側クリックで閉じる
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.brand-combobox')) {
+            dropdown.classList.remove('open');
+        }
+    });
+}
+
+// 商品名入力時にブランド名を自動選択
+function setupBrandAutoDetect() {
+    const productNameInput = document.getElementById('product_name');
+    const brandInput = document.getElementById('brand_name');
+    
+    if (productNameInput && brandInput) {
+        productNameInput.addEventListener('input', function() {
+            const detectedBrand = detectBrandFromProductName(this.value);
+            
+            if (detectedBrand) {
+                // ブランドが検出された場合、入力欄を更新
+                // 既に手動で入力されている場合は上書きしない
+                if (brandInput.value === '' || brandInput.dataset.autoDetected === 'true') {
+                    brandInput.value = detectedBrand;
+                    brandInput.dataset.autoDetected = 'true';
+                    
+                    // 視覚的なフィードバック
+                    brandInput.classList.add('brand-auto-detected');
+                    setTimeout(() => {
+                        brandInput.classList.remove('brand-auto-detected');
+                    }, 1000);
+                }
+            }
+        });
+    }
+}
+
+// マスターデータをロードしてセレクトボックスを生成
+async function loadMasterData() {
+    try {
+        const scope = isKaikaScope ? 'admin' : 'user';
+        const response = await fetch(`/api/master-data?scope=${scope}`);
+        const data = await response.json();
+        
+        // ブランド名コンボボックスのドロップダウンを生成
+        window.brandMasterList = data.brands || [];
+        const brandInput = document.getElementById('brand_name');
+        const brandDropdown = document.getElementById('brand-dropdown');
+        const currentBrand = document.getElementById('current_brand_name').value;
+        
+        // 現在値をセット
+        if (currentBrand && !brandInput.value) {
+            brandInput.value = currentBrand;
+        }
+        
+        // カテゴリごとにグループ化
+        const brandsByCategory = {};
+        data.brands.forEach(brand => {
+            const categoryId = brand.category_id || 0;
+            if (!brandsByCategory[categoryId]) {
+                brandsByCategory[categoryId] = [];
+            }
+            brandsByCategory[categoryId].push(brand);
+        });
+        
+        // カテゴリ情報をマッピング
+        const categoryMap = {};
+        data.brand_categories.forEach(cat => {
+            categoryMap[cat.id] = cat.name;
+        });
+        
+        // ドロップダウンデータを保存
+        window.brandCategoryData = { brandsByCategory, categoryMap };
+        
+        // 商品状態セレクトボックスを生成
+        const conditionSelect = document.getElementById('item_condition');
+        const currentCondition = document.getElementById('current_item_condition').value;
+        conditionSelect.innerHTML = '<option value="">選択してください</option>';
+        
+        data.conditions.forEach(condition => {
+            const option = document.createElement('option');
+            option.value = condition.value;
+            option.textContent = condition.display_name || condition.value;
+            if (condition.value === currentCondition) {
+                option.selected = true;
+            }
+            conditionSelect.appendChild(option);
+        });
+        
+        // 仕入先セレクトボックスを生成
+        const supplierSelect = document.getElementById('store_name');
+        const currentSupplier = document.getElementById('current_store_name').value;
+        populateSupplierSelectOptions(supplierSelect, currentSupplier);
+        
+        // 仕入先詳細セレクトボックスを生成
+        const supplierDetailSelect = document.getElementById('supplier_detail');
+        const currentSupplierDetail = document.getElementById('current_supplier_detail').value;
+        supplierDetailSelect.innerHTML = '<option value="">選択してください</option>';
+        
+        data.supplier_details.forEach(detail => {
+            const option = document.createElement('option');
+            option.value = detail.value;
+            option.textContent = detail.display_name || detail.value;
+            if (detail.value === currentSupplierDetail) {
+                option.selected = true;
+            }
+            supplierDetailSelect.appendChild(option);
+        });
+        
+        // 支払方法セレクトボックスを生成
+        const paymentSelect = document.getElementById('payment_method');
+        const currentPayment = document.getElementById('current_payment_method').value;
+        paymentSelect.innerHTML = '<option value="">選択してください</option>';
+        
+        data.payment_methods.forEach(method => {
+            const option = document.createElement('option');
+            option.value = method.value;
+            option.textContent = method.display_name || method.value;
+            if (method.value === currentPayment) {
+                option.selected = true;
+            }
+            paymentSelect.appendChild(option);
+        });
+        
+        // 仕入先詳細の表示状態を更新
+        toggleSupplierDetail();
+
+        if (window.MasterSuggestionHelper) {
+            window.MasterSuggestionHelper.init({
+                scope: scope,
+                data: data,
+                formSelector: '#item-form'
+            });
+        }
+        
+        // ブランド自動検出用のキーワードマップを更新
+        window.masterBrandKeywords = {};
+        data.brands.forEach(brand => {
+            if (brand.keywords) {
+                window.masterBrandKeywords[brand.value] = brand.keywords.split(',').map(k => k.trim().toLowerCase());
+            }
+        });
+        
+    } catch (error) {
+        console.error('マスターデータの読み込みに失敗しました:', error);
+    }
+}
+
+// 初期計算
+document.addEventListener('DOMContentLoaded', function() {
+    // マスターデータをロード
+    loadMasterData();
+    
+    // ステータスフィールドの初期表示
+    updateStatusFields();
+    
+    // ステータス変更イベントリスナー（onchange属性のバックアップ）
+    var statusSelect = document.getElementById('item_status');
+    if (statusSelect) {
+        statusSelect.addEventListener('change', updateStatusFields);
+    }
+    
+    // 仕入先詳細の初期表示
+    toggleSupplierDetail();
+    
+    const existingCommission = parseInt(document.getElementById('commission').value) || 0;
+    const existingSalePrice = parseInt(document.getElementById('sale_price').value) || 0;
+    
+    // 既存データがある場合は手動入力と見なす
+    if (!isKaikaScope && existingCommission > 0 && existingSalePrice > 0) {
+        autoCalculateCommission = false;
+    }
+    
+    // 複数選択のチェックボックスの初期化
+    const saleTypeValue = document.getElementById('sale_type').value;
+    if (saleTypeValue) {
+        if (isKaikaScope) {
+            const selectedType = normalizeKaikaSaleTypeValue(saleTypeValue);
+            const targetRadio = document.querySelector(`input[name="sale_type_choice"][value="${selectedType}"]`);
+            if (targetRadio) {
+                targetRadio.checked = true;
+            }
+            if (hintEl) {
+                hintEl.textContent = `販売媒体手数料率 ${feeRate}% を反映しています。`;
+            }
+            renderCommissionBreakdownOverride(
+                (calculated > 0 || salePrice > 0)
+                    ? [`${(salesDestinationValue || '通常販売')} 手数料: ¥${calculated.toLocaleString()}（${feeRate}%）`]
+                    : []
+            );
+        } else {
+            const selectedTypes = saleTypeValue.split(',');
+            document.querySelectorAll('input[name="sale_type[]"]').forEach(checkbox => {
+                checkbox.checked = selectedTypes.includes(checkbox.value);
+            });
+        }
+    }
+    
+    // 初期ヒント表示（複数選択対応）
+    const hintEl = document.getElementById('commission_hint');
+    if (isKaikaScope) {
+        hintEl.textContent = getKaikaSaleTypeMeta(saleTypeValue, existingSalePrice).hint;
+    } else {
+        const selectedTypes = saleTypeValue ? saleTypeValue.split(',') : ['photo_packing'];
+        let hints = [];
+        selectedTypes.forEach(type => {
+            const rule = saleTypeRules[type];
+            if (rule) {
+                if (typeof rule.hint === 'function') {
+                    hints.push(rule.hint(existingSalePrice));
+                } else {
+                    hints.push(rule.hint);
+                }
+            }
+        });
+        hintEl.textContent = hints.length > 0 ? hints.join(' + ') : '販売タイプに応じて自動計算されます';
+    }
+    
+    calculateProfit();
+    
+    // 画像リサイズ処理
+    const MAX_WIDTH = 1200;
+    const MAX_HEIGHT = 1200;
+    const QUALITY = 0.85;
+    
+    async function resizeImage(file) {
+        return new Promise((resolve) => {
+            // 画像以外はそのまま返す
+            if (!file.type.startsWith('image/')) {
+                resolve(file);
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    // リサイズが不要な場合はそのまま返す
+                    if (img.width <= MAX_WIDTH && img.height <= MAX_HEIGHT) {
+                        resolve(file);
+                        return;
+                    }
+                    
+                    // アスペクト比を維持してリサイズ
+                    let width = img.width;
+                    let height = img.height;
+                    
+                    if (width > height) {
+                        if (width > MAX_WIDTH) {
+                            height = Math.round(height * MAX_WIDTH / width);
+                            width = MAX_WIDTH;
+                        }
+                    } else {
+                        if (height > MAX_HEIGHT) {
+                            width = Math.round(width * MAX_HEIGHT / height);
+                            height = MAX_HEIGHT;
+                        }
+                    }
+                    
+                    // Canvas で描画
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    
+                    // Blob に変換
+                    canvas.toBlob(function(blob) {
+                        const resizedFile = new File([blob], file.name, {
+                            type: 'image/jpeg',
+                            lastModified: Date.now()
+                        });
+                        console.log(`リサイズ: ${file.name} ${(file.size/1024).toFixed(0)}KB → ${(resizedFile.size/1024).toFixed(0)}KB`);
+                        resolve(resizedFile);
+                    }, 'image/jpeg', QUALITY);
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+    
+    // フォーム送信時のローディング処理と画像リサイズ
+    const photoInputForPreview = document.getElementById('photo');
+    const photoPreview = document.getElementById('local-photo-preview');
+    const additionalInputForPreview = document.getElementById('additional_photos');
+    const additionalPreview = document.getElementById('local-additional-preview');
+    let selectedAdditionalFiles = [];
+    let additionalSelectionTouched = false;
+
+    function buildPreviewItem(file, onRemove) {
+        const item = document.createElement('div');
+        item.className = 'local-preview-item';
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(file);
+        img.alt = file.name;
+        img.onload = () => URL.revokeObjectURL(img.src);
+        const name = document.createElement('span');
+        name.className = 'preview-name';
+        name.textContent = file.name;
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'remove-local-photo';
+        remove.textContent = 'x';
+        remove.addEventListener('click', onRemove);
+        item.append(img, name, remove);
+        return item;
+    }
+
+    function syncAdditionalFileInput() {
+        if (!additionalInputForPreview || typeof DataTransfer === 'undefined') return;
+        const transfer = new DataTransfer();
+        selectedAdditionalFiles.forEach((file) => transfer.items.add(file));
+        additionalInputForPreview.files = transfer.files;
+    }
+
+    function renderAdditionalPreview() {
+        if (!additionalPreview) return;
+        additionalPreview.innerHTML = '';
+        selectedAdditionalFiles.forEach((file, index) => {
+            additionalPreview.appendChild(buildPreviewItem(file, () => {
+                selectedAdditionalFiles.splice(index, 1);
+                additionalSelectionTouched = true;
+                syncAdditionalFileInput();
+                renderAdditionalPreview();
+            }));
+        });
+    }
+
+    if (photoInputForPreview && photoPreview) {
+        photoInputForPreview.addEventListener('change', () => {
+            photoPreview.innerHTML = '';
+            const file = photoInputForPreview.files && photoInputForPreview.files[0];
+            if (!file) return;
+            photoPreview.appendChild(buildPreviewItem(file, () => {
+                photoInputForPreview.value = '';
+                photoPreview.innerHTML = '';
+            }));
+        });
+    }
+
+    if (additionalInputForPreview) {
+        additionalInputForPreview.addEventListener('change', () => {
+            selectedAdditionalFiles = Array.from(additionalInputForPreview.files || []).slice(0, 19);
+            additionalSelectionTouched = true;
+            syncAdditionalFileInput();
+            renderAdditionalPreview();
+        });
+    }
+
+    const form = document.getElementById('item-form');
+    const submitBtn = document.getElementById('submit-btn');
+    const btnText = submitBtn.querySelector('.btn-text');
+    const btnLoading = submitBtn.querySelector('.btn-loading');
+    const kaikaImagePicker = isKaikaScope && window.KaikaProductImagePicker
+        ? window.KaikaProductImagePicker.init({
+            root: document.getElementById('kaika-image-picker-root'),
+            form: form
+        })
+        : null;
+    
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        // 二重送信防止
+        if (submitBtn.disabled) {
+            return;
+        }
+        
+        // ボタンを無効化してローディング表示
+        submitBtn.disabled = true;
+        submitBtn.style.opacity = '0.7';
+        submitBtn.style.cursor = 'wait';
+        btnText.style.display = 'none';
+        btnLoading.style.display = 'inline';
+        
+        try {
+            let formData;
+            if (kaikaImagePicker) {
+                formData = await kaikaImagePicker.prepareFormData(resizeImage);
+            } else {
+                formData = new FormData(form);
+
+                // メイン写真をリサイズ
+                const photoInput = document.getElementById('photo');
+                if (photoInput.files.length > 0) {
+                    formData.delete('photo');
+                    const resizedPhoto = await resizeImage(photoInput.files[0]);
+                    formData.append('photo', resizedPhoto);
+                }
+
+                // 追加写真をリサイズ
+                const additionalInput = document.getElementById('additional_photos');
+                const additionalFilesToSend = additionalSelectionTouched
+                    ? selectedAdditionalFiles
+                    : Array.from((additionalInput && additionalInput.files) || []);
+                if (additionalSelectionTouched || additionalFilesToSend.length > 0) {
+                    formData.delete('additional_photos');
+                    for (let i = 0; i < additionalFilesToSend.length; i++) {
+                        const resizedPhoto = await resizeImage(additionalFilesToSend[i]);
+                        formData.append('additional_photos', resizedPhoto);
+                    }
+                }
+            }
+            
+            // フォーム送信
+            const response = await fetch(form.action || window.location.href, {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (response.redirected) {
+                window.location.href = response.url;
+            } else if (response.ok) {
+                window.location.href = '{{ url_for("index") }}';
+            } else {
+                throw new Error('送信エラー');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('エラーが発生しました。もう一度お試しください。');
+            submitBtn.disabled = false;
+            submitBtn.style.opacity = '1';
+            submitBtn.style.cursor = 'pointer';
+            btnText.style.display = 'inline';
+            btnLoading.style.display = 'none';
+        }
+    });
+    
+});
+
+// Google Drive Picker関連の変数
+let googleDriveConfig = null;
+let googlePickerInited = false;
+let gisInited = false;
+let tokenClient = null;
+let accessToken = null;
+let currentPickerTarget = null; // 'photo' or 'additional'
+let googleDriveAdditionalPaths = [];
+
+// Google Drive設定を取得
+async function initGoogleDrivePicker() {
+    try {
+        const response = await fetch('/api/google-drive/config');
+        googleDriveConfig = await response.json();
+        
+        if (!googleDriveConfig.enabled) {
+            // Google Drive連携が無効の場合、ボタンを非表示
+            document.querySelectorAll('.btn-google-drive').forEach(btn => {
+                btn.style.display = 'none';
+            });
+            return;
+        }
+        
+        // Google APIスクリプトをロード
+        loadGoogleAPIs();
+        
+        // ボタンにイベントリスナーを追加
+        document.getElementById('google-drive-photo-btn')?.addEventListener('click', () => openGooglePicker('photo'));
+        document.getElementById('google-drive-additional-btn')?.addEventListener('click', () => openGooglePicker('additional'));
+        
+    } catch (error) {
+        console.error('Google Drive設定の取得に失敗:', error);
+        document.querySelectorAll('.btn-google-drive').forEach(btn => {
+            btn.style.display = 'none';
+        });
+    }
+}
+
+// Google APIスクリプトをロード
+function loadGoogleAPIs() {
+    // Google Identity Services (GIS)
+    const gisScript = document.createElement('script');
+    gisScript.src = 'https://accounts.google.com/gsi/client';
+    gisScript.async = true;
+    gisScript.defer = true;
+    gisScript.onload = gisLoaded;
+    document.head.appendChild(gisScript);
+    
+    // Google API (gapi)
+    const gapiScript = document.createElement('script');
+    gapiScript.src = 'https://apis.google.com/js/api.js';
+    gapiScript.async = true;
+    gapiScript.defer = true;
+    gapiScript.onload = gapiLoaded;
+    document.head.appendChild(gapiScript);
+}
+
+// gapi ロード完了
+function gapiLoaded() {
+    gapi.load('picker', () => {
+        googlePickerInited = true;
+    });
+}
+
+// GIS ロード完了
+function gisLoaded() {
+    tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: googleDriveConfig.clientId,
+        scope: 'https://www.googleapis.com/auth/drive.readonly',
+        callback: '', // 後で設定
+    });
+    gisInited = true;
+}
+
+// Google Pickerを開く
+function openGooglePicker(target) {
+    currentPickerTarget = target;
+    
+    if (!googlePickerInited || !gisInited) {
+        alert('Google Drive連携を読み込み中です。しばらくお待ちください。');
+        return;
+    }
+    
+    tokenClient.callback = async (response) => {
+        if (response.error !== undefined) {
+            throw response;
+        }
+        accessToken = response.access_token;
+        createPicker();
+    };
+    
+    if (accessToken === null) {
+        // 初回は認証を要求
+        tokenClient.requestAccessToken({ prompt: 'consent' });
+    } else {
+        // 既に認証済みの場合はそのまま使用
+        tokenClient.requestAccessToken({ prompt: '' });
+    }
+}
+
+// Pickerを作成
+function createPicker() {
+    const picker = new google.picker.PickerBuilder()
+        .addView(new google.picker.DocsView(google.picker.ViewId.DOCS_IMAGES)
+            .setIncludeFolders(true)
+            .setSelectFolderEnabled(false))
+        .setOAuthToken(accessToken)
+        .setDeveloperKey(googleDriveConfig.apiKey)
+        .setCallback(pickerCallback)
+        .setTitle('Googleドライブから画像を選択')
+        .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
+        .setLocale('ja')
+        .build();
+    picker.setVisible(true);
+}
+
+// Picker選択後のコールバック
+async function pickerCallback(data) {
+    if (data.action === google.picker.Action.PICKED) {
+        const files = data.docs;
+        
+        for (const file of files) {
+            await downloadAndSaveFile(file);
+        }
+    }
+}
+
+// ファイルをダウンロードしてサーバーに保存
+async function downloadAndSaveFile(file) {
+    try {
+        // ローディング表示
+        const btn = currentPickerTarget === 'photo' 
+            ? document.getElementById('google-drive-photo-btn')
+            : document.getElementById('google-drive-additional-btn');
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '<span class="loading-spinner"></span> ダウンロード中...';
+        btn.disabled = true;
+        
+        const response = await fetch('/api/google-drive/download', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                fileId: file.id,
+                fileName: file.name,
+                accessToken: accessToken
+            })
+        });
+        
+        const result = await response.json();
+        
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+        
+        if (result.success) {
+            if (currentPickerTarget === 'photo') {
+                // メイン写真
+                document.getElementById('google-drive-photo-path').value = result.filePath;
+                const preview = document.getElementById('google-drive-photo-preview');
+                const img = document.getElementById('google-drive-photo-img');
+                img.src = '/static/' + result.filePath;
+                preview.style.display = 'inline-block';
+                
+                // 通常のファイル入力をクリア
+                document.getElementById('photo').value = '';
+            } else {
+                // 追加写真
+                googleDriveAdditionalPaths.push(result.filePath);
+                document.getElementById('google-drive-additional-paths').value = JSON.stringify(googleDriveAdditionalPaths);
+                
+                // プレビューを追加
+                const previewContainer = document.getElementById('google-drive-additional-preview');
+                const previewItem = document.createElement('div');
+                previewItem.className = 'preview-item';
+                previewItem.dataset.path = result.filePath;
+                previewItem.innerHTML = `
+                    <img src="/static/${result.filePath}" alt="追加写真">
+                    <button type="button" class="remove-btn" onclick="removeGoogleDriveAdditional('${result.filePath}')">×</button>
+                `;
+                previewContainer.appendChild(previewItem);
+            }
+        } else {
+            alert('画像のダウンロードに失敗しました: ' + result.error);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('エラーが発生しました');
+    }
+}
+
+// メイン写真のGoogle Drive画像を削除
+function removeGoogleDrivePhoto() {
+    document.getElementById('google-drive-photo-path').value = '';
+    document.getElementById('google-drive-photo-preview').style.display = 'none';
+    document.getElementById('google-drive-photo-img').src = '';
+}
+
+// 追加写真のGoogle Drive画像を削除
+function removeGoogleDriveAdditional(path) {
+    googleDriveAdditionalPaths = googleDriveAdditionalPaths.filter(p => p !== path);
+    document.getElementById('google-drive-additional-paths').value = JSON.stringify(googleDriveAdditionalPaths);
+    
+    const previewContainer = document.getElementById('google-drive-additional-preview');
+    const item = previewContainer.querySelector(`[data-path="${path}"]`);
+    if (item) {
+        item.remove();
+    }
+}
+
+// HTML属性(onchange/oninput/onclick)から呼べるようグローバルに公開
+const salesDestinationPresets = {
+    kaika: {
+        normal: ['メルカリ', 'ヤフオク', 'ラクマ', 'ebay', 'ショッピー', 'その他'],
+        wholesale: ['業者販売'],
+        auction: ['オークション販売'],
+        live_commerce: ['ライブコマース']
+    },
+    user: {
+        normal: ['メルカリ', 'ヤフオク', 'ラクマ', 'その他'],
+        wholesale: ['業者販売'],
+        multi_listing: ['同時出品サービス'],
+        auction: ['オークション販売']
+    }
+};
+
+function getSelectedUserSaleTypeOverride() {
+    const selected = document.querySelector('input[name="sale_type_choice_user"]:checked');
+    return selected ? selected.value : 'normal';
+}
+
+function getActiveSaleTypeOverride() {
+    if (isKaikaScope) {
+        const selected = document.querySelector('input[name="sale_type_choice"]:checked');
+        return selected ? selected.value : 'normal';
+    }
+    return getSelectedUserSaleTypeOverride();
+}
+
+function getFixedSalesDestinationOverride(scopeKey, activeType) {
+    if (activeType === 'normal') return '';
+    const options = (salesDestinationPresets[scopeKey] && salesDestinationPresets[scopeKey][activeType]) || [];
+    return options.length ? options[0] : '';
+}
+
+function getKaikaFeeComponentOverride() {
+    if (isKaikaScope) return 0;
+    const purchasePrice = parseInt(document.getElementById('purchase_price').value) || 0;
+    const wholesalePrice = parseInt(document.getElementById('wholesale_price').value) || 0;
+    if (!purchasePrice || !wholesalePrice) return 0;
+    return Math.max(wholesalePrice - purchasePrice, 0);
+}
+
+function syncSalesDestinationFieldOverride() {
+    const hidden = document.getElementById('sales_destination');
+    const select = document.getElementById('sales_destination_choice');
+    const other = document.getElementById('sales_destination_other');
+    if (!hidden || !select || !other) return;
+    hidden.value = select.value === 'その他' ? (other.value || '').trim() : (select.value || '');
+}
+
+function updateSalesDestinationOptionsOverride() {
+    const hidden = document.getElementById('sales_destination');
+    const select = document.getElementById('sales_destination_choice');
+    const other = document.getElementById('sales_destination_other');
+    const hint = document.getElementById('sales_destination_hint');
+    const group = document.getElementById('sales-destination-group');
+    if (!hidden || !select || !other) return;
+
+    const scopeKey = isKaikaScope ? 'kaika' : 'user';
+    const activeType = getActiveSaleTypeOverride();
+    const options = salesDestinationPresets[scopeKey][activeType] || ['その他'];
+    const currentValue = (hidden.value || '').trim();
+    const allowOther = options.includes('その他');
+    const isFixedDestination = activeType !== 'normal';
+
+    if (group) {
+        group.style.display = 'block';
+    }
+    select.disabled = isFixedDestination;
+
+    if (isFixedDestination) {
+        const fixedValue = getFixedSalesDestinationOverride(scopeKey, activeType);
+        select.innerHTML = '';
+        select.appendChild(new Option(fixedValue || '選択してください', fixedValue || ''));
+        select.value = fixedValue;
+        other.value = '';
+        other.style.display = 'none';
+        hidden.value = fixedValue;
+        if (hint) {
+            hint.textContent = 'この販売タイプでは、販売先は自動で固定されます。';
+        }
+        return;
+    }
+
+    select.disabled = false;
+    select.innerHTML = '';
+    select.appendChild(new Option('選択してください', ''));
+    options.forEach((value) => select.appendChild(new Option(value, value)));
+
+    if (currentValue && options.includes(currentValue)) {
+        select.value = currentValue;
+        other.value = '';
+        other.style.display = 'none';
+    } else if (allowOther && currentValue) {
+        select.value = 'その他';
+        other.value = currentValue;
+        other.style.display = 'block';
+    } else if (!allowOther && options.length === 1) {
+        select.value = options[0];
+        other.value = '';
+        other.style.display = 'none';
+        hidden.value = options[0];
+    } else {
+        select.value = '';
+        other.value = '';
+        other.style.display = 'none';
+        hidden.value = '';
+    }
+
+    if (select.value === 'その他') {
+        other.style.display = 'block';
+    }
+
+    if (hint) {
+        hint.textContent = allowOther
+            ? '販売先を選択し、その他の場合のみ自由入力してください。'
+            : '販売タイプに応じて販売先を固定しています。';
+    }
+    syncSalesDestinationFieldOverride();
+}
+
+function renderCommissionBreakdownOverride(lines) {
+    const container = document.getElementById('commission_breakdown');
+    if (!container) return;
+    if (!lines.length) {
+        container.hidden = true;
+        container.innerHTML = '';
+        return;
+    }
+    container.hidden = false;
+    container.innerHTML = lines.map((line) => `<div class="sale-type-breakdown__item">${line}</div>`).join('');
+}
+
+updateSaleTypeValue = function() {
+    const hidden = document.getElementById('sale_type');
+    if (!hidden) return;
+    if (isKaikaScope) {
+        hidden.value = getActiveSaleTypeOverride();
+    } else {
+        hidden.value = `photo_packing,${getSelectedUserSaleTypeOverride()}`;
+    }
+    updateSalesDestinationOptionsOverride();
+    if (autoCalculateCommission) {
+        calculateCommission();
+    }
+};
+
+calculateProfit = function() {
+    const purchasePrice = parseInt(document.getElementById('purchase_price').value) || 0;
+    const wholesalePrice = parseInt(document.getElementById('wholesale_price').value) || 0;
+    const salePrice = parseInt(document.getElementById('sale_price').value) || 0;
+    const shippingCost = parseInt(document.getElementById('shipping_cost').value) || 0;
+    const commission = parseInt(document.getElementById('commission').value) || 0;
+    const baseCost = isKaikaScope ? purchasePrice : (wholesalePrice || purchasePrice);
+    const actualProfit = salePrice - baseCost - shippingCost - commission;
+    const actualEl = document.getElementById('actual_profit');
+    actualEl.textContent = '¥' + actualProfit.toLocaleString();
+    actualEl.className = 'calculated-value ' + (actualProfit >= 0 ? 'profit-positive' : 'profit-negative');
+};
+
+calculateCommission = function() {
+    if (!autoCalculateCommission) return;
+
+    const salePrice = parseInt(document.getElementById('sale_price').value) || 0;
+    const hiddenCommission = document.getElementById('commission');
+    const hintEl = document.getElementById('commission_hint');
+    const shippingHintEl = document.getElementById('shipping_hint');
+
+    if (isKaikaScope) {
+        const meta = getKaikaSaleTypeMeta(getActiveSaleTypeOverride(), salePrice);
+        hiddenCommission.value = meta.commission;
+        hintEl.textContent = meta.hint;
+        if (shippingHintEl) shippingHintEl.textContent = '';
+        renderCommissionBreakdownOverride([]);
+        calculateProfit();
+        return;
+    }
+
+    const selectedType = getSelectedUserSaleTypeOverride();
+    const platformFee = selectedType === 'normal'
+        ? Math.floor(salePrice * _commNormal)
+        : ((saleTypeRules[selectedType] && typeof saleTypeRules[selectedType].calculate === 'function')
+            ? saleTypeRules[selectedType].calculate(salePrice)
+            : 0);
+    const kaikaFee = getKaikaFeeComponentOverride();
+    const totalFee = platformFee + kaikaFee;
+    const commissionDisplay = document.getElementById('commission_display');
+    const salesDestinationValue = (document.getElementById('sales_destination').value || '').trim();
+    const breakdownLines = [];
+
+    hiddenCommission.value = platformFee;
+    if (commissionDisplay) {
+        commissionDisplay.value = `¥${totalFee.toLocaleString()}`;
+    }
+
+    if (platformFee > 0) {
+        if (selectedType === 'normal') {
+            breakdownLines.push(`${salesDestinationValue || '通常販売'} 手数料: ¥${platformFee.toLocaleString()}（売上の${_commNormal * 100}%）`);
+        } else if (saleTypeRules[selectedType]) {
+            breakdownLines.push(`${saleTypeRules[selectedType].name} 手数料: ¥${platformFee.toLocaleString()}`);
+        }
+    }
+    if (kaikaFee > 0) {
+        breakdownLines.push(`開花手数料: ¥${kaikaFee.toLocaleString()}`);
+    }
+    if (!breakdownLines.length) {
+        breakdownLines.push('手数料は0円です。');
+    }
+
+    hintEl.textContent = `手数料合計 ¥${totalFee.toLocaleString()}`;
+    if (shippingHintEl) shippingHintEl.textContent = '';
+    renderCommissionBreakdownOverride(breakdownLines);
+    calculateProfit();
+};
+
+function initializeSoldFieldsOverride() {
+    const saleTypeField = document.getElementById('sale_type');
+    const saleTypeValue = saleTypeField ? saleTypeField.value : '';
+    if (isKaikaScope) {
+        const selectedType = normalizeKaikaSaleTypeValue(saleTypeValue || 'normal');
+        const target = document.querySelector(`input[name="sale_type_choice"][value="${selectedType}"]`);
+        if (target) target.checked = true;
+    } else {
+        const selectedType = (saleTypeValue || '').split(',').map((part) => part.trim()).find((part) => part && part !== 'photo_packing') || 'normal';
+        const target = document.querySelector(`input[name="sale_type_choice_user"][value="${selectedType}"]`);
+        if (target) target.checked = true;
+    }
+    autoCalculateCommission = true;
+    updateSalesDestinationOptionsOverride();
+    calculateCommission();
+    calculateProfit();
+}
+
+document.querySelectorAll('input[name="sale_type_choice"]').forEach((radio) => {
+    radio.addEventListener('change', function() {
+        autoCalculateCommission = true;
+        updateSaleTypeValue();
+    });
+});
+
+document.querySelectorAll('input[name="sale_type_choice_user"]').forEach((radio) => {
+    radio.addEventListener('change', function() {
+        autoCalculateCommission = true;
+        updateSaleTypeValue();
+    });
+});
+
+const salesDestinationChoiceOverride = document.getElementById('sales_destination_choice');
+if (salesDestinationChoiceOverride) {
+    salesDestinationChoiceOverride.addEventListener('change', function() {
+        const other = document.getElementById('sales_destination_other');
+        if (other) {
+            other.style.display = this.value === 'その他' ? 'block' : 'none';
+            if (this.value !== 'その他') {
+                other.value = '';
+            }
+        }
+        syncSalesDestinationFieldOverride();
+        calculateCommission();
+    });
+}
+
+const salesDestinationOtherOverride = document.getElementById('sales_destination_other');
+if (salesDestinationOtherOverride) {
+    salesDestinationOtherOverride.addEventListener('input', function() {
+        syncSalesDestinationFieldOverride();
+        calculateCommission();
+    });
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeSoldFieldsOverride);
+} else {
+    initializeSoldFieldsOverride();
+}
+
+let lastActiveSaleTypeV2 = '';
+
+function getManualFeeRateV2() {
+    const rateInput = document.getElementById('commission_rate');
+    return Math.max(parseFloat(rateInput ? rateInput.value : 0) || 0, 0);
+}
+
+function updateCommissionRateVisibilityV2() {
+    const rateGroup = document.getElementById('commission-rate-group');
+    const rateInput = document.getElementById('commission_rate');
+    const rateHint = document.getElementById('commission_rate_hint');
+    const commissionInput = document.getElementById('commission');
+    if (!rateGroup || !rateInput) return;
+
+    const activeType = getActiveSaleTypeOverride();
+    const isNormal = activeType === 'normal';
+    rateGroup.style.display = isNormal ? 'block' : 'none';
+
+    if (isKaikaScope) {
+        if (commissionInput) {
+            commissionInput.readOnly = isNormal;
+        }
+        if (rateHint) {
+            rateHint.textContent = isNormal
+                ? '通常販売のときだけ、販売媒体ごとの手数料率を入力できます。'
+                : 'この販売タイプは固定率にせず、手数料を直接入力してください。';
+        }
+        if (!isNormal && lastActiveSaleTypeV2 === 'normal' && autoCalculateCommission && commissionInput && !commissionInput.dataset.manualFilled) {
+            commissionInput.value = '0';
+        }
+    } else if (rateHint) {
+        rateHint.textContent = isNormal
+            ? '通常販売では、販売媒体ごとの手数料率を入力できます。'
+            : '通常販売以外は、設定済みのサービス手数料をもとに自動計算します。';
+    }
+
+    if (rateHint) {
+        rateHint.textContent = isNormal
+            ? '通常販売のときだけ、販売媒体ごとの手数料率を入力できます。'
+            : (isKaikaScope
+                ? 'この販売タイプは手数料を直接入力してください。'
+                : 'この販売タイプでは、サービス手数料と撮影梱包発送代行手数料を合計して表示します。');
+    }
+
+    lastActiveSaleTypeV2 = activeType;
+}
+
+calculateCommission = function() {
+    if (!autoCalculateCommission) return;
+
+    const salePrice = parseInt(document.getElementById('sale_price').value) || 0;
+    const commissionInput = document.getElementById('commission');
+    const rateInput = document.getElementById('commission_rate');
+    const hintEl = document.getElementById('commission_hint');
+    const shippingHintEl = document.getElementById('shipping_hint');
+    const activeType = getActiveSaleTypeOverride();
+    const feeRate = getManualFeeRateV2();
+
+    updateCommissionRateVisibilityV2();
+
+    if (isKaikaScope) {
+        if (activeType === 'normal') {
+            const calculated = Math.floor(salePrice * (feeRate / 100));
+            commissionInput.value = calculated;
+            commissionInput.dataset.manualFilled = '';
+            hintEl.textContent = `通常販売: ${feeRate}% を反映しています`;
+            renderCommissionBreakdownOverride([
+                `${(document.getElementById('sales_destination').value || '通常販売')} 手数料: ¥${calculated.toLocaleString()}（${feeRate}%）`
+            ]);
+        } else {
+            const currentValue = parseInt(commissionInput.value) || 0;
+            hintEl.textContent = 'この販売タイプは手数料を直接入力してください。';
+            renderCommissionBreakdownOverride(currentValue > 0 ? [`手数料入力額: ¥${currentValue.toLocaleString()}`] : []);
+        }
+        if (activeType !== 'normal') {
+            const manualValue = Math.max(parseInt(commissionInput.value) || 0, 0);
+            commissionInput.value = manualValue;
+            if (hintEl) {
+                hintEl.textContent = 'この販売タイプは手数料を直接入力できます。';
+            }
+            renderCommissionBreakdownOverride(
+                manualValue > 0 ? [`${(saleTypeRules[activeType] ? saleTypeRules[activeType].name : '販売')} 手数料: ¥${manualValue.toLocaleString()}`] : []
+            );
+        }
+        if (shippingHintEl) shippingHintEl.textContent = '';
+        calculateProfit();
+        return;
+    }
+
+    const photoPackingFee = _tierCalc(_ppTiers, salePrice);
+    let selectedFee = 0;
+    let selectedLabel = '';
+    const salesDestinationValue = (document.getElementById('sales_destination').value || '').trim();
+
+    if (activeType === 'normal') {
+        selectedFee = Math.floor(salePrice * (feeRate / 100));
+        selectedLabel = `${salesDestinationValue || '通常販売'} 手数料`;
+    } else {
+        selectedFee = (saleTypeRules[activeType] && typeof saleTypeRules[activeType].calculate === 'function')
+            ? saleTypeRules[activeType].calculate(salePrice)
+            : 0;
+        selectedLabel = saleTypeRules[activeType] ? `${saleTypeRules[activeType].name} 手数料` : '販売手数料';
+    }
+
+    const kaikaFee = 0;
+    const visibleTotal = selectedFee + photoPackingFee;
+    const commissionDisplay = document.getElementById('commission_display');
+    const lines = [
+        `${selectedLabel}: ¥${selectedFee.toLocaleString()}${activeType === 'normal' ? `（${feeRate}%）` : ''}`,
+        `撮影梱包発送代行 手数料: ¥${photoPackingFee.toLocaleString()}`
+    ];
+
+    if (kaikaFee > 0) {
+        lines.push(`開花手数料: ¥${kaikaFee.toLocaleString()}`);
+    }
+
+    commissionInput.value = visibleTotal;
+    if (commissionDisplay) {
+        commissionDisplay.value = `¥${visibleTotal.toLocaleString()}`;
+    }
+    hintEl.textContent = `手数料合計 ¥${visibleTotal.toLocaleString()}`;
+    if (shippingHintEl) shippingHintEl.textContent = '';
+    renderCommissionBreakdownOverride(lines);
+    calculateProfit();
+};
+
+const commissionRateInputV2 = document.getElementById('commission_rate');
+if (commissionRateInputV2) {
+    commissionRateInputV2.addEventListener('input', function() {
+        autoCalculateCommission = true;
+        calculateCommission();
+    });
+}
+
+if (isKaikaScope) {
+    const commissionInputV2 = document.getElementById('commission');
+    if (commissionInputV2) {
+        commissionInputV2.addEventListener('input', function() {
+            this.dataset.manualFilled = this.value ? 'true' : '';
+            if (getActiveSaleTypeOverride() !== 'normal') {
+                autoCalculateCommission = true;
+                calculateCommission();
+                return;
+                calculateProfit();
+                renderCommissionBreakdownOverride(this.value ? [`手数料入力額: ¥${(parseInt(this.value) || 0).toLocaleString()}`] : []);
+                const hintEl = document.getElementById('commission_hint');
+                if (hintEl) {
+                    hintEl.textContent = 'この販売タイプは手数料を直接入力してください。';
+                }
+            }
+        });
+    }
+}
+
+const initializeSoldFieldsOverrideOriginal = initializeSoldFieldsOverride;
+initializeSoldFieldsOverride = function() {
+    if (typeof initializeSoldFieldsOverrideOriginal === 'function') {
+        initializeSoldFieldsOverrideOriginal();
+    }
+    const rateInput = document.getElementById('commission_rate');
+    const salePrice = parseInt(document.getElementById('sale_price').value) || 0;
+    const commissionValue = parseInt(document.getElementById('commission').value) || 0;
+    if (rateInput && salePrice > 0 && getActiveSaleTypeOverride() === 'normal' && commissionValue > 0) {
+        const baseCommission = isKaikaScope
+            ? commissionValue
+            : Math.max(commissionValue - _tierCalc(_ppTiers, salePrice), 0);
+        if (baseCommission > 0) {
+            rateInput.value = ((baseCommission / salePrice) * 100).toFixed(1).replace(/\.0$/, '');
+        }
+    }
+    updateCommissionRateVisibilityV2();
+    calculateCommission();
+};
+
+updateCommissionRateVisibilityV2 = function() {
+    const rateGroup = document.getElementById('commission-rate-group');
+    const rateInput = document.getElementById('commission_rate');
+    const rateHint = document.getElementById('commission_rate_hint');
+    const commissionInput = document.getElementById('commission');
+    const commissionGroup = document.getElementById('commission-group');
+    if (!rateGroup || !rateInput) return;
+
+    const activeType = getActiveSaleTypeOverride();
+    const isNormal = activeType === 'normal';
+    rateGroup.style.display = isNormal ? 'block' : 'none';
+    if (commissionGroup) {
+        commissionGroup.style.display = isKaikaScope && !isNormal ? 'none' : 'block';
+    }
+
+    if (isKaikaScope && commissionInput) {
+        commissionInput.readOnly = true;
+        if (!isNormal) {
+            commissionInput.value = '0';
+            commissionInput.dataset.manualFilled = '';
+        }
+    }
+
+    if (rateHint) {
+        rateHint.textContent = isNormal
+            ? '通常販売のときだけ、販売媒体ごとの手数料率を入力できます。'
+            : (isKaikaScope
+                ? '通常販売以外では販売媒体手数料は使用しません。'
+                : 'この販売タイプでは、サービス手数料と撮影梱包発送代行手数料を合計して表示します。');
+    }
+
+    lastActiveSaleTypeV2 = activeType;
+};
+
+calculateCommission = function() {
+    if (!autoCalculateCommission) return;
+
+    const salePrice = parseInt(document.getElementById('sale_price').value) || 0;
+    const commissionInput = document.getElementById('commission');
+    const commissionDisplay = document.getElementById('commission_display');
+    const hintEl = document.getElementById('commission_hint');
+    const shippingHintEl = document.getElementById('shipping_hint');
+    const salesDestinationValue = (document.getElementById('sales_destination').value || '').trim();
+    const activeType = getActiveSaleTypeOverride();
+    const feeRate = getManualFeeRateV2();
+
+    updateCommissionRateVisibilityV2();
+
+    if (isKaikaScope) {
+        if (activeType === 'normal') {
+            const calculated = Math.floor(salePrice * (feeRate / 100));
+            commissionInput.value = calculated;
+            commissionInput.dataset.manualFilled = '';
+            if (hintEl) {
+                hintEl.textContent = `販売媒体手数料率 ${feeRate}% を反映しています。`;
+            }
+            renderCommissionBreakdownOverride(
+                (calculated > 0 || salePrice > 0)
+                    ? [`${(salesDestinationValue || '通常販売')} 手数料: ¥${calculated.toLocaleString()}（${feeRate}%）`]
+                    : []
+            );
+        } else {
+            commissionInput.value = '';
+            commissionInput.dataset.manualFilled = '';
+            if (hintEl) {
+                hintEl.textContent = '通常販売以外では販売媒体手数料は表示しません。';
+            }
+            renderCommissionBreakdownOverride([]);
+        }
+        if (shippingHintEl) shippingHintEl.textContent = '';
+        calculateProfit();
+        return;
+    }
+
+    const photoPackingFee = _tierCalc(_ppTiers, salePrice);
+    const selectedFee = activeType === 'normal'
+        ? Math.floor(salePrice * (feeRate / 100))
+        : ((saleTypeRules[activeType] && typeof saleTypeRules[activeType].calculate === 'function')
+            ? saleTypeRules[activeType].calculate(salePrice)
+            : 0);
+    const selectedLabel = activeType === 'normal'
+        ? `${salesDestinationValue || '通常販売'} 手数料`
+        : `${saleTypeRules[activeType] ? saleTypeRules[activeType].name : '販売'} 手数料`;
+    const totalFee = selectedFee + photoPackingFee;
+    const lines = [
+        `${selectedLabel}: ¥${selectedFee.toLocaleString()}${activeType === 'normal' ? `（${feeRate}%）` : ''}`,
+        `撮影梱包発送代行 手数料: ¥${photoPackingFee.toLocaleString()}`
+    ];
+
+    commissionInput.value = totalFee;
+    if (commissionDisplay) {
+        commissionDisplay.value = `¥${totalFee.toLocaleString()}`;
+    }
+    if (hintEl) {
+        hintEl.textContent = `手数料合計 ¥${totalFee.toLocaleString()}`;
+    }
+    if (shippingHintEl) shippingHintEl.textContent = '';
+    renderCommissionBreakdownOverride(lines);
+    calculateProfit();
+};
+
+const commissionRateInputFinal = document.getElementById('commission_rate');
+if (commissionRateInputFinal) {
+    commissionRateInputFinal.addEventListener('input', function() {
+        autoCalculateCommission = true;
+        calculateCommission();
+    });
+}
+
+if (isKaikaScope) {
+    const commissionInputFinal = document.getElementById('commission');
+    if (commissionInputFinal) {
+        commissionInputFinal.addEventListener('input', function() {
+            if (getActiveSaleTypeOverride() !== 'normal') {
+                this.dataset.manualFilled = this.value ? 'true' : '';
+                autoCalculateCommission = true;
+                calculateCommission();
+            }
+        });
+    }
+}
+
+const initializeSoldFieldsFinalOriginal = initializeSoldFieldsOverride;
+initializeSoldFieldsOverride = function() {
+    if (typeof initializeSoldFieldsFinalOriginal === 'function') {
+        initializeSoldFieldsFinalOriginal();
+    }
+    const rateInput = document.getElementById('commission_rate');
+    const salePrice = parseInt(document.getElementById('sale_price').value) || 0;
+    const commissionValue = parseInt(document.getElementById('commission').value) || 0;
+    const activeType = getActiveSaleTypeOverride();
+    if (rateInput && salePrice > 0 && activeType === 'normal' && commissionValue > 0) {
+        const baseCommission = isKaikaScope
+            ? commissionValue
+            : Math.max(commissionValue - _tierCalc(_ppTiers, salePrice), 0);
+        if (baseCommission > 0) {
+            rateInput.value = ((baseCommission / salePrice) * 100).toFixed(1).replace(/\.0$/, '');
+        }
+    }
+    updateCommissionRateVisibilityV2();
+    calculateCommission();
+};
+
+initializeSoldFieldsOverride();
+
+window.updateStatusFields = updateStatusFields;
+window.toggleSupplierDetail = toggleSupplierDetail;
+window.recalculateWholesalePrice = recalculateWholesalePrice;
+window.calculateProfit = calculateProfit;
+window.removeGoogleDrivePhoto = removeGoogleDrivePhoto;
+window.removeGoogleDriveAdditional = removeGoogleDriveAdditional;
+})();
+</script>
+{% endblock %}

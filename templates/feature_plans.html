@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}利用プラン - 株式会社 開花{% endblock %}
+{% block content %}
+{% include "_feature_plan_styles.html" %}
+<div class="fp-page">
+  <h1>利用プラン</h1>
+  <p class="fp-muted">在庫管理から販売代行まで、ご契約に応じた機能をご利用いただけます。</p>
+  {% if billing_return %}<p class="fp-note" role="status">決済結果を確認しています。反映まで少し時間がかかる場合があります。この画面を更新してご確認ください。</p>{% endif %}
+  <section class="fp-panel" aria-label="現在の契約">
+    <span class="fp-badge">{{ status_names.get(state.status, '確認中') }}</span>
+    <h2>{% for plan in plans if plan.code == state.plan_code %}{{ plan.name }}{% else %}利用可能な機能プランはありません{% endfor %}</h2>
+    {% if state.manual %}<p class="fp-muted">運営による期限付きの利用権限：{{ management.manual_until }}まで。この付与自体による月額請求はありません。</p>{% endif %}
+    {% for sub in state.subscriptions if sub.status == 'grace_period' %}<p role="status">ストアでお支払い方法の確認が必要です。ストアが認める猶予期間中は機能をご利用いただけます。契約管理からお支払い方法をご確認ください。</p>{% endfor %}
+    {% for contract in management.contracts %}
+    <section class="fp-contract" aria-label="{{ contract.provider_name }}の契約">
+      <h3>{{ contract.plan_name }} <span class="fp-badge">{{ contract.status }}</span></h3>
+      <dl class="fp-details">
+        <dt>購入・契約元</dt><dd>{{ contract.provider_name }}</dd>
+        <dt>次回請求予定</dt><dd>{% if contract.next_billing %}{{ contract.next_billing }}{% elif contract.cancel_at_period_end %}解約予約のため、次回更新の請求はありません{% else %}購入元でご確認ください{% endif %}</dd>
+        <dt>確認済みの利用期限</dt><dd>{{ contract.access_until or '現在、この契約による追加機能は利用できません' }}</dd>
+        <dt>契約情報の最終確認</dt><dd>{{ contract.verified_at or '未確認' }}</dd>
+      </dl>
+      {% if contract.cancel_at_period_end and contract.active %}<p role="status">解約予約済みです。上記の利用期限まで現在の機能をご利用いただけます。</p>{% endif %}
+      {% for change in contract.changes %}<p role="status">{{ change.effective_at }}から{{ change.plan_name }}へ変更する予約があります。更新までは現在のプランをご利用いただけます。</p>{% endfor %}
+      {% if contract.provider in ['apple', 'google'] %}<p class="fp-muted">ストアでの変更予約と最新の請求額は、購入元の契約管理画面でご確認ください。</p>{% endif %}
+    </section>
+    {% else %}{% if not management.legacy_contract and not state.manual %}<p>現在、追加機能の月額契約はありません。</p>{% endif %}{% endfor %}
+    {% for instruction in management.instructions %}<p class="fp-note">{{ instruction }}</p>{% endfor %}
+    {% if management.contracts %}<p class="fp-muted">予定日は最後に確認した契約期間をもとに表示しています。実際の請求日・金額・変更内容は購入元でご確認ください。反映を待っている間に、別のストアで申し込み直す必要はありません。</p>{% endif %}
+    <div class="fp-actions">
+      <a class="btn btn-secondary" href="{{ url_for('index') }}">商品一覧へ</a>
+      {% if has_plan_feature('inventory_manage') and not current_user.is_admin() %}<a class="btn btn-primary" href="{{ url_for('self_inventory_new') }}">自分の在庫を登録</a>{% endif %}
+      {% if not feature_native_app and portal_ready and (state.subscriptions|selectattr('provider', 'equalto', 'stripe')|list) %}
+      <form method="post" action="{{ url_for('feature_plans.portal') }}">
+        <input type="hidden" name="csrf_token" value="{{ feature_csrf_token() }}">
+        <button type="submit" class="btn btn-secondary">支払い方法・解約の管理</button>
+      </form>{% endif %}
+    </div>
+    {% if not feature_native_app and not portal_ready and (state.subscriptions|selectattr('provider', 'equalto', 'stripe')|list) %}<p class="fp-note">Webの契約管理を現在開けません。メニューの「お問い合わせ」から、解約・支払い方法の確認をご依頼ください。この表示だけで請求が停止することはありません。</p>{% endif %}
+  </section>
+  <section class="fp-panel" aria-label="解約後の利用">
+    <h2>解約・利用期間終了後について</h2>
+    <p>アプリの削除やログアウトだけでは、月額契約は解約されません。購入元で解約をお手続きください。</p>
+    <ul class="fp-features">
+      <li>閲覧：登録済みの商品・書類・申請履歴は削除されず、引き続き確認できます。</li>
+      <li>登録・編集：自己在庫の新規登録・編集には、有効な対応プランが必要です。</li>
+      <li>出力：閲覧権限のある既存の帳票・写真の保存機能は、プラン終了だけを理由に停止しません。</li>
+      <li>販売代行：新規申請には対応プランが必要です。進行中の案件が自動で取り消されることはありません。</li>
+    </ul>
+    <p class="fp-muted">月額契約の解約と、退会・アカウント情報の削除は別の手続きです。退会や保存データについてはメニューの「お問い合わせ」からご相談ください。取引中の案件や保管中の商品がある場合も、先にご相談ください。</p>
+  </section>
+  {% if feature_native_app %}
+  <section class="fp-panel"><h2>利用できる機能</h2><ul class="fp-features">{% for feature in state.features %}<li>{{ feature_labels[feature] }}</li>{% else %}<li>現在、利用可能な追加機能はありません。</li>{% endfor %}</ul></section>
+  {% else %}
+  <div class="fp-grid">
+    {% for plan in plans %}
+    <section class="fp-card">
+      <h2>{{ plan.name }}</h2>
+      <div class="fp-price">{% if plan.monthly_amount %}¥{{ '{:,}'.format(plan.monthly_amount) }} <small>税込／月</small>{% else %}料金準備中{% endif %}</div>
+      <ul class="fp-features">{% for feature in plan.features %}<li>{{ feature_labels[feature] }}</li>{% endfor %}</ul>
+      {% if state.plan_code == plan.code %}<span class="fp-badge">利用中のプラン</span>
+      {% elif plan.selling and change_ready %}
+      <form method="post" action="{{ url_for('feature_plans.change_plan') }}">
+        <input type="hidden" name="csrf_token" value="{{ feature_csrf_token() }}"><input type="hidden" name="plan_code" value="{{ plan.code }}">
+        <button type="submit" class="btn btn-primary">{{ plan.name }}への変更内容を確認</button>
+      </form>
+      <p class="fp-muted">変更前に料金と適用日を確認できます。上位プランは差額のお支払い確認後、下位プランは次回更新から適用します。</p>
+      {% elif plan.selling and billing_ready and not open_contract %}
+      <form method="post" action="{{ url_for('feature_plans.checkout') }}">
+        <input type="hidden" name="csrf_token" value="{{ feature_csrf_token() }}"><input type="hidden" name="plan_code" value="{{ plan.code }}">
+        <button type="submit" class="btn btn-primary">{{ plan.name }}で申し込む</button>
+      </form>
+      {% else %}<span class="fp-muted">{% if open_contract %}契約内容はお問い合わせからご相談ください。{% else %}受付準備中{% endif %}</span>{% endif %}
+    </section>
+    {% endfor %}
+  </div>
+  <p class="fp-muted">月額料金は自動更新です。解約すると、次回更新以降の請求が停止します。商品代金・送料・販売代行手数料は機能プランの月額料金に含まれません。既存の在庫件数に応じたご契約がある場合は、切替前に契約内容を確認します。</p>
+  {% endif %}
+</div>
+{% endblock %}

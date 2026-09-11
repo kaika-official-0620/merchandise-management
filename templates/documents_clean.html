@@ -1,0 +1,459 @@
+{% extends "base.html" %}
+{% block title %}書類履歴 - 開花{% endblock %}
+
+{% block content %}
+{% set current_return_url = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path %}
+<style>
+.user-docs {
+    display: grid;
+    gap: 1rem;
+    min-width: 0;
+}
+
+.user-doc-panel {
+    min-width: 0;
+    padding: 1.1rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+}
+
+.user-doc-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.user-doc-head h1,
+.user-doc-head h2 {
+    margin: 0;
+    color: #0f172a;
+}
+
+.user-doc-head p {
+    margin: 0.35rem 0 0;
+    color: #64748b;
+    line-height: 1.6;
+}
+
+.user-doc-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 0.85rem;
+}
+
+.user-doc-card {
+    display: grid;
+    gap: 0.48rem;
+    min-width: 0;
+    padding: 0.95rem;
+    border: 1px solid #dbeafe;
+    border-radius: 10px;
+    background: #f8fbff;
+    color: inherit;
+    text-decoration: none;
+}
+
+.user-doc-card.active,
+.user-doc-card:hover,
+.user-doc-card:focus-visible {
+    border-color: #2563eb;
+    box-shadow: 0 12px 24px rgba(37, 99, 235, 0.12);
+    outline: none;
+}
+
+.user-doc-card.has-unread {
+    border-color: #f59e0b;
+    background: #fffaf0;
+    box-shadow: inset 4px 0 0 #f59e0b, 0 12px 24px rgba(245, 158, 11, 0.12);
+}
+
+.user-doc-no {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.9rem;
+    height: 1.9rem;
+    border-radius: 999px;
+    background: #2563eb;
+    color: #fff;
+    font-weight: 900;
+}
+
+.user-doc-card strong {
+    color: #0f172a;
+    font-size: 1rem;
+}
+
+.user-doc-card small {
+    color: #64748b;
+    line-height: 1.5;
+}
+
+.user-doc-unread-badge,
+.user-doc-row-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: max-content;
+    border-radius: 999px;
+    background: #dc2626;
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 800;
+    line-height: 1;
+    padding: 0.26rem 0.55rem;
+}
+
+.user-doc-table-wrap {
+    overflow-x: auto;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.user-doc-table {
+    width: 100%;
+    min-width: 780px;
+    border-collapse: collapse;
+    table-layout: auto;
+}
+
+.user-doc-table th,
+.user-doc-table td {
+    padding: 0.72rem;
+    border-bottom: 1px solid #e2e8f0;
+    text-align: left;
+    vertical-align: middle;
+    writing-mode: horizontal-tb;
+    word-break: keep-all;
+    overflow-wrap: normal;
+    line-break: strict;
+}
+
+.user-doc-table th {
+    background: #f8fafc;
+    color: #475569;
+    font-size: 0.84rem;
+    white-space: nowrap;
+}
+
+.user-doc-table th:first-child,
+.user-doc-table td:first-child {
+    width: 9.5rem;
+    min-width: 9.5rem;
+}
+
+.user-doc-table th:last-child,
+.user-doc-table td:last-child {
+    width: 7.5rem;
+    min-width: 7.5rem;
+    text-align: center;
+}
+
+.user-doc-table th:nth-child(5),
+.user-doc-table td:nth-child(5) {
+    width: 8rem;
+    min-width: 8rem;
+}
+
+.user-doc-table tr[data-detail-url] {
+    cursor: pointer;
+}
+
+.user-doc-table tr[data-detail-url]:hover td,
+.user-doc-table tr[data-detail-url]:focus-visible td {
+    background: #f8fbff;
+}
+
+.user-doc-table tr.is-unread td {
+    background: #fffaf0;
+}
+
+.user-doc-title-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+}
+
+.doc-status-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: max-content;
+    max-width: 100%;
+    white-space: nowrap;
+    word-break: keep-all;
+    line-height: 1.2;
+    padding: 0.24rem 0.58rem;
+    border-radius: 999px;
+    background: #f1f5f9;
+    color: #334155;
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+.doc-version-note {
+    display: block;
+    margin-top: 0.28rem;
+    color: #64748b;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    white-space: normal;
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+}
+
+.doc-version-note a {
+    color: #2563eb;
+    font-weight: 800;
+}
+
+.doc-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    flex-wrap: nowrap;
+}
+
+.doc-actions .btn {
+    min-height: 36px;
+    padding: 0.5rem 0.85rem;
+    border-radius: 999px;
+    white-space: nowrap;
+    line-height: 1;
+}
+
+.doc-actions .btn-info {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: #fff;
+}
+
+.doc-actions form {
+    margin: 0;
+}
+
+.empty-box {
+    border: 1px dashed #cbd5e1;
+    border-radius: 12px;
+    background: #f8fafc;
+    color: #64748b;
+    padding: 1.4rem;
+    text-align: center;
+}
+
+@media (max-width: 768px) {
+    .user-doc-panel {
+        padding: 0.95rem;
+        border-radius: 10px;
+        overflow: hidden;
+    }
+
+    .user-doc-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .user-doc-table {
+        min-width: 0;
+        display: block;
+    }
+
+    .user-doc-table thead {
+        display: none;
+    }
+
+    .user-doc-table tbody {
+        display: grid;
+        gap: 0.75rem;
+    }
+
+    .user-doc-table tr {
+        display: grid;
+        gap: 0.4rem;
+        padding: 0.85rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        background: #fff;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    .user-doc-table tr[data-detail-url]:active,
+    .user-doc-table tr[data-detail-url]:focus-visible {
+        background: #f8fbff;
+        outline: 2px solid rgba(37, 99, 235, 0.18);
+        outline-offset: 2px;
+    }
+
+    .user-doc-table th,
+    .user-doc-table td {
+        display: grid;
+        grid-template-columns: 6.4rem minmax(0, 1fr);
+        gap: 0.65rem;
+        padding: 0;
+        border-bottom: 0;
+        align-items: center;
+        min-width: 0;
+        word-break: normal;
+        overflow-wrap: anywhere;
+    }
+
+    .user-doc-table td::before {
+        content: attr(data-label);
+        color: #64748b;
+        font-size: 0.78rem;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    .user-doc-table th:first-child,
+    .user-doc-table td:first-child,
+    .user-doc-table th:nth-child(5),
+    .user-doc-table td:nth-child(5),
+    .user-doc-table th:last-child,
+    .user-doc-table td:last-child {
+        width: auto;
+        min-width: 0;
+        text-align: left;
+    }
+
+    .user-doc-table td:last-child {
+        display: flex;
+        justify-content: flex-end;
+        grid-template-columns: none;
+    }
+
+    .user-doc-table td:last-child::before {
+        display: none;
+    }
+
+    .doc-actions {
+        width: 100%;
+        gap: 0.35rem;
+        justify-content: flex-end;
+        overflow-x: visible;
+    }
+
+    .doc-actions .btn {
+        width: auto;
+        flex: 0 0 auto;
+        justify-content: center;
+    }
+
+    .doc-status-badge,
+    .user-doc-title-cell {
+        max-width: 100%;
+        min-width: 0;
+    }
+}
+</style>
+
+<div class="user-docs">
+    <section class="user-doc-panel user-doc-head">
+        <div>
+            <h1>書類履歴</h1>
+            <p>送付済み・確認可能な書類をカテゴリ別に確認できます。</p>
+        </div>
+    </section>
+
+    {% if not selected_category %}
+    <section class="user-doc-panel">
+        <div class="user-doc-grid">
+            {% for card in category_cards %}
+            <a class="user-doc-card {% if card.selected %}active{% endif %} {% if card.has_unread %}has-unread{% endif %}" href="{{ card.url }}">
+                <span class="user-doc-no">{{ card.step }}</span>
+                <strong>{{ card.title }}</strong>
+                <small>{{ card.description }}</small>
+                {% if card.unread_count %}
+                <span class="user-doc-unread-badge">新着 {{ card.unread_count }}件</span>
+                {% endif %}
+            </a>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    {% if selected_category %}
+    <section class="user-doc-panel">
+        <div class="user-doc-head">
+            <div>
+                <h2>{{ selected_meta.title }}</h2>
+                <p>{{ selected_meta.description }}</p>
+            </div>
+            <a href="{{ url_for('documents') }}" class="btn btn-outline">カテゴリ一覧へ</a>
+        </div>
+
+        {% if history_rows %}
+        <div class="user-doc-table-wrap">
+            <table class="user-doc-table">
+                <thead>
+                    <tr>
+                        <th>書類</th>
+                        <th>No./書類名</th>
+                        <th>日付</th>
+                        <th>金額</th>
+                        <th>状態</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in history_rows %}
+                    <tr class="{% if row.is_unread %}is-unread{% endif %}" {% if row.detail_url %}data-detail-url="{{ row.detail_url }}" tabindex="0" role="link"{% endif %}>
+                        <td data-label="書類">
+                            <span class="user-doc-title-cell">
+                                {{ row.document_type }}
+                                {% if row.is_unread %}<span class="user-doc-row-badge">新着</span>{% endif %}
+                            </span>
+                        </td>
+            <td data-label="No./書類名">
+              {{ row.document_no }}
+              {% if row.status == 'replaced' %}
+              <span class="doc-version-note">
+                差替え済み
+                {% if row.replacement_detail_url %}
+                / <a href="{{ row.replacement_detail_url }}">最新版を確認</a>
+                {% endif %}
+              </span>
+              {% elif row.revision_of_document_id %}
+              <span class="doc-version-note">旧版 #{{ row.revision_of_document_id }} の最新版</span>
+              {% endif %}
+            </td>
+                        <td data-label="日付">{{ row.issue_date }}</td>
+                        <td data-label="金額">{% if row.total_amount %}¥{{ "{:,}".format(row.total_amount) }}{% else %}-{% endif %}</td>
+                        <td data-label="状態"><span class="doc-status-badge">{{ row.status_label }}</span></td>
+                        <td data-label="操作">
+                            <div class="doc-actions">
+                                {% if row.detail_url %}<a href="{{ row.detail_url }}" class="btn btn-info btn-sm">詳細</a>{% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-box">このカテゴリの書類はまだありません。</div>
+        {% endif %}
+    </section>
+    {% endif %}
+</div>
+
+<script>
+document.querySelectorAll('.user-doc-table tr[data-detail-url]').forEach(function(row) {
+    row.addEventListener('click', function(event) {
+        if (event.target.closest('a, button, input, select, textarea, label, form')) return;
+        window.location.href = row.dataset.detailUrl;
+    });
+    row.addEventListener('keydown', function(event) {
+        if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            window.location.href = row.dataset.detailUrl;
+        }
+    });
+});
+</script>
+{% endblock %}

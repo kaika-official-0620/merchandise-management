@@ -1,0 +1,306 @@
+{% extends "base.html" %}
+
+{% block title %}計算書詳細 - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="page-actions">
+    <a href="{{ url_for('documents') }}" class="btn btn-secondary context-back-inline">← 書類履歴へ戻る</a>
+    <a href="{{ url_for('user_keisan_download', id=keisan.id) }}" class="btn btn-download js-csv-download" download>CSV</a>
+    <a href="{{ url_for('user_keisan_pdf', id=keisan.id) }}" class="btn btn-pdf" target="_blank">PDF</a>
+    {% if keisan.can_user_edit %}
+    <a href="{{ url_for('user_keisan_edit', id=keisan.id) }}" class="btn btn-primary">編集</a>
+    {% endif %}
+    {% if keisan.can_user_delete %}
+    <form method="POST" action="{{ url_for('user_keisan_delete', id=keisan.id) }}" class="inline-delete-form" onsubmit="return confirm('この計算書を削除しますか？')">
+        <input type="hidden" name="next" value="{{ url_for('documents') }}">
+        <button type="submit" class="btn btn-danger">削除</button>
+    </form>
+    {% endif %}
+</div>
+
+<div class="keisan-sheet">
+    <h1 class="keisan-title">計算書</h1>
+
+    <div class="keisan-meta-grid">
+        <div class="meta-item">
+            <span class="meta-label">対象月</span>
+            <span class="meta-value">{{ (keisan.issue_date|string)[:7] if keisan.issue_date else '-' }}</span>
+        </div>
+        <div class="meta-item">
+            <span class="meta-label">宛先</span>
+            <span class="meta-value">{{ keisan.recipient_name or current_user.display_name or current_user.username or '宛先未設定' }} 様</span>
+        </div>
+        <div class="meta-item">
+            <span class="meta-label">発行者</span>
+            <span class="meta-value">株式会社開花</span>
+        </div>
+        <div class="meta-item">
+            <span class="meta-label">クライアント番号</span>
+            <span class="meta-value">C-{{ "%03d"|format(keisan.user_id or current_user.id or 0) }}</span>
+        </div>
+        <div class="meta-item">
+            <span class="meta-label">書類区分</span>
+            <span class="meta-value">{{ keisan.subject or '計算書' }}</span>
+        </div>
+        <div class="meta-item">
+            <span class="meta-label">支払方法</span>
+            <span class="meta-value">指定口座振込</span>
+        </div>
+    </div>
+
+    {% if keisan.status == 'cancelled' %}
+    <div class="cancelled-document-box">
+        <strong>&#21462;&#28040;&#28168;&#12415;</strong>
+        <span>{{ keisan.cancel_reason or '-' }}</span>
+    </div>
+    {% endif %}
+
+    <div class="keisan-table-scroll">
+    <table class="keisan-items">
+        <thead>
+            <tr>
+                <th class="col-no">No.</th>
+                <th>項目</th>
+                <th class="col-qty">数量</th>
+                <th class="col-amount">金額</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <td class="text-center">{{ item.item_no or loop.index }}</td>
+                <td>{{ item.item_name }}</td>
+                <td class="text-center">{{ item.quantity or 1 }}</td>
+                <td class="text-right">¥{{ "{:,}".format(item.amount or 0) }}</td>
+            </tr>
+            {% endfor %}
+            {% for i in range(items|length, 2) %}
+            <tr class="empty-row">
+                <td>&nbsp;</td>
+                <td></td>
+                <td></td>
+                <td></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+
+    <div class="keisan-total-row">
+        <span>合計金額</span>
+        <strong>¥{{ "{:,}".format(keisan.total_amount or 0) }}</strong>
+    </div>
+
+    <div class="keisan-divider"></div>
+
+    <section class="keisan-notes">
+        <h2>備考</h2>
+        {% if keisan.notes %}
+        <p>{{ keisan.notes|replace('\n', '<br>')|safe }}</p>
+        {% else %}
+        <p>代行仕入れサービスの終了結果に基づき作成しています。</p>
+        {% endif %}
+    </section>
+
+    <div class="keisan-status-line">
+        <span>計算書番号 {{ keisan.document_no }}</span>
+    </div>
+</div>
+
+<style>
+.page-actions {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.btn {
+    display: inline-block;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    color: white;
+    font-size: 14px;
+    text-decoration: none;
+}
+
+.btn-primary { background: #10b981; }
+.btn-secondary { background: #64748b; }
+.btn-pdf { background: #dc3545; }
+.btn-danger { background: #dc3545; }
+
+.inline-delete-form {
+    margin: 0;
+    display: inline-flex;
+}
+
+.keisan-sheet {
+    max-width: 960px;
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 1180px;
+    margin: 0 auto;
+    padding: 72px 64px;
+    background: #fff;
+    color: #1f2937;
+    box-shadow: 0 8px 28px rgba(15, 23, 42, 0.1);
+    border: 1px solid #e5e7eb;
+    overflow: hidden;
+}
+
+.keisan-title {
+    margin: 0 0 34px;
+    text-align: center;
+    color: #111827;
+    font-size: 34px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+}
+
+.keisan-meta-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    column-gap: 56px;
+    row-gap: 22px;
+    margin-bottom: 28px;
+    font-size: 17px;
+}
+
+.meta-label {
+    margin-right: 8px;
+    color: #111827;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.meta-value {
+    color: #374151;
+    font-weight: 500;
+}
+
+.keisan-items {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+    font-size: 17px;
+}
+
+.cancelled-document-box {
+    display: grid;
+    gap: 0.45rem;
+    margin-bottom: 1rem;
+    padding: 0.85rem 1rem;
+    border: 1px solid #d1d5db;
+    border-radius: 10px;
+    background: #f3f4f6;
+    color: #374151;
+}
+
+.keisan-table-scroll {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.keisan-items th,
+.keisan-items td {
+    border: 2px solid #475569;
+    padding: 13px 14px;
+    vertical-align: middle;
+}
+
+.keisan-items th {
+    background: #f8fafc;
+    color: #111827;
+    font-weight: 800;
+    text-align: center;
+}
+
+.col-no { width: 84px; }
+.col-qty { width: 140px; }
+.col-amount { width: 190px; }
+
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+.empty-row td { height: 48px; }
+
+.keisan-total-row {
+    display: flex;
+    justify-content: flex-end;
+    align-items: baseline;
+    gap: 24px;
+    margin: 38px 0 20px;
+    color: #111827;
+}
+
+.keisan-total-row span {
+    font-size: 22px;
+    font-weight: 800;
+}
+
+.keisan-total-row strong {
+    font-size: 42px;
+    font-weight: 900;
+    letter-spacing: 0.02em;
+}
+
+.keisan-divider {
+    border-top: 1px solid #d1d5db;
+    margin: 0 0 28px;
+}
+
+.keisan-notes h2 {
+    margin: 0 0 22px;
+    font-size: 22px;
+    font-weight: 800;
+}
+
+.keisan-notes p {
+    margin: 0;
+    color: #374151;
+    font-size: 16px;
+    line-height: 1.9;
+}
+
+.keisan-status-line {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 42px;
+    color: #64748b;
+    font-size: 13px;
+}
+
+@media (max-width: 860px) {
+    .page-actions {
+        flex-wrap: wrap;
+    }
+
+    .keisan-sheet {
+        padding: 28px 16px;
+        min-height: 0;
+    }
+
+    .keisan-meta-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    .keisan-items {
+        min-width: 680px;
+        font-size: 14px;
+    }
+
+    .keisan-items th,
+    .keisan-items td {
+        padding: 9px 10px;
+        word-break: normal;
+        overflow-wrap: anywhere;
+    }
+
+    .keisan-total-row strong {
+        font-size: 32px;
+    }
+}
+</style>
+{% endblock %}

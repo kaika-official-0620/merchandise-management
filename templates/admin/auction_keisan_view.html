@@ -1,0 +1,329 @@
+{% extends "base.html" %}
+{% block title %}計算書詳細 - 株式会社 開花{% endblock %}
+
+{% block content %}
+{% include "admin/_document_detail_styles.html" %}
+<div class="admin-header">
+    <h1>計算書詳細</h1>
+    <div class="admin-nav">
+        <a href="{{ back_url }}" class="btn btn-secondary context-back-inline">← 処理送付へ戻る</a>
+        {% if can_edit_final_documents() %}
+        <a href="{{ url_for('admin_final_document_edit', document_kind='user_keisan', document_id=keisan.id) }}" class="btn btn-primary">&#20462;&#27491;</a>
+        {% endif %}
+        <a href="{{ url_for('user_keisan_download', id=keisan.id) }}" class="btn btn-download js-csv-download" download>CSV</a>
+        <a href="{{ url_for('admin_auction_keisan_pdf', id=keisan.id) }}" class="btn btn-pdf" target="_blank" rel="noopener">PDF</a>
+        {% if keisan.is_admin_created and keisan.status != 'submitted' and can_edit_final_documents() %}
+        <a href="{{ url_for('admin_auction_keisan_edit', id=keisan.id, next=next_url) if next_url else url_for('admin_auction_keisan_edit', id=keisan.id) }}" class="btn btn-primary">計算書を編集</a>
+        {% endif %}
+        {% if keisan.is_admin_created and keisan.status == 'completed' %}
+        <form action="{{ url_for('admin_auction_keisan_submit', id=keisan.id) }}" method="POST" style="display:inline;">
+            {% if next_url %}
+            <input type="hidden" name="next" value="{{ next_url }}">
+            {% endif %}
+            <button type="submit" class="btn btn-client-send" onclick="return confirm('このクライアントへ計算書を送付しますか？送付後に対象商品がユーザー商品へ反映されます。')">このクライアントに送付</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="keisan-sheet">
+    <h2 class="keisan-title">計算書</h2>
+
+    <div class="keisan-meta-grid">
+        <div class="meta-item">
+            <span class="meta-label">対象月</span>
+            <span class="meta-value">{{ (keisan.issue_date|string)[:7] if keisan.issue_date else '-' }}</span>
+        </div>
+        <div class="meta-item">
+            <span class="meta-label">宛先</span>
+            <span class="meta-value">{{ keisan.recipient_name or keisan.user_name or keisan.username or '宛先未設定' }} 様</span>
+        </div>
+        <div class="meta-item">
+            <span class="meta-label">発行者</span>
+            <span class="meta-value">株式会社開花</span>
+        </div>
+        <div class="meta-item">
+            <span class="meta-label">クライアント番号</span>
+            <span class="meta-value">C-{{ "%03d"|format(keisan.user_id or 0) }}</span>
+        </div>
+        <div class="meta-item">
+            <span class="meta-label">書類区分</span>
+            <span class="meta-value">計算書</span>
+        </div>
+        <div class="meta-item">
+            <span class="meta-label">支払方法</span>
+            <span class="meta-value">指定口座振込</span>
+        </div>
+    </div>
+
+    {% if keisan.status == 'cancelled' %}
+    <div class="final-doc-cancel-box is-cancelled">
+        <strong>&#21462;&#28040;&#28168;&#12415;</strong>
+        <span>{{ keisan.cancel_reason or '-' }}</span>
+    </div>
+    {% elif can_cancel_documents() %}
+    <div class="final-doc-cancel-box">
+        <strong>&#26360;&#39006;&#21462;&#28040;</strong>
+        <form method="POST" action="{{ url_for('admin_cancel_final_document', document_kind='user_keisan', document_id=keisan.id) }}" onsubmit="return confirm('&#12371;&#12398;&#26360;&#39006;&#12434;&#21462;&#28040;&#28168;&#12415;&#12395;&#12375;&#12414;&#12377;&#12363;&#65311;');">
+            <textarea name="reason" rows="3" required placeholder="&#21462;&#28040;&#29702;&#30001;"></textarea>
+            <button type="submit" class="btn btn-danger">&#21462;&#28040;&#12377;&#12427;</button>
+        </form>
+    </div>
+    {% endif %}
+
+    <table class="keisan-items">
+        <thead>
+            <tr>
+                <th class="col-no">No.</th>
+                <th>項目</th>
+                <th class="col-qty">数量</th>
+                <th class="col-amount">金額</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <td class="text-center">{{ item.item_no or loop.index }}</td>
+                <td>
+                    <div class="item-name">{{ item.item_name or item.source_product_name or '商品' }}</div>
+                    <div class="item-note">
+                        {{ keisan.auction_name_display }} / {{ keisan.sale_mode_label }}
+                        {% if keisan.auction_end_display and keisan.auction_end_display != '-' %}
+                        / 終了日時 {{ keisan.auction_end_display }}
+                        {% endif %}
+                    </div>
+                </td>
+                <td class="text-center">{{ item.quantity or 1 }}</td>
+                <td class="text-right">¥{{ "{:,}".format(item.amount or 0) }}</td>
+            </tr>
+            {% endfor %}
+            {% for i in range(items|length, 2) %}
+            <tr class="empty-row">
+                <td>&nbsp;</td>
+                <td></td>
+                <td></td>
+                <td></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="keisan-total-row">
+        <span>合計金額</span>
+        <strong>¥{{ "{:,}".format(keisan.total_amount or 0) }}</strong>
+    </div>
+
+    <div class="keisan-divider"></div>
+
+    <section class="keisan-notes">
+        <h3>備考</h3>
+        {% if keisan.notes %}
+        <p>{{ keisan.notes|replace('\n', '<br>')|safe }}</p>
+        {% else %}
+        <p>代行仕入れサービスの終了結果に基づき作成しています。計算書送付後、対象商品はクライアントの商品一覧へ反映されます。</p>
+        {% endif %}
+    </section>
+
+    {% set final_document_kind = 'user_keisan' %}
+    {% set final_document_id = keisan.id %}
+    {% include "admin/_final_document_event_history.html" %}
+
+    <div class="keisan-status-line">
+        <span>計算書番号 {{ keisan.document_no }}</span>
+    </div>
+</div>
+
+<style>
+.keisan-sheet {
+    max-width: 960px;
+    min-height: 1180px;
+    margin: 0 auto;
+    padding: 72px 64px;
+    background: #fff;
+    color: #1f2937;
+    box-shadow: 0 8px 28px rgba(15, 23, 42, 0.1);
+    border: 1px solid #e5e7eb;
+}
+
+.keisan-title {
+    margin: 0 0 34px;
+    text-align: center;
+    color: #111827;
+    font-size: 34px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+}
+
+.keisan-meta-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    column-gap: 56px;
+    row-gap: 22px;
+    margin-bottom: 28px;
+    font-size: 17px;
+}
+
+.final-doc-cancel-box {
+    display: grid;
+    gap: 0.65rem;
+    margin-bottom: 1rem;
+    padding: 0.9rem 1rem;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    background: #fff7f7;
+}
+
+.final-doc-cancel-box.is-cancelled {
+    border-color: #d1d5db;
+    background: #f3f4f6;
+}
+
+.final-doc-cancel-box form {
+    display: grid;
+    gap: 0.6rem;
+}
+
+.final-doc-cancel-box textarea {
+    width: 100%;
+    resize: vertical;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid #fca5a5;
+    border-radius: 8px;
+    font: inherit;
+}
+
+.meta-label {
+    margin-right: 8px;
+    color: #111827;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.meta-value {
+    color: #374151;
+    font-weight: 500;
+}
+
+.keisan-items {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+    font-size: 17px;
+}
+
+.keisan-items th,
+.keisan-items td {
+    border: 2px solid #475569;
+    padding: 13px 14px;
+    vertical-align: middle;
+}
+
+.keisan-items th {
+    background: #f8fafc;
+    color: #111827;
+    font-weight: 800;
+    text-align: center;
+}
+
+.col-no {
+    width: 84px;
+}
+
+.col-qty {
+    width: 140px;
+}
+
+.col-amount {
+    width: 190px;
+}
+
+.text-center {
+    text-align: center;
+}
+
+.text-right {
+    text-align: right;
+}
+
+.item-name {
+    font-weight: 700;
+}
+
+.item-note {
+    margin-top: 4px;
+    color: #64748b;
+    font-size: 12px;
+}
+
+.empty-row td {
+    height: 48px;
+}
+
+.keisan-total-row {
+    display: flex;
+    justify-content: flex-end;
+    align-items: baseline;
+    gap: 24px;
+    margin: 38px 0 20px;
+    color: #111827;
+}
+
+.keisan-total-row span {
+    font-size: 22px;
+    font-weight: 800;
+}
+
+.keisan-total-row strong {
+    font-size: 42px;
+    font-weight: 900;
+    letter-spacing: 0.02em;
+}
+
+.keisan-divider {
+    border-top: 1px solid #d1d5db;
+    margin: 0 0 28px;
+}
+
+.keisan-notes h3 {
+    margin: 0 0 22px;
+    font-size: 22px;
+    font-weight: 800;
+}
+
+.keisan-notes p {
+    margin: 0;
+    color: #374151;
+    font-size: 16px;
+    line-height: 1.9;
+}
+
+.keisan-status-line {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 42px;
+    color: #64748b;
+    font-size: 13px;
+}
+
+@media (max-width: 860px) {
+    .keisan-sheet {
+        padding: 36px 20px;
+        min-height: 0;
+        overflow-x: auto;
+    }
+
+    .keisan-meta-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    .keisan-items {
+        min-width: 760px;
+    }
+
+    .keisan-total-row strong {
+        font-size: 32px;
+    }
+}
+</style>
+{% endblock %}

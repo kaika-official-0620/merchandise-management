@@ -1,0 +1,1111 @@
+{% extends "base.html" %}
+
+{% block title %}{% if kaitori %}買取明細書編集{% else %}買取明細書作成{% endif %} - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <h1>{% if kaitori %}買取明細書編集{% else %}買取明細書作成{% endif %}</h1>
+    <a href="{{ back_url|default(url_for('admin_documents_dashboard', group='client_outgoing'), true) }}" class="btn btn-secondary">書類管理へ戻る</a>
+</div>
+
+<form method="POST" class="kaitori-form" id="admin-client-kaitori-form" enctype="multipart/form-data">
+    {% if source_request is defined and source_request %}
+    <input type="hidden" name="request_id" value="{{ source_request.id }}">
+    {% endif %}
+    <div class="form-section">
+        <h3>基本情報</h3>
+        <div class="form-grid">
+            <div class="form-group">
+                <label>No.</label>
+                <input type="text" name="document_no" value="{{ kaitori.invoice_no if kaitori else document_no }}" readonly class="form-control readonly">
+            </div>
+            <div class="form-group">
+                <label for="issue_date">発行日 *</label>
+                <input type="date" id="issue_date" name="issue_date" value="{{ kaitori.issue_date if kaitori else today }}" required class="form-control">
+            </div>
+            <div class="form-group">
+                <label for="tax_rate">消費税率</label>
+                <select id="tax_rate" name="tax_rate" class="form-control">
+                    <option value="10" {% if not kaitori or kaitori.tax_rate == 10 %}selected{% endif %}>10%（内税）</option>
+                    <option value="0" {% if kaitori and kaitori.tax_rate == 0 %}selected{% endif %}>0%（非課税）</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    {% if source_request is defined and source_request %}
+    <div class="form-section">
+        <h3>案件情報</h3>
+        <div class="attachment-info">
+            <p><strong>対象案件:</strong> {{ source_request.service_name }} / {{ source_request.client_name }} / 受付番号 {{ source_request.reception_number or source_request.id }}</p>
+            {% if source_vendor_kaitori is defined and source_vendor_kaitori %}
+            <p><strong>元になる業者明細:</strong> {{ source_vendor_kaitori.document_no or '-' }} の内容をもとに、ユーザー向け買取明細書を作成します。</p>
+            {% else %}
+            <p>業者側の回答確認後に、ユーザーへ送る最終的な買取明細書を作成する画面です。</p>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="form-section">
+        <h3>買取先（売主）情報</h3>
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="seller_id">登録ユーザーから選択</label>
+                <select id="seller_id" name="seller_id" class="form-control" onchange="loadUserProducts()">
+                    <option value="">-- ユーザーを選択 --</option>
+                    {% for user in users %}
+                    <option value="{{ user.id }}" {% if (kaitori and kaitori.seller_id == user.id) or (not kaitori and source_request is defined and source_request and source_request.user_id == user.id) %}selected{% endif %}>
+                        {{ user.display_name or user.username }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="seller_name">または直接入力</label>
+                <input type="text" id="seller_name" name="seller_name" value="{{ kaitori.seller_name if kaitori else '' }}" placeholder="氏名" class="form-control">
+            </div>
+            <div class="form-group">
+                <label for="seller_address">住所</label>
+                <input type="text" id="seller_address" name="seller_address" value="{{ kaitori.seller_address if kaitori else '' }}" placeholder="住所" class="form-control">
+            </div>
+            <div class="form-group">
+                <label for="seller_phone">電話番号</label>
+                <input type="text" id="seller_phone" name="seller_phone" value="{{ kaitori.seller_phone if kaitori else '' }}" placeholder="電話番号" class="form-control">
+            </div>
+        </div>
+    </div>
+
+    <div class="form-section">
+        <h3>添付書類</h3>
+        <div class="attachment-info">
+            <p>商品を選択すると、商品登録時に添付された身分証・同意書が自動で引き継がれます。</p>
+        </div>
+        <div class="form-grid attachment-grid">
+            <div class="form-group">
+                <label>身分証明書</label>
+                {% if kaitori and kaitori.id_document_path %}
+                <div class="current-file">
+                    <a href="{{ url_for('static', filename=kaitori.id_document_path) }}" target="_blank">添付済み（クリックで表示）</a>
+                </div>
+                {% else %}
+                <div class="no-file" id="id-doc-status">未添付（商品選択で自動取得）</div>
+                {% endif %}
+                <input type="file" id="id_document" name="id_document" class="form-control" accept="image/*,.pdf">
+                <small>または新しいファイルをアップロード</small>
+            </div>
+            <div class="form-group">
+                <label>同意書</label>
+                {% if kaitori and kaitori.consent_form_path %}
+                <div class="current-file">
+                    <a href="{{ url_for('static', filename=kaitori.consent_form_path) }}" target="_blank">添付済み（クリックで表示）</a>
+                </div>
+                {% else %}
+                <div class="no-file" id="consent-doc-status">未添付（商品選択で自動取得）</div>
+                {% endif %}
+                <input type="file" id="consent_form" name="consent_form" class="form-control" accept="image/*,.pdf">
+                <small>または新しいファイルをアップロード</small>
+            </div>
+        </div>
+    </div>
+
+    <div class="form-section">
+        <h3>業者書類の参考金額</h3>
+        <div class="attachment-info">
+            {% if source_vendor_kaitori is defined and source_vendor_kaitori %}
+            <p><strong>業者買取額（参考金額）:</strong> ¥{{ "{:,}".format(source_vendor_kaitori.vendor_amount or 0) }}</p>
+            <p><strong>顧客へ支払う金額:</strong> ¥{{ "{:,}".format(source_vendor_kaitori.customer_amount or 0) }}</p>
+            <p><strong>差額:</strong> ¥{{ "{:,}".format(source_vendor_kaitori.amount_difference or 0) }} / <strong>差額率:</strong> {{ source_vendor_kaitori.difference_rate or 0 }}%</p>
+            <p><strong>編集した管理者:</strong> {{ source_vendor_kaitori.editor_name or '-' }} / <strong>編集日時:</strong> {{ source_vendor_kaitori.edited_label or '-' }}</p>
+            {% else %}
+            <p>業者買取額は「業者関連書類登録」の参考金額を確認してください。顧客へ支払う金額は、下の明細の買取金額欄で管理者が入力・編集できます。</p>
+            <p>差額、差額率、編集した管理者、編集日時は、業者関連書類側で確認できます。</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="form-section">
+        <h3>買取商品</h3>
+        <div class="product-selector">
+            <label>登録商品から追加：</label>
+            <select id="sold-days-filter" class="form-control" style="max-width: 170px;">
+                <option value="">売却日: すべて</option>
+                <option value="7">直近7日以内</option>
+                <option value="30">直近30日以内</option>
+                <option value="90">直近90日以内</option>
+            </select>
+            <select id="product-select" class="form-control">
+                <option value="">-- ユーザーを選択してください --</option>
+            </select>
+            <button type="button" class="btn btn-info" id="add-product-btn">追加</button>
+        </div>
+        <div class="table-responsive">
+            <table class="items-table" id="items-table">
+                <thead>
+                    <tr>
+                        <th width="5%">No.</th>
+                        <th width="25%">商品名 *</th>
+                        <th width="12%">ブランド</th>
+                        <th width="12%">仕入れ日</th>
+                        <th width="12%">状態</th>
+                        <th width="14%">買取金額</th>
+                        <th width="14%">身分証/同意書</th>
+                        <th width="6%"></th>
+                    </tr>
+                </thead>
+                <tbody id="items-body">
+                    {% if items %}
+                        {% for item in items %}
+                        <tr class="item-row">
+                            <td class="item-no">{{ item.item_no }}</td>
+                            <td><input type="text" name="item_name[]" value="{{ item.product_name }}" class="form-control item-name" required></td>
+                            <td><input type="text" name="brand_name[]" value="{{ item.brand_name or '' }}" class="form-control"></td>
+                            <td><input type="date" name="purchase_date[]" value="{{ item.purchase_date or '' }}" class="form-control"></td>
+                            <td>
+                                <select name="item_condition[]" class="form-control">
+                                    <option value="">-</option>
+                                    <option value="N" {% if item.item_condition == 'N' %}selected{% endif %}>N</option>
+                                    <option value="S" {% if item.item_condition == 'S' %}selected{% endif %}>S</option>
+                                    <option value="A" {% if item.item_condition == 'A' %}selected{% endif %}>A</option>
+                                    <option value="AB" {% if item.item_condition == 'AB' %}selected{% endif %}>AB</option>
+                                    <option value="B" {% if item.item_condition == 'B' %}selected{% endif %}>B</option>
+                                </select>
+                            </td>
+                            <td><input type="number" name="amount[]" value="{{ item.amount }}" class="form-control item-amount-input" min="0"></td>
+                            <td class="doc-status">
+                                {% if item.has_id_doc %}○{% else %}×{% endif %}身分証 
+                                {% if item.has_consent %}○{% else %}×{% endif %}同意書
+                            </td>
+                            <td>
+                                <input type="hidden" name="merchandise_id[]" value="{{ item.merchandise_id or '' }}">
+                                <button type="button" class="btn btn-danger btn-sm remove-row">×</button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr class="item-row">
+                            <td class="item-no">1</td>
+                            <td><input type="text" name="item_name[]" class="form-control item-name"></td>
+                            <td><input type="text" name="brand_name[]" class="form-control"></td>
+                            <td><input type="date" name="purchase_date[]" class="form-control"></td>
+                            <td>
+                                <select name="item_condition[]" class="form-control">
+                                    <option value="">-</option>
+                                    <option value="N">N</option>
+                                    <option value="S">S</option>
+                                    <option value="A">A</option>
+                                    <option value="AB">AB</option>
+                                    <option value="B">B</option>
+                                </select>
+                            </td>
+                            <td><input type="number" name="amount[]" class="form-control item-amount-input" min="0"></td>
+                            <td class="doc-status">-</td>
+                            <td>
+                                <input type="hidden" name="merchandise_id[]" value="">
+                                <button type="button" class="btn btn-danger btn-sm remove-row">×</button>
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="8">
+                            <button type="button" class="btn btn-secondary" id="add-row">+ 行を追加</button>
+                        </td>
+                    </tr>
+                    <tr class="totals-row">
+                        <td colspan="4"></td>
+                        <td class="text-right"><strong>合計点数</strong></td>
+                        <td id="item-count">0 点</td>
+                        <td colspan="2"></td>
+                    </tr>
+                    <tr class="totals-row total-final">
+                        <td colspan="4"></td>
+                        <td class="text-right"><strong>買取合計</strong></td>
+                        <td id="total-amount">¥0</td>
+                        <td colspan="2"></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+
+    <div class="form-section">
+        <h3>備考</h3>
+        <div class="form-group">
+            <textarea name="notes" rows="3" class="form-control" placeholder="備考・特記事項">{{ kaitori.notes if kaitori else '' }}</textarea>
+        </div>
+    </div>
+
+    <div class="form-section preview-confirm-section">
+        <div>
+            <h3>書類プレビュー確認</h3>
+            <p>買取先・商品明細・添付状況を確認してから、顧客へ送付する買取明細書として保存します。</p>
+        </div>
+        <button type="button" class="btn btn-info" id="open-client-kaitori-preview-btn">プレビューを確認する</button>
+    </div>
+
+    <div class="form-actions">
+        <button type="submit" name="status" value="draft" class="btn btn-secondary">下書き保存</button>
+    </div>
+</form>
+
+<div class="document-preview-modal" id="client-kaitori-preview-modal" aria-hidden="true">
+    <div class="document-preview-backdrop" data-close-client-kaitori-preview></div>
+    <div class="document-preview-panel" role="dialog" aria-modal="true" aria-labelledby="client-kaitori-preview-title">
+        <div class="document-preview-toolbar">
+            <div>
+                <h3 id="client-kaitori-preview-title">買取明細書プレビュー</h3>
+                <p>内容に問題がなければ、顧客へ送付する買取明細書として保存してください。</p>
+            </div>
+            <button type="button" class="btn btn-secondary" data-close-client-kaitori-preview>閉じる</button>
+        </div>
+        <div class="preview-sheet">
+            <div class="preview-title">買取明細書</div>
+            <div class="preview-header">
+                <div>
+                    <div class="preview-recipient" id="client-preview-seller-name">-</div>
+                    <p class="preview-muted">下記内容で買取明細を作成します。</p>
+                </div>
+                <div class="preview-meta">
+                    <div>書類No.: <strong id="client-preview-document-no">-</strong></div>
+                    <div>発行日: <strong id="client-preview-issue-date">-</strong></div>
+                </div>
+            </div>
+            <div class="preview-info-grid">
+                <div><strong>住所</strong><span id="client-preview-seller-address">-</span></div>
+                <div><strong>電話番号</strong><span id="client-preview-seller-phone">-</span></div>
+            </div>
+            <div class="preview-total-box">
+                <span>買取合計</span>
+                <strong id="client-preview-total-amount">¥0</strong>
+            </div>
+            <table class="preview-items-table">
+                <thead>
+                    <tr>
+                        <th>No.</th>
+                        <th>商品名</th>
+                        <th>ブランド</th>
+                        <th>仕入れ日</th>
+                        <th>状態</th>
+                        <th>買取金額</th>
+                        <th>添付</th>
+                    </tr>
+                </thead>
+                <tbody id="client-preview-items-body"></tbody>
+            </table>
+            <div class="preview-notes">
+                <strong>備考</strong>
+                <div id="client-preview-notes">-</div>
+            </div>
+        </div>
+        <div class="document-preview-actions">
+            <button type="button" class="btn btn-secondary" data-close-client-kaitori-preview>修正する</button>
+            <button type="button" class="btn btn-primary" id="submit-client-kaitori-preview-btn">顧客へ送付として保存する</button>
+        </div>
+    </div>
+</div>
+
+<style>
+.kaitori-form {
+    max-width: 1100px;
+    margin: 0 auto;
+}
+
+.form-section {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.form-section h3 {
+    margin: 0 0 15px 0;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #e9ecef;
+    color: #333;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+}
+
+.attachment-grid {
+    grid-template-columns: repeat(2, 1fr);
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.form-group label {
+    font-weight: 500;
+    margin-bottom: 5px;
+    color: #555;
+}
+
+.form-control {
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.form-control.readonly {
+    background: #f5f5f5;
+    color: #666;
+}
+
+.attachment-info {
+    background: #e8f4f8;
+    padding: 12px 16px;
+    border-radius: 6px;
+    margin-bottom: 16px;
+}
+
+.attachment-info p {
+    margin: 0;
+    color: #0c5460;
+    font-size: 0.9rem;
+}
+
+.current-file {
+    background: #d4edda;
+    padding: 8px 12px;
+    border-radius: 4px;
+    margin-bottom: 8px;
+}
+
+.current-file a {
+    color: #155724;
+    text-decoration: none;
+}
+
+.no-file {
+    background: #f8f9fa;
+    padding: 8px 12px;
+    border-radius: 4px;
+    margin-bottom: 8px;
+    color: #6c757d;
+    font-size: 0.85rem;
+}
+
+.items-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+
+.items-table th,
+.items-table td {
+    padding: 8px;
+    border: 1px solid #ddd;
+    text-align: left;
+    font-size: 0.9rem;
+}
+
+.items-table th {
+    background: #f8f9fa;
+    font-weight: 500;
+}
+
+.items-table .form-control {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 6px 8px;
+}
+
+.doc-status {
+    font-size: 0.75rem;
+    white-space: nowrap;
+}
+
+.totals-row td {
+    border: none;
+    padding: 8px 10px;
+}
+
+.totals-row .text-right {
+    text-align: right;
+}
+
+.total-final td {
+    font-size: 18px;
+    color: #28a745;
+}
+
+.form-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+.btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    text-decoration: none;
+    display: inline-block;
+}
+
+.btn-primary { background: #007bff; color: white; }
+.btn-secondary { background: #6c757d; color: white; }
+.btn-danger { background: #dc3545; color: white; }
+.btn-info { background: #17a2b8; color: white; }
+.btn-sm { padding: 4px 8px; font-size: 12px; }
+
+.product-selector {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 15px;
+    padding: 15px;
+    background: #e8f4f8;
+    border-radius: 6px;
+}
+
+.product-selector label {
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.product-selector select {
+    flex: 1;
+    max-width: 400px;
+}
+
+.preview-confirm-section,
+.document-preview-toolbar,
+.document-preview-actions,
+.preview-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.preview-confirm-section {
+    align-items: center;
+}
+
+.preview-confirm-section p,
+.document-preview-toolbar p,
+.preview-muted {
+    margin: 0.35rem 0 0;
+    color: #64748b;
+    line-height: 1.7;
+}
+
+.document-preview-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    display: none;
+}
+
+.document-preview-modal.is-open {
+    display: block;
+}
+
+.document-preview-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.68);
+}
+
+.document-preview-panel {
+    position: relative;
+    z-index: 1;
+    width: min(1080px, calc(100% - 24px));
+    max-height: calc(100vh - 32px);
+    margin: 16px auto;
+    overflow: auto;
+    border-radius: 18px;
+    background: #f8fafc;
+    box-shadow: 0 24px 80px rgba(15, 23, 42, 0.28);
+}
+
+.document-preview-toolbar,
+.document-preview-actions {
+    align-items: center;
+    padding: 1rem 1.25rem;
+    background: #fff;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.document-preview-toolbar h3 {
+    margin: 0;
+}
+
+.document-preview-actions {
+    justify-content: flex-end;
+    border-top: 1px solid #e5e7eb;
+    border-bottom: 0;
+}
+
+.preview-sheet {
+    width: min(920px, calc(100% - 32px));
+    margin: 1.25rem auto;
+    padding: 2rem;
+    background: #fff;
+    border: 1px solid #d1d5db;
+}
+
+.preview-title {
+    text-align: center;
+    font-size: 1.45rem;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    margin-bottom: 1.4rem;
+}
+
+.preview-recipient {
+    display: inline-block;
+    padding-bottom: 0.25rem;
+    border-bottom: 1px solid #111827;
+    font-size: 1.1rem;
+    font-weight: 900;
+}
+
+.preview-meta {
+    min-width: 240px;
+    text-align: right;
+    line-height: 1.8;
+}
+
+.preview-info-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+    margin: 1rem 0;
+}
+
+.preview-info-grid div,
+.preview-notes {
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 0.75rem;
+    background: #f9fafb;
+}
+
+.preview-info-grid strong,
+.preview-notes strong {
+    display: block;
+    color: #111827;
+    margin-bottom: 0.35rem;
+}
+
+.preview-total-box {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 1rem 0;
+    padding: 1rem;
+    border: 2px solid #111827;
+}
+
+.preview-total-box strong {
+    color: #28a745;
+    font-size: 1.35rem;
+}
+
+.preview-items-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.86rem;
+}
+
+.preview-items-table th,
+.preview-items-table td {
+    padding: 0.5rem;
+    border: 1px solid #111827;
+}
+
+.preview-items-table th {
+    background: #f3f4f6;
+    text-align: center;
+}
+
+.preview-items-table .text-right {
+    text-align: right;
+}
+
+.preview-items-table .text-center {
+    text-align: center;
+}
+
+.preview-notes {
+    margin-top: 1rem;
+    white-space: pre-wrap;
+}
+
+/* スマホ対応 */
+@media (max-width: 768px) {
+    .kaitori-form {
+        max-width: 100%;
+    }
+    
+    .admin-header {
+        flex-direction: column;
+        gap: 0.5rem;
+        text-align: center;
+    }
+    
+    .admin-header h1 {
+        font-size: 1rem;
+    }
+    
+    .form-section {
+        padding: 10px;
+        margin-bottom: 10px;
+    }
+    
+    .form-section h3 {
+        font-size: 0.9rem;
+        margin-bottom: 8px;
+        padding-bottom: 6px;
+    }
+    
+    .form-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+    
+    .attachment-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .form-group label {
+        font-size: 0.75rem;
+        margin-bottom: 2px;
+    }
+    
+    .form-control {
+        padding: 6px;
+        font-size: 0.8rem;
+    }
+    
+    input[type="date"].form-control {
+        padding: 6px 8px;
+        font-size: 0.8rem;
+        min-width: 110px;
+        width: auto;
+        -webkit-appearance: none;
+        appearance: none;
+    }
+    
+    .attachment-info {
+        padding: 8px 10px;
+        margin-bottom: 10px;
+    }
+    
+    .attachment-info p {
+        font-size: 0.75rem;
+    }
+    
+    .current-file,
+    .no-file {
+        padding: 6px 8px;
+        font-size: 0.75rem;
+    }
+    
+    .form-group small {
+        font-size: 0.65rem;
+    }
+    
+    .table-responsive {
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .items-table {
+        min-width: 600px;
+    }
+    
+    .items-table th,
+    .items-table td {
+        padding: 4px 3px;
+        font-size: 0.7rem;
+    }
+    
+    .items-table th {
+        font-size: 0.65rem;
+    }
+    
+    .items-table .form-control {
+        padding: 4px 3px;
+        font-size: 0.7rem;
+    }
+    
+    .items-table input[type="date"].form-control {
+        padding: 4px 2px;
+        font-size: 0.7rem;
+        min-width: 85px;
+        width: 85px;
+    }
+    
+    .doc-status {
+        font-size: 0.6rem;
+    }
+    
+    .product-selector {
+        flex-wrap: wrap;
+        padding: 8px;
+        gap: 6px;
+    }
+    
+    .product-selector label {
+        flex: 1 1 100%;
+        font-size: 0.75rem;
+    }
+    
+    .product-selector select {
+        flex: 0 0 auto;
+        width: auto;
+        max-width: 120px;
+        font-size: 0.75rem;
+        padding: 6px;
+    }
+    
+    .product-selector .btn {
+        flex: 0 0 auto;
+        padding: 6px 10px;
+        font-size: 0.75rem;
+    }
+    
+    .totals-row td {
+        padding: 4px 6px;
+        font-size: 0.75rem;
+    }
+    
+    .total-final td {
+        font-size: 0.9rem;
+    }
+    
+    .form-actions {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .form-actions .btn {
+        width: 100%;
+        padding: 10px 16px;
+        font-size: 0.85rem;
+    }
+
+    .preview-confirm-section,
+    .document-preview-toolbar,
+    .document-preview-actions,
+    .preview-header {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .preview-confirm-section .btn,
+    .document-preview-actions .btn {
+        width: 100%;
+    }
+
+    .preview-sheet {
+        width: calc(100% - 16px);
+        padding: 1rem;
+    }
+
+    .preview-info-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .preview-meta {
+        min-width: 0;
+        text-align: left;
+    }
+    
+    .btn-sm {
+        padding: 2px 4px;
+        font-size: 0.6rem;
+    }
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const itemsBody = document.getElementById('items-body');
+    const addRowBtn = document.getElementById('add-row');
+    const productSelect = document.getElementById('product-select');
+    const soldDaysFilter = document.getElementById('sold-days-filter');
+    const addProductBtn = document.getElementById('add-product-btn');
+    const sellerSelect = document.getElementById('seller_id');
+    const form = document.getElementById('admin-client-kaitori-form');
+    const previewModal = document.getElementById('client-kaitori-preview-modal');
+    const openPreviewBtn = document.getElementById('open-client-kaitori-preview-btn');
+    const submitPreviewBtn = document.getElementById('submit-client-kaitori-preview-btn');
+    
+    let products = [];
+    
+    // 商品一覧を取得
+    window.loadUserProducts = async function() {
+        const userId = sellerSelect.value;
+        if (!userId) {
+            productSelect.innerHTML = '<option value="">-- ユーザーを選択してください --</option>';
+            return;
+        }
+        
+        try {
+            const params = new URLSearchParams();
+            params.append('user_id', userId);
+            params.append('exclude_used', '1');
+            if (soldDaysFilter.value) {
+                params.append('sold_days', soldDaysFilter.value);
+            }
+            const response = await fetch('/api/admin/products?' + params.toString());
+            products = await response.json();
+            updateProductSelect();
+        } catch (error) {
+            console.error('商品一覧の取得に失敗しました:', error);
+        }
+    };
+    
+    // 商品選択肢を更新
+    function updateProductSelect() {
+        productSelect.innerHTML = '<option value="">-- 商品を選択 --</option>';
+        products.forEach(product => {
+            const option = document.createElement('option');
+            option.value = JSON.stringify(product);
+            const hasIdDoc = product.id_document_path ? '○身分証' : '';
+            const hasConsent = product.consent_form_path ? '○同意書' : '';
+            option.textContent = `${product.product_name}${product.brand_name ? ' (' + product.brand_name + ')' : ''} - ¥${(product.purchase_price || 0).toLocaleString()} ${hasIdDoc} ${hasConsent}`;
+            productSelect.appendChild(option);
+        });
+    }
+    
+    // 初期ロード
+    if (sellerSelect.value) {
+        loadUserProducts();
+    }
+    soldDaysFilter.addEventListener('change', function() {
+        loadUserProducts();
+    });
+    
+    // 商品を追加
+    addProductBtn.addEventListener('click', function() {
+        if (!productSelect.value) return;
+        
+        const product = JSON.parse(productSelect.value);
+        addRow(product);
+        productSelect.value = '';
+        
+        // 身分証・同意書のステータスを更新
+        if (product.id_document_path) {
+            document.getElementById('id-doc-status').innerHTML = '○ 商品から取得済み';
+            document.getElementById('id-doc-status').className = 'current-file';
+        }
+        if (product.consent_form_path) {
+            document.getElementById('consent-doc-status').innerHTML = '○ 商品から取得済み';
+            document.getElementById('consent-doc-status').className = 'current-file';
+        }
+    });
+    
+    // 行を追加
+    function addRow(product = null) {
+        const rowCount = itemsBody.querySelectorAll('.item-row').length;
+        const newRow = document.createElement('tr');
+        newRow.className = 'item-row';
+        
+        const hasIdDoc = product && product.id_document_path;
+        const hasConsent = product && product.consent_form_path;
+        
+        newRow.innerHTML = `
+            <td class="item-no">${rowCount + 1}</td>
+            <td><input type="text" name="item_name[]" value="${product ? product.product_name : ''}" class="form-control item-name"></td>
+            <td><input type="text" name="brand_name[]" value="${product ? (product.brand_name || '') : ''}" class="form-control"></td>
+            <td><input type="date" name="purchase_date[]" value="${product ? (product.purchase_date || '') : ''}" class="form-control"></td>
+            <td>
+                <select name="item_condition[]" class="form-control">
+                    <option value="">-</option>
+                    <option value="N" ${product && product.item_condition === 'N' ? 'selected' : ''}>N</option>
+                    <option value="S" ${product && product.item_condition === 'S' ? 'selected' : ''}>S</option>
+                    <option value="A" ${product && product.item_condition === 'A' ? 'selected' : ''}>A</option>
+                    <option value="AB" ${product && product.item_condition === 'AB' ? 'selected' : ''}>AB</option>
+                    <option value="B" ${product && product.item_condition === 'B' ? 'selected' : ''}>B</option>
+                </select>
+            </td>
+            <td><input type="number" name="amount[]" value="${product ? (product.purchase_price || 0) : ''}" class="form-control item-amount-input" min="0"></td>
+            <td class="doc-status">${hasIdDoc ? '○' : '×'}身分証 ${hasConsent ? '○' : '×'}同意書</td>
+            <td>
+                <input type="hidden" name="merchandise_id[]" value="${product ? product.id : ''}">
+                <button type="button" class="btn btn-danger btn-sm remove-row">×</button>
+            </td>
+        `;
+        itemsBody.appendChild(newRow);
+        attachRowEvents(newRow);
+        renumberRows();
+        calculateTotals();
+    }
+    
+    addRowBtn.addEventListener('click', function() {
+        addRow();
+    });
+    
+    // 行を削除
+    function attachRowEvents(row) {
+        const removeBtn = row.querySelector('.remove-row');
+        const amountInput = row.querySelector('.item-amount-input');
+        
+        removeBtn.addEventListener('click', function() {
+            row.remove();
+            renumberRows();
+            calculateTotals();
+        });
+        
+        if (amountInput) {
+            amountInput.addEventListener('input', calculateTotals);
+        }
+    }
+    
+    // 行番号を振り直す
+    function renumberRows() {
+        const rows = itemsBody.querySelectorAll('.item-row');
+        rows.forEach((row, index) => {
+            row.querySelector('.item-no').textContent = index + 1;
+        });
+    }
+    
+    // 合計を計算
+    function calculateTotals() {
+        let total = 0;
+        let itemCount = 0;
+        const rows = itemsBody.querySelectorAll('.item-row');
+        rows.forEach(row => {
+            const amountInput = row.querySelector('.item-amount-input');
+            const nameInput = row.querySelector('.item-name');
+            if (amountInput) {
+                const amount = parseInt(amountInput.value) || 0;
+                total += amount;
+                if (nameInput && nameInput.value.trim()) {
+                    itemCount++;
+                }
+            }
+        });
+        
+        document.getElementById('item-count').textContent = itemCount + ' 点';
+        document.getElementById('total-amount').textContent = '¥' + total.toLocaleString();
+        return { total, itemCount };
+    }
+
+    function formatYen(value) {
+        return '¥' + Number(value || 0).toLocaleString('ja-JP');
+    }
+
+    function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, function(char) {
+            return {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            }[char];
+        });
+    }
+
+    function setPreviewText(id, value, fallback = '-') {
+        const target = document.getElementById(id);
+        if (target) {
+            target.textContent = value || fallback;
+        }
+    }
+
+    function collectPreviewItems() {
+        return Array.from(itemsBody.querySelectorAll('.item-row')).map((row, index) => {
+            const itemName = row.querySelector('input[name="item_name[]"]')?.value?.trim() || '';
+            const brandName = row.querySelector('input[name="brand_name[]"]')?.value?.trim() || '';
+            const purchaseDate = row.querySelector('input[name="purchase_date[]"]')?.value || '-';
+            const condition = row.querySelector('select[name="item_condition[]"]')?.value || '-';
+            const amount = Number(row.querySelector('input[name="amount[]"]')?.value || 0);
+            const docStatus = row.querySelector('.doc-status')?.textContent?.trim() || '-';
+            return { no: index + 1, itemName, brandName, purchaseDate, condition, amount, docStatus };
+        }).filter(item => item.itemName || item.amount > 0);
+    }
+
+    function renderPreview() {
+        const totals = calculateTotals();
+        const selectedSeller = sellerSelect.options[sellerSelect.selectedIndex]?.textContent?.trim() || '';
+        setPreviewText('client-preview-document-no', document.querySelector('input[name="document_no"]')?.value);
+        setPreviewText('client-preview-issue-date', document.getElementById('issue_date')?.value);
+        setPreviewText('client-preview-seller-name', document.getElementById('seller_name')?.value?.trim() || selectedSeller, '売主未入力');
+        setPreviewText('client-preview-seller-address', document.getElementById('seller_address')?.value?.trim());
+        setPreviewText('client-preview-seller-phone', document.getElementById('seller_phone')?.value?.trim());
+        setPreviewText('client-preview-total-amount', formatYen(totals.total));
+        setPreviewText('client-preview-notes', document.querySelector('textarea[name="notes"]')?.value?.trim());
+
+        const previewBody = document.getElementById('client-preview-items-body');
+        previewBody.innerHTML = '';
+        const items = collectPreviewItems();
+        const rows = items.length ? items : [{ no: 1, itemName: '明細未入力', brandName: '-', purchaseDate: '-', condition: '-', amount: 0, docStatus: '-' }];
+        rows.forEach(item => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="text-center">${item.no}</td>
+                <td>${escapeHtml(item.itemName)}</td>
+                <td>${escapeHtml(item.brandName || '-')}</td>
+                <td>${escapeHtml(item.purchaseDate || '-')}</td>
+                <td>${escapeHtml(item.condition || '-')}</td>
+                <td class="text-right">${formatYen(item.amount)}</td>
+                <td>${escapeHtml(item.docStatus || '-')}</td>
+            `;
+            previewBody.appendChild(tr);
+        });
+    }
+
+    function openPreview() {
+        if (!form.reportValidity()) {
+            return;
+        }
+        renderPreview();
+        previewModal.classList.add('is-open');
+        previewModal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closePreview() {
+        previewModal.classList.remove('is-open');
+        previewModal.setAttribute('aria-hidden', 'true');
+    }
+
+    function submitFromPreview() {
+        form.querySelectorAll('input[name="status"][type="hidden"]').forEach(input => input.remove());
+        const statusInput = document.createElement('input');
+        statusInput.type = 'hidden';
+        statusInput.name = 'status';
+        statusInput.value = 'completed';
+        form.appendChild(statusInput);
+        form.submit();
+    }
+    
+    // 既存の行にイベントを付与
+    document.querySelectorAll('.item-row').forEach(row => {
+        attachRowEvents(row);
+    });
+
+    openPreviewBtn.addEventListener('click', openPreview);
+    submitPreviewBtn.addEventListener('click', submitFromPreview);
+    previewModal.querySelectorAll('[data-close-client-kaitori-preview]').forEach(button => {
+        button.addEventListener('click', closePreview);
+    });
+    document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape' && previewModal.classList.contains('is-open')) {
+            closePreview();
+        }
+    });
+    
+    // 初期計算
+    calculateTotals();
+});
+</script>
+{% endblock %}

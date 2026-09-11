@@ -1,0 +1,1009 @@
+{% extends "base.html" %}
+{% block title %}
+{% if is_admin_report_view %}
+    {% if selected_client_name %}{{ selected_client_name }} のレポート{% else %}クライアントレポート{% endif %} - 株式会社開花
+{% else %}
+    レポート・CSV - 株式会社開花
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="reports-page" data-report-client-id="{{ selected_client_id if is_admin_report_view and selected_client_id else '' }}">
+    <div class="page-header">
+        <div>
+            {% if is_admin_report_view %}
+                {% if selected_client_name %}
+                <h1>{{ selected_client_name }} のレポート</h1>
+                <p class="page-desc">売上推移や平均販売日数の分析と、売上・仕入・手数料・在庫のCSV・PDF出力を、このクライアント単位で確認できます。</p>
+                {% else %}
+                <h1>クライアントレポート</h1>
+                <p class="page-desc">クライアント名からレポートを開くと、各クライアントの売上推移・分析と、CSV・PDF出力を確認できます。</p>
+                {% endif %}
+            {% else %}
+            <h1>レポート・CSV</h1>
+            <p class="page-desc">売上推移や平均販売日数の分析と、売上・仕入・手数料・在庫のCSV・PDF出力をまとめています。</p>
+            {% endif %}
+        </div>
+        <div class="page-header-actions">
+            {% if is_admin_report_view and selected_client_id %}
+            <a href="{{ url_for('reports') }}" class="report-link-button report-link-button--subtle">クライアント一覧へ戻る</a>
+            <a href="{{ url_for('user_analytics', client_id=selected_client_id, from_client_reports=1) }}" class="report-link-button">各クライアント売上分析を見る</a>
+            {% elif is_admin_report_view %}
+            <a href="{{ url_for('client_analytics_reports') }}" class="report-link-button">各クライアント売上分析を見る</a>
+            {% else %}
+            <a href="{{ url_for('user_analytics') }}" class="report-link-button">売上分析を見る</a>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if is_admin_report_view and show_client_list %}
+    <section class="report-section">
+        <div class="section-header">
+            <h2>クライアント一覧</h2>
+            <p>「レポートを見る」から、そのクライアントの売上推移・分析と各CSV・PDFに進めます。</p>
+        </div>
+
+        {% if report_clients %}
+        <div class="report-table-shell">
+            <div class="report-table-wrapper report-table-wrapper--static">
+                <div class="report-table-track report-table-track--fit">
+                    <table class="report-table report-table--clients">
+                        <thead>
+                            <tr>
+                                <th>クライアント名</th>
+                                <th>ユーザー名</th>
+                                <th class="text-right">商品数</th>
+                                <th class="text-center">レポート</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for client in report_clients %}
+                            <tr>
+                                <td>{{ client.display_name }}</td>
+                                <td>{{ client.username }}</td>
+                                <td class="text-right">{{ client.item_count }}</td>
+                                <td class="text-center">
+                                    <a href="{{ url_for('reports', client_id=client.id) }}" class="client-report-link">レポートを見る</a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="empty-state">表示できるクライアントがまだありません。</div>
+        {% endif %}
+    </section>
+    {% else %}
+        {% if is_admin_report_view and selected_client_name %}
+        <section class="selected-client-panel">
+            <span class="selected-client-chip">対象クライアント</span>
+            <strong>{{ selected_client_name }}</strong>
+        </section>
+        {% endif %}
+
+        <section class="report-section">
+            <div class="section-header">
+                <h2>売上推移・分析</h2>
+                <p>年次は年だけ、月次は年と月を選びながら、売上推移と在庫回転分析を確認できます。</p>
+            </div>
+            <div class="report-grid">
+                {% for card in management_cards %}
+                <article class="report-card" data-report-type="{{ card.type }}">
+                    <div class="report-card-head">
+                        <h3>{{ card.title }}</h3>
+                        <p>{{ card.description }}</p>
+                    </div>
+                    <div class="report-controls">
+                        {% if 'aggregation' in card.filters %}
+                        <label class="report-control" data-control="aggregation">
+                            <span>集計単位</span>
+                            <select class="report-select" data-filter="aggregation">
+                                <option value="yearly">年次</option>
+                                <option value="monthly">月次</option>
+                            </select>
+                        </label>
+                        {% endif %}
+                        {% if 'year' in card.filters %}
+                        <label class="report-control" data-control="year">
+                            <span>年</span>
+                            <select class="report-select" data-filter="year">
+                                {% for y in years %}
+                                <option value="{{ y }}" {% if y == current_year %}selected{% endif %}>{{ y }}年</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                        {% endif %}
+                        {% if 'month' in card.filters %}
+                        <label class="report-control" data-control="month" {% if 'aggregation' in card.filters %}hidden{% endif %}>
+                            <span>月</span>
+                            <select class="report-select" data-filter="month">
+                                {% for m in range(1, 13) %}
+                                <option value="{{ m }}" {% if m == current_month %}selected{% endif %}>{{ m }}月</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                        {% endif %}
+                    </div>
+                    <div class="report-actions">
+                        <button type="button" class="btn btn-info" data-action="preview">プレビュー</button>
+                        <button type="button" class="btn btn-secondary" data-action="csv">CSV</button>
+                        <button type="button" class="btn btn-primary" data-action="pdf">PDF</button>
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section class="report-section">
+            <div class="section-header">
+                <h2>各項目ごと</h2>
+                <p>売上、仕入、在庫、手数料の各一覧も、年次は年だけ、月次は年と月を選んで出力できます。</p>
+            </div>
+            <div class="report-grid">
+                {% for card in export_cards %}
+                <article class="report-card" data-report-type="{{ card.type }}">
+                    <div class="report-card-head">
+                        <h3>{{ card.title }}</h3>
+                        <p>{{ card.description }}</p>
+                    </div>
+                    <div class="report-controls">
+                        {% if 'aggregation' in card.filters %}
+                        <label class="report-control" data-control="aggregation">
+                            <span>集計単位</span>
+                            <select class="report-select" data-filter="aggregation">
+                                <option value="yearly">年次</option>
+                                <option value="monthly">月次</option>
+                            </select>
+                        </label>
+                        {% endif %}
+                        {% if 'year' in card.filters %}
+                        <label class="report-control" data-control="year">
+                            <span>年</span>
+                            <select class="report-select" data-filter="year">
+                                {% for y in years %}
+                                <option value="{{ y }}" {% if y == current_year %}selected{% endif %}>{{ y }}年</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                        {% endif %}
+                        {% if 'month' in card.filters %}
+                        <label class="report-control" data-control="month" {% if 'aggregation' in card.filters %}hidden{% endif %}>
+                            <span>月</span>
+                            <select class="report-select" data-filter="month">
+                                {% for m in range(1, 13) %}
+                                <option value="{{ m }}" {% if m == current_month %}selected{% endif %}>{{ m }}月</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                        {% endif %}
+                    </div>
+                    <div class="report-actions">
+                        <button type="button" class="btn btn-info" data-action="preview">プレビュー</button>
+                        <button type="button" class="btn btn-secondary" data-action="csv">CSV</button>
+                        <button type="button" class="btn btn-primary" data-action="pdf">PDF</button>
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+        </section>
+    {% endif %}
+</div>
+
+<div class="report-modal" id="reportModal">
+    <div class="report-modal-overlay"></div>
+    <div class="report-modal-content" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+        <div class="report-modal-header">
+            <div>
+                <h2 id="modalTitle">レポートプレビュー</h2>
+                <p id="modalDescription" class="modal-description"></p>
+            </div>
+            <button type="button" class="report-modal-close" id="closeReportModalBtn" aria-label="閉じる">×</button>
+        </div>
+        <div class="report-modal-body" id="modalBody">
+            <div class="loading">読み込み中...</div>
+        </div>
+        <div class="report-modal-footer">
+            <button type="button" class="btn btn-light" id="cancelReportModalBtn">閉じる</button>
+            <button type="button" id="downloadCsvBtn" class="btn btn-secondary">CSV</button>
+            <button type="button" id="downloadPdfBtn" class="btn btn-primary">PDF</button>
+        </div>
+    </div>
+</div>
+
+<style>
+.reports-page {
+    display: grid;
+    gap: 1.5rem;
+}
+
+.page-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.page-header h1 {
+    margin: 0 0 0.45rem;
+    color: #0f172a;
+    font-size: 1.8rem;
+}
+
+.page-desc {
+    margin: 0;
+    color: #64748b;
+    line-height: 1.75;
+}
+
+.page-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.report-link-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.82rem 1rem;
+    border-radius: 999px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1d4ed8;
+    font-weight: 700;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.report-link-button--subtle {
+    background: #fff;
+    border-color: #cbd5e1;
+    color: #334155;
+}
+
+.selected-client-panel {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.65rem;
+    width: fit-content;
+    padding: 0.85rem 1rem;
+    border-radius: 14px;
+    border: 1px solid #dbeafe;
+    background: #f8fbff;
+    color: #0f172a;
+}
+
+.selected-client-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.28rem 0.65rem;
+    border-radius: 999px;
+    background: #dbeafe;
+    color: #1d4ed8;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.report-section {
+    display: grid;
+    gap: 1rem;
+}
+
+.section-header h2 {
+    margin: 0;
+    color: #0f172a;
+    font-size: 1.2rem;
+}
+
+.section-header p {
+    margin: 0.35rem 0 0;
+    color: #64748b;
+    line-height: 1.75;
+}
+
+.report-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1rem;
+}
+
+.report-card {
+    display: grid;
+    gap: 1rem;
+    padding: 1.2rem;
+    border-radius: 18px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+    min-width: 0;
+}
+
+.report-card-head h3 {
+    margin: 0 0 0.5rem;
+    color: #0f172a;
+    font-size: 1.05rem;
+}
+
+.report-card-head p {
+    margin: 0;
+    color: #64748b;
+    line-height: 1.7;
+    min-height: 3.4rem;
+}
+
+.report-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.report-control {
+    display: grid;
+    gap: 0.35rem;
+    flex: 1 1 120px;
+}
+
+.report-control[hidden],
+.report-control.report-control--hidden {
+    display: none !important;
+}
+
+.report-control span {
+    color: #64748b;
+    font-size: 0.82rem;
+}
+
+.report-select {
+    width: 100%;
+    padding: 0.72rem 0.85rem;
+    border-radius: 10px;
+    border: 1px solid #d1d5db;
+    background: #fff;
+    color: #0f172a;
+    font-size: 0.92rem;
+}
+
+.report-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+}
+
+.btn {
+    padding: 0.7rem 1rem;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 0.88rem;
+    font-weight: 700;
+}
+
+.btn-primary {
+    background: #2563eb;
+    color: #fff;
+}
+
+.btn-secondary {
+    background: #64748b;
+    color: #fff;
+}
+
+.btn-info {
+    background: #0f766e;
+    color: #fff;
+}
+
+.btn-light {
+    background: #e2e8f0;
+    color: #0f172a;
+}
+
+.report-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+}
+
+.report-modal.open {
+    display: block;
+}
+
+.report-modal-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.6);
+}
+
+.report-modal-content {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(1120px, 94vw);
+    max-height: 92vh;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border-radius: 18px;
+    overflow: hidden;
+    box-shadow: 0 26px 60px rgba(15, 23, 42, 0.24);
+}
+
+.report-modal-header,
+.report-modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+}
+
+.report-modal-header {
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.report-modal-footer {
+    justify-content: flex-end;
+    border-top: 1px solid #e2e8f0;
+}
+
+.report-modal-header h2 {
+    margin: 0;
+    color: #0f172a;
+    font-size: 1.15rem;
+}
+
+.modal-description {
+    margin: 0.35rem 0 0;
+    color: #64748b;
+    font-size: 0.9rem;
+    line-height: 1.7;
+}
+
+.report-modal-close {
+    border: none;
+    background: transparent;
+    color: #64748b;
+    font-size: 1.5rem;
+    cursor: pointer;
+}
+
+.report-modal-body {
+    flex: 1;
+    overflow: auto;
+    padding: 1.25rem;
+    background: #f8fafc;
+}
+
+.loading,
+.empty-state,
+.error-state {
+    padding: 2.25rem 1rem;
+    text-align: center;
+    color: #64748b;
+}
+
+.error-state {
+    color: #b91c1c;
+}
+
+.report-preview {
+    display: grid;
+    gap: 1rem;
+}
+
+.report-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.8rem;
+}
+
+.summary-item {
+    padding: 0.95rem 1rem;
+    border-radius: 14px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+}
+
+.summary-label {
+    display: block;
+    margin-bottom: 0.35rem;
+    color: #64748b;
+    font-size: 0.8rem;
+}
+
+.summary-value {
+    color: #0f172a;
+    font-size: 1.05rem;
+    font-weight: 700;
+}
+
+.report-notes {
+    display: grid;
+    gap: 0.7rem;
+}
+
+.report-notes summary {
+    list-style: none;
+}
+
+.report-notes summary::-webkit-details-marker {
+    display: none;
+}
+
+.report-notes-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    width: fit-content;
+    padding: 0.45rem 0.8rem;
+    border-radius: 999px;
+    border: 1px solid #bfdbfe;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.report-notes-toggle::after {
+    content: '＋';
+    font-size: 0.9rem;
+    line-height: 1;
+}
+
+.report-notes[open] .report-notes-toggle::after {
+    content: '－';
+}
+
+.report-notes-content {
+    padding: 0.95rem 1rem;
+    border-radius: 14px;
+    border: 1px solid #dbeafe;
+    background: #fff;
+}
+
+.report-notes-content ul {
+    margin: 0;
+    padding-left: 1.1rem;
+    color: #334155;
+    line-height: 1.7;
+}
+
+.report-table-shell {
+    display: grid;
+    gap: 0.55rem;
+}
+
+.report-table-scroll-note {
+    color: #64748b;
+    font-size: 0.82rem;
+}
+
+.report-table-wrapper {
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    cursor: grab;
+    overscroll-behavior-x: contain;
+    scrollbar-gutter: stable both-edges;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 0.15rem;
+}
+
+.report-table-wrapper--static {
+    cursor: default;
+}
+
+.report-table-track {
+    display: inline-block;
+    min-width: 100%;
+    padding-right: 1.25rem;
+    box-sizing: border-box;
+}
+
+.report-table-track--fit {
+    padding-right: 0;
+}
+
+.report-table {
+    width: 100%;
+    min-width: 760px;
+    border-collapse: collapse;
+}
+
+.report-table--clients {
+    min-width: 620px;
+}
+
+.report-table th,
+.report-table td {
+    padding: 0.85rem 0.9rem;
+    border-bottom: 1px solid #e2e8f0;
+    font-size: 0.9rem;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+.report-table thead th {
+    position: sticky;
+    top: 0;
+    background: #f8fafc;
+    color: #475569;
+    font-weight: 700;
+    z-index: 1;
+}
+
+.report-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.report-table-wrapper.dragging {
+    cursor: grabbing;
+    user-select: none;
+}
+
+.client-report-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 112px;
+    padding: 0.55rem 0.85rem;
+    border-radius: 999px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1d4ed8;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.text-right {
+    text-align: right;
+}
+
+.text-center {
+    text-align: center;
+}
+
+@media (max-width: 900px) {
+    .page-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .page-header-actions {
+        justify-content: flex-start;
+    }
+
+    .report-link-button {
+        width: fit-content;
+    }
+}
+
+@media (max-width: 768px) {
+    .report-summary {
+        grid-template-columns: 1fr;
+    }
+
+    .report-modal-content {
+        width: 96vw;
+        max-height: 94vh;
+    }
+
+    .report-modal-header,
+    .report-modal-footer {
+        padding: 0.9rem 1rem;
+    }
+
+    .report-modal-body {
+        padding: 1rem;
+    }
+}
+</style>
+
+<script>
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function getReportPage() {
+    return document.querySelector('.reports-page');
+}
+
+function collectCardParams(card) {
+    const params = {};
+    const aggregationInput = card.querySelector('[data-filter="aggregation"]');
+    const aggregationValue = aggregationInput ? aggregationInput.value : '';
+    card.querySelectorAll('[data-filter]').forEach((input) => {
+        if (input.dataset.filter === 'month' && aggregationValue === 'yearly') {
+            params[input.dataset.filter] = '0';
+            return;
+        }
+        params[input.dataset.filter] = input.value;
+    });
+
+    const reportPage = getReportPage();
+    const clientId = reportPage ? reportPage.dataset.reportClientId : '';
+    if (clientId) {
+        params.client_id = clientId;
+    }
+    return params;
+}
+
+function getQueryString(params) {
+    return new URLSearchParams(params).toString();
+}
+
+function openReportModal(type, params) {
+    const modal = document.getElementById('reportModal');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalDescription = document.getElementById('modalDescription');
+    const modalBody = document.getElementById('modalBody');
+    const downloadCsvBtn = document.getElementById('downloadCsvBtn');
+    const downloadPdfBtn = document.getElementById('downloadPdfBtn');
+    const queryString = getQueryString(params);
+    const requestUrl = queryString ? `/api/report-v2/${type}?${queryString}` : `/api/report-v2/${type}`;
+
+    modalTitle.textContent = 'レポートプレビュー';
+    modalDescription.textContent = '';
+    modalBody.innerHTML = '<div class="loading">読み込み中...</div>';
+    downloadCsvBtn.onclick = () => downloadReport(type, params, 'csv');
+    downloadPdfBtn.onclick = () => downloadReport(type, params, 'pdf');
+    modal.classList.add('open');
+
+    fetch(requestUrl)
+        .then((response) => {
+            if (!response.ok) {
+                throw new Error('レポートの読み込みに失敗しました。');
+            }
+            return response.json();
+        })
+        .then((data) => {
+            modalTitle.textContent = data.title || 'レポートプレビュー';
+            modalDescription.textContent = data.description || '';
+            modalBody.innerHTML = renderReportPreview(data);
+            setupReportTableInteractions(modalBody);
+        })
+        .catch((error) => {
+            modalBody.innerHTML = `<div class="error-state">${escapeHtml(error.message)}</div>`;
+        });
+}
+
+function closeReportModal() {
+    document.getElementById('reportModal').classList.remove('open');
+}
+
+function downloadReport(type, params, formatType = 'csv') {
+    const queryString = getQueryString({ ...params, format: formatType });
+    window.location.href = queryString
+        ? `/api/report-v2/${type}/download?${queryString}`
+        : `/api/report-v2/${type}/download`;
+}
+
+function renderReportPreview(report) {
+    const summaryHtml = Array.isArray(report.summary) && report.summary.length
+        ? `
+            <div class="report-summary">
+                ${report.summary.map((item) => `
+                    <div class="summary-item">
+                        <span class="summary-label">${escapeHtml(item.label)}</span>
+                        <span class="summary-value">${escapeHtml(item.value)}</span>
+                    </div>
+                `).join('')}
+            </div>
+        `
+        : '';
+
+    const notesHtml = Array.isArray(report.notes) && report.notes.length
+        ? `
+            <details class="report-notes">
+                <summary class="report-notes-toggle">確認ポイント</summary>
+                <div class="report-notes-content">
+                    <ul>
+                        ${report.notes.map((note) => `<li>${escapeHtml(note)}</li>`).join('')}
+                    </ul>
+                </div>
+            </details>
+        `
+        : '';
+
+    const tableHtml = renderReportTable(
+        report.columns || [],
+        report.rows || [],
+        report.empty_message || 'データがありません。'
+    );
+
+    return `
+        <div class="report-preview">
+            ${summaryHtml}
+            ${notesHtml}
+            ${tableHtml}
+        </div>
+    `;
+}
+
+function renderReportTable(columns, rows, emptyText) {
+    if (!columns.length) {
+        return rows.length ? '' : `<div class="empty-state">${escapeHtml(emptyText)}</div>`;
+    }
+
+    if (!rows.length) {
+        return `<div class="empty-state">${escapeHtml(emptyText)}</div>`;
+    }
+
+    const minWidth = `${Math.max(columns.length * 150, 820)}px`;
+
+    return `
+        <div class="report-table-shell">
+            <div class="report-table-scroll-note">左右へドラッグして確認できます。</div>
+            <div class="report-table-wrapper" data-draggable-scroll="true">
+                <div class="report-table-track" style="min-width: max(100%, ${minWidth});">
+                    <table class="report-table">
+                        <thead>
+                            <tr>
+                                ${columns.map((column) => `
+                                    <th class="${column.align === 'right' ? 'text-right' : column.align === 'center' ? 'text-center' : ''}">
+                                        ${escapeHtml(column.label)}
+                                    </th>
+                                `).join('')}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows.map((row) => `
+                                <tr>
+                                    ${row.map((cell, index) => {
+                                        const align = columns[index] && columns[index].align ? columns[index].align : 'left';
+                                        const className = align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : '';
+                                        return `<td class="${className}">${escapeHtml(cell)}</td>`;
+                                    }).join('')}
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function enableDraggableTable(wrapper) {
+    if (!wrapper || wrapper.dataset.dragReady === '1') {
+        return;
+    }
+
+    wrapper.dataset.dragReady = '1';
+
+    let isDragging = false;
+    let startX = 0;
+    let startScrollLeft = 0;
+
+    wrapper.addEventListener('pointerdown', (event) => {
+        if (wrapper.scrollWidth <= wrapper.clientWidth) {
+            return;
+        }
+        isDragging = true;
+        startX = event.clientX;
+        startScrollLeft = wrapper.scrollLeft;
+        wrapper.classList.add('dragging');
+        if (wrapper.setPointerCapture) {
+            wrapper.setPointerCapture(event.pointerId);
+        }
+    });
+
+    wrapper.addEventListener('pointermove', (event) => {
+        if (!isDragging) {
+            return;
+        }
+        wrapper.scrollLeft = startScrollLeft - (event.clientX - startX);
+    });
+
+    const stopDragging = (event) => {
+        if (!isDragging) {
+            return;
+        }
+        isDragging = false;
+        wrapper.classList.remove('dragging');
+        if (event && wrapper.releasePointerCapture && wrapper.hasPointerCapture && wrapper.hasPointerCapture(event.pointerId)) {
+            wrapper.releasePointerCapture(event.pointerId);
+        }
+    };
+
+    wrapper.addEventListener('pointerup', stopDragging);
+    wrapper.addEventListener('pointercancel', stopDragging);
+    wrapper.addEventListener('pointerleave', stopDragging);
+}
+
+function setupReportTableInteractions(scope) {
+    scope.querySelectorAll('[data-draggable-scroll="true"]').forEach((wrapper) => {
+        enableDraggableTable(wrapper);
+    });
+}
+
+function syncReportCardFilters(card) {
+    const aggregationSelect = card.querySelector('[data-filter="aggregation"]');
+    if (!aggregationSelect) {
+        return;
+    }
+
+    const isYearly = aggregationSelect.value === 'yearly';
+    const yearInput = card.querySelector('[data-filter="year"]');
+    const monthInput = card.querySelector('[data-filter="month"]');
+    const monthControl = card.querySelector('[data-control="month"]');
+
+    if (yearInput) {
+        yearInput.disabled = false;
+    }
+
+    if (monthInput) {
+        monthInput.disabled = isYearly;
+        if (!isYearly && (!monthInput.value || monthInput.value === '0')) {
+            const currentMonthOption = monthInput.querySelector('option[selected]') || monthInput.querySelector('option');
+            if (currentMonthOption) {
+                monthInput.value = currentMonthOption.value;
+            }
+        }
+    }
+
+    if (monthControl) {
+        monthControl.hidden = isYearly;
+        monthControl.classList.toggle('report-control--hidden', isYearly);
+        monthControl.style.display = isYearly ? 'none' : '';
+    }
+}
+
+document.querySelectorAll('.report-card').forEach((card) => {
+    const type = card.dataset.reportType;
+    const previewButton = card.querySelector('[data-action="preview"]');
+    const csvButton = card.querySelector('[data-action="csv"]');
+    const pdfButton = card.querySelector('[data-action="pdf"]');
+    const aggregationSelect = card.querySelector('[data-filter="aggregation"]');
+
+    syncReportCardFilters(card);
+
+    if (aggregationSelect) {
+        aggregationSelect.addEventListener('change', () => {
+            syncReportCardFilters(card);
+        });
+    }
+
+    if (previewButton) {
+        previewButton.addEventListener('click', () => {
+            openReportModal(type, collectCardParams(card));
+        });
+    }
+
+    if (csvButton) {
+        csvButton.addEventListener('click', () => {
+            downloadReport(type, collectCardParams(card), 'csv');
+        });
+    }
+
+    if (pdfButton) {
+        pdfButton.addEventListener('click', () => {
+            downloadReport(type, collectCardParams(card), 'pdf');
+        });
+    }
+});
+
+document.getElementById('closeReportModalBtn').addEventListener('click', closeReportModal);
+document.getElementById('cancelReportModalBtn').addEventListener('click', closeReportModal);
+document.querySelector('.report-modal-overlay').addEventListener('click', closeReportModal);
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+        closeReportModal();
+    }
+});
+</script>
+{% endblock %}

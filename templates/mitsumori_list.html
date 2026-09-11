@@ -1,0 +1,296 @@
+{% extends "base.html" %}
+
+{% block title %}見積り依頼書一覧 - 株式会社 開花{% endblock %}
+
+{% block content %}
+{% set current_return_url = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path %}
+{% set pending_mitsumori_count = pending_mitsumori_from_invoices|default([])|length %}
+<div class="mitsumori-list-page">
+    <div class="page-header">
+        <div>
+            <h1>作成中の見積依頼書</h1>
+            <p class="page-subtitle">下書き保存中の見積依頼書だけを表示します。作成完了した書類は書類履歴へ移動します。</p>
+        </div>
+        <div class="header-actions">
+            <a href="{{ url_for('user_document_list') }}" class="btn btn-secondary">書類一覧へ戻る</a>
+            <a href="{{ url_for('user_mitsumori_add') }}" class="btn btn-primary">+ 新規作成</a>
+        </div>
+    </div>
+
+    {% if pending_mitsumori_count %}
+    <div class="pending-mitsumori-box">
+        <strong>&#35211;&#31309;&#20381;&#38972;&#26360;&#20316;&#25104; {{ pending_mitsumori_count }}&#20214;</strong>
+        <span>&#36023;&#21462;&#26126;&#32048;&#26360;&#12434;&#30906;&#35469;&#12375;&#12289;&#35211;&#31309;&#20381;&#38972;&#26360;&#12434;&#20316;&#25104;&#12375;&#12390;&#12367;&#12384;&#12373;&#12356;&#12290;</span>
+        <div class="pending-mitsumori-links">
+            {% for inv in pending_mitsumori_from_invoices %}
+            <a href="{{ url_for('user_mitsumori_add', source_invoice_id=inv.id) }}" class="btn btn-info">{{ inv.invoice_no or inv.id }}</a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if mitsumori_list %}
+    <div class="doc-grid">
+        {% for doc in mitsumori_list %}
+        {% set status = doc.status or 'draft' %}
+        <article class="doc-card status-{{ status }}">
+            <div class="doc-card-head">
+                <span class="doc-no">{{ doc.document_no }}</span>
+                <span class="status-badge status-{{ status }}">
+                    {% if status == 'draft' %}下書き
+                    {% elif status == 'in_progress' %}作成中
+                    {% elif status in ['completed', 'submitted', 'sent'] %}作成済み
+                    {% elif status == 'approved' %}承認済み
+                    {% elif status == 'rejected' %}差し戻し
+                    {% else %}{{ status }}
+                    {% endif %}
+                </span>
+            </div>
+            <div class="doc-card-body">
+                <h2>{{ doc.subject or '見積り依頼書' }}</h2>
+                <dl>
+                    <div>
+                        <dt>発行日</dt>
+                        <dd>{{ doc.issue_date or '-' }}</dd>
+                    </div>
+                    <div>
+                        <dt>宛先</dt>
+                        <dd>{{ doc.company_name or '株式会社 開花' }}</dd>
+                    </div>
+                    <div>
+                        <dt>有効期限</dt>
+                        <dd>{{ doc.valid_until or '-' }}</dd>
+                    </div>
+                    <div class="total">
+                        <dt>合計金額</dt>
+                        <dd>¥{{ "{:,}".format(doc.total_amount or 0) }}</dd>
+                    </div>
+                </dl>
+            </div>
+            <div class="doc-card-actions">
+                <a href="{{ url_for('user_mitsumori_view', id=doc.id) }}" class="btn btn-info">詳細を見る</a>
+                {% if status in ['draft', 'in_progress'] %}
+                <a href="{{ url_for('user_mitsumori_edit', id=doc.id) }}" class="btn btn-secondary">編集</a>
+                {% endif %}
+                {% if status in ['draft', 'in_progress'] %}
+                <form method="POST" action="{{ url_for('user_mitsumori_delete', id=doc.id) }}" class="inline-delete-form" onsubmit="return confirm('この見積り依頼書を削除しますか？')">
+                    <input type="hidden" name="next" value="{{ current_return_url }}">
+                    <button type="submit" class="btn btn-danger">削除</button>
+                </form>
+                {% endif %}
+                <a href="{{ url_for('user_mitsumori_pdf', id=doc.id) }}" class="btn btn-secondary" target="_blank" rel="noopener">PDF</a>
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state-card">
+        <h2>作成中の見積依頼書はありません</h2>
+        <p>下書き保存すると、この画面と書類一覧に表示されます。</p>
+        <a href="{{ url_for('user_mitsumori_add') }}" class="btn btn-primary">見積り依頼書を作成</a>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.mitsumori-list-page {
+    display: grid;
+    gap: 1.25rem;
+}
+
+.page-header,
+.header-actions,
+.doc-card-head,
+.doc-card-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+}
+
+.inline-delete-form {
+    margin: 0;
+    display: inline-flex;
+}
+
+.page-header h1 {
+    margin: 0;
+    color: #0f172a;
+}
+
+.page-subtitle {
+    margin: 0.35rem 0 0;
+    color: #64748b;
+    line-height: 1.7;
+}
+
+.doc-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1rem;
+}
+
+.pending-mitsumori-box {
+    display: grid;
+    gap: 0.55rem;
+    padding: 0.9rem 1rem;
+    border: 1px solid #bfdbfe;
+    border-radius: 12px;
+    background: #eff6ff;
+    color: #1e3a8a;
+}
+
+.pending-mitsumori-links {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.doc-card,
+.empty-state-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.07);
+    padding: 1rem;
+}
+
+.doc-card {
+    display: grid;
+    gap: 1rem;
+}
+
+.doc-no {
+    color: #1d4ed8;
+    font-family: Consolas, monospace;
+    font-weight: 800;
+}
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 0.32rem 0.75rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.status-badge.status-draft,
+.status-badge.status-in_progress {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.status-badge.status-completed,
+.status-badge.status-submitted,
+.status-badge.status-sent,
+.status-badge.status-approved {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.status-badge.status-rejected {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.doc-card-body h2 {
+    margin: 0 0 0.85rem;
+    color: #0f172a;
+    font-size: 1.05rem;
+}
+
+.doc-card-body dl {
+    display: grid;
+    gap: 0.65rem;
+    margin: 0;
+}
+
+.doc-card-body dl div {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    border-bottom: 1px solid #f1f5f9;
+    padding-bottom: 0.55rem;
+}
+
+.doc-card-body dt {
+    color: #64748b;
+    font-weight: 700;
+}
+
+.doc-card-body dd {
+    margin: 0;
+    color: #0f172a;
+    text-align: right;
+}
+
+.doc-card-body .total dd {
+    font-size: 1.15rem;
+    font-weight: 800;
+}
+
+.doc-card-actions {
+    justify-content: flex-start;
+}
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 38px;
+    padding: 0.58rem 0.9rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    color: #fff;
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.btn-primary {
+    background: #0f172a;
+}
+
+.btn-secondary {
+    background: #fff;
+    color: #475569;
+    border-color: #cbd5e1;
+}
+
+.btn-info {
+    background: #2563eb;
+}
+
+.btn-danger {
+    background: #fff;
+    color: #dc2626;
+    border-color: #fecaca;
+}
+
+.empty-state-card {
+    text-align: center;
+    padding: 2rem;
+}
+
+.empty-state-card h2 {
+    margin: 0 0 0.5rem;
+    color: #0f172a;
+}
+
+.empty-state-card p {
+    color: #64748b;
+}
+
+@media (max-width: 760px) {
+    .header-actions,
+    .header-actions .btn {
+        width: 100%;
+    }
+}
+</style>
+{% endblock %}

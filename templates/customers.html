@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}顧客管理 - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="page-actions">
+    <a href="{{ url_for('add_customer') }}" class="btn btn-primary">+ 新規登録</a>
+</div>
+
+<div class="customers-grid">
+    {% for customer in customers %}
+    <div class="customer-card">
+        <div class="customer-info">
+            <h3>{{ customer.name }}</h3>
+            {% if customer.email %}
+            <p>📧 {{ customer.email }}</p>
+            {% endif %}
+            {% if customer.phone %}
+            <p>📞 {{ customer.phone }}</p>
+            {% endif %}
+        </div>
+        
+        <div class="customer-stats">
+            <div class="stat">
+                <span class="stat-value">¥{{ "{:,}".format(customer.total_purchase or 0) }}</span>
+                <span class="stat-label">累計購入額</span>
+            </div>
+            <div class="stat">
+                <span class="stat-value">{{ customer.purchase_count or 0 }}</span>
+                <span class="stat-label">購入回数</span>
+            </div>
+        </div>
+        
+        <div class="customer-actions">
+            <a href="{{ url_for('edit_customer', id=customer.id) }}" class="btn btn-sm">編集</a>
+            <a href="{{ url_for('delete_customer', id=customer.id) }}" class="btn btn-sm btn-delete"
+               onclick="return confirm('削除しますか？')">削除</a>
+        </div>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <p>顧客がありません</p>
+        <a href="{{ url_for('add_customer') }}" class="btn btn-primary">最初の顧客を登録</a>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
+
+

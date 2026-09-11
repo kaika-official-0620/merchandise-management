@@ -1,0 +1,353 @@
+{% extends "base.html" %}
+{% block title %}お知らせ一覧 - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>お知らせ一覧</h1>
+    <a href="{{ url_for('admin_add_announcement') }}" class="btn btn-primary">+ 新規追加</a>
+</div>
+
+<div class="announcement-list-page">
+    <form method="GET" action="{{ url_for('admin_announcements') }}" class="admin-announcement-filter">
+        <input type="search" name="q" value="{{ search_query or '' }}" placeholder="タイトル・本文で検索">
+        <input type="date" name="date" value="{{ selected_date or '' }}" aria-label="日付で検索">
+        <button type="submit" class="btn btn-primary">検索</button>
+        {% if is_filtered %}
+        <a href="{{ url_for('admin_announcements') }}" class="btn btn-secondary">検索解除</a>
+        {% endif %}
+    </form>
+
+    <div class="table-card">
+        <div class="table-scroll">
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>公開状態</th>
+                        <th>種類</th>
+                        <th>タイトル / 本文</th>
+                        <th>通知先</th>
+                        <th>公開開始</th>
+                        <th>公開終了</th>
+                        <th>作成者</th>
+                        <th>作成日</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ann in announcements %}
+                    <tr class="{% if not ann.is_active %}row-inactive{% endif %}">
+                        <td>
+                            {% if ann.is_active %}
+                            <span class="status-badge active">公開中</span>
+                            {% else %}
+                            <span class="status-badge inactive">停止中</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if ann.announcement_type == 'important' %}
+                            <span class="type-badge important">重要</span>
+                            {% elif ann.announcement_type == 'warning' %}
+                            <span class="type-badge warning">注意</span>
+                            {% elif ann.announcement_type == 'success' %}
+                            <span class="type-badge success">完了・更新</span>
+                            {% else %}
+                            <span class="type-badge info">通常</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="title-cell">
+                                <strong>{{ ann.title }}</strong>
+                                <small>{{ ann.content[:70] }}{% if ann.content|length > 70 %}...{% endif %}</small>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="recipient-cell">
+                                <strong>{{ ann.recipient_summary or '一斉通知' }}</strong>
+                                <small>
+                                    {% if ann.line_notify_enabled %}
+                                        {% if ann.line_notified_at %}
+                                        LINE通知済み
+                                        {% else %}
+                                        公開時にLINE通知
+                                        {% endif %}
+                                    {% else %}
+                                    画面表示のみ
+                                    {% endif %}
+                                </small>
+                                {% if ann.recipient_scope == 'selected' and ann.recipient_user_ids_list %}
+                                <small>ID: {{ ann.recipient_user_ids_list|join(', ') }}</small>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>{{ (ann.publish_at|string)[:16] if ann.publish_at else '即時公開' }}</td>
+                        <td>{{ (ann.expire_at|string)[:16] if ann.expire_at else '期限なし' }}</td>
+                        <td>{{ ann.author_name or '-' }}</td>
+                        <td>{{ (ann.created_at|string)[:10] if ann.created_at else '-' }}</td>
+                        <td>
+                            <div class="action-cell">
+                                <a href="{{ url_for('admin_toggle_announcement', id=ann.id) }}" class="btn btn-sm {% if ann.is_active %}btn-secondary{% else %}btn-primary{% endif %}">
+                                    {% if ann.is_active %}停止{% else %}公開{% endif %}
+                                </a>
+                                <a href="{{ url_for('admin_edit_announcement', id=ann.id) }}" class="btn btn-sm btn-edit">編集</a>
+                                <a href="{{ url_for('admin_delete_announcement', id=ann.id) }}" class="btn btn-sm btn-delete" onclick="return confirm('このお知らせを削除しますか？')">削除</a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="9">
+                            <div class="empty-state">
+                                まだお知らせがありません。必要に応じて新規追加してください。
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<style>
+.announcement-list-page {
+    display: grid;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.admin-announcement-filter {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) 152px auto auto;
+    gap: 0.625rem;
+    align-items: center;
+    min-width: 0;
+    margin-bottom: 0.75rem;
+    padding: 0.65rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #fff;
+}
+
+.admin-announcement-filter input {
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    min-height: 38px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 0.5rem 0.65rem;
+    font: inherit;
+}
+
+.admin-announcement-filter input[type="search"] {
+    width: 100%;
+}
+
+.admin-announcement-filter input[type="date"] {
+    width: 152px;
+}
+
+.admin-announcement-filter .btn {
+    min-height: 38px;
+    border-radius: 8px;
+}
+
+.table-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+    max-width: 100%;
+    min-width: 0;
+}
+
+.table-scroll {
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+}
+
+.admin-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 1080px;
+}
+
+.admin-table th,
+.admin-table td {
+    padding: 0.9rem 0.95rem;
+    border-bottom: 1px solid #e2e8f0;
+    vertical-align: top;
+}
+
+.admin-table th {
+    background: #f8fafc;
+    color: #334155;
+    text-align: left;
+    font-size: 0.85rem;
+}
+
+.row-inactive {
+    opacity: 0.72;
+}
+
+.status-badge,
+.type-badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 0.28rem 0.7rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.status-badge.active { background: #d1fae5; color: #047857; }
+.status-badge.inactive { background: #e2e8f0; color: #475569; }
+
+.type-badge.info { background: #dbeafe; color: #1d4ed8; }
+.type-badge.important { background: #fee2e2; color: #dc2626; }
+.type-badge.warning { background: #fef3c7; color: #b45309; }
+.type-badge.success { background: #d1fae5; color: #047857; }
+
+.title-cell,
+.recipient-cell,
+.action-cell {
+    display: grid;
+    gap: 0.28rem;
+}
+
+.title-cell small,
+.recipient-cell small {
+    color: #64748b;
+    line-height: 1.6;
+}
+
+.action-cell {
+    grid-template-columns: repeat(3, max-content);
+    gap: 0.45rem;
+}
+
+.empty-state {
+    padding: 2.4rem 1rem;
+    text-align: center;
+    color: #64748b;
+}
+
+@media (max-width: 768px) {
+    .admin-announcement-filter {
+        grid-template-columns: minmax(0, 1fr);
+        align-items: stretch;
+        gap: 10px;
+    }
+
+    .admin-announcement-filter input[type="search"] {
+        grid-column: auto;
+    }
+
+    .admin-announcement-filter input[type="date"] {
+        width: 100%;
+        max-width: 172px;
+    }
+
+    .admin-announcement-filter .btn {
+        justify-self: start;
+        margin-left: 0;
+        width: max-content;
+        min-width: 96px;
+        border-radius: 8px;
+        justify-content: center;
+    }
+
+    .table-card,
+    .table-scroll {
+        border: 0;
+        box-shadow: none;
+        background: transparent;
+        overflow: visible;
+    }
+
+    .admin-table {
+        display: block;
+        min-width: 0;
+    }
+
+    .admin-table thead {
+        display: none;
+    }
+
+    .admin-table tbody {
+        display: grid;
+        gap: 0.55rem;
+    }
+
+    .admin-table tr {
+        display: grid;
+        grid-template-columns: auto auto minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 0.32rem 0.45rem;
+        padding: 0.58rem 0.65rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 9px;
+        background: #fff;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
+    }
+
+    .admin-table td {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+        padding: 0;
+        border: 0;
+        font-size: 0.76rem;
+        line-height: 1.35;
+    }
+
+    .admin-table td:nth-child(1) { order: 2; }
+    .admin-table td:nth-child(2) { order: 1; }
+    .admin-table td:nth-child(3) {
+        grid-column: 1 / -1;
+        order: 3;
+    }
+    .admin-table td:nth-child(4) {
+        grid-column: 1 / -1;
+        order: 5;
+        color: #64748b;
+    }
+    .admin-table td:nth-child(5),
+    .admin-table td:nth-child(6),
+    .admin-table td:nth-child(7) {
+        display: none;
+    }
+    .admin-table td:nth-child(8) {
+        order: 4;
+        justify-content: flex-end;
+        color: #94a3b8;
+        white-space: nowrap;
+    }
+    .admin-table td:nth-child(9) {
+        grid-column: 1 / -1;
+        order: 6;
+        justify-content: flex-end;
+    }
+
+    .title-cell {
+        min-width: 0;
+    }
+
+    .title-cell strong,
+    .title-cell small {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .action-cell {
+        display: flex;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+    }
+}
+</style>
+{% endblock %}

@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}{{ detail.title }} - 株式会社 開花{% endblock %}
+
+{% block content %}
+<style>
+.fee-detail-page {
+    max-width: 820px;
+    margin: 0 auto;
+}
+
+.fee-detail-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 1.5rem;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+.fee-detail-card h1 {
+    margin: 0 0 0.75rem;
+    font-size: 1.5rem;
+    color: #0f172a;
+}
+
+.fee-detail-summary {
+    margin: 0 0 1rem;
+    color: #475569;
+    line-height: 1.7;
+}
+
+.fee-detail-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1rem;
+}
+
+.fee-detail-table th,
+.fee-detail-table td {
+    padding: 0.9rem 1rem;
+    border-bottom: 1px solid #e2e8f0;
+    text-align: left;
+}
+
+.fee-detail-table th {
+    background: #f8fafc;
+    color: #334155;
+    font-size: 0.85rem;
+}
+
+.fee-detail-table td {
+    color: #0f172a;
+}
+
+.fee-detail-notes {
+    margin-top: 1rem;
+    padding-left: 1.2rem;
+    color: #475569;
+}
+
+.fee-detail-notes li + li {
+    margin-top: 0.35rem;
+}
+</style>
+
+<div class="fee-detail-page">
+    <div class="fee-detail-card">
+        <h1>{{ detail.title }}</h1>
+        <p class="fee-detail-summary">{{ detail.summary }}</p>
+
+        <table class="fee-detail-table">
+            <thead>
+                <tr>
+                    <th>売上金額・対象</th>
+                    <th>手数料</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in detail.rows %}
+                <tr>
+                    <td>{{ row.range }}</td>
+                    <td>{{ row.fee }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        {% if detail.notes %}
+        <ul class="fee-detail-notes">
+            {% for note in detail.notes %}
+            <li>{{ note }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,27 @@
+<section class="sales-method-guide" aria-label="販売方法の選び方">
+  <h3>販売方法を選ぶ目安</h3>
+  <div class="sales-method-guide-grid">
+    <article><h4>業者卸販売</h4><p>業者への販売を運営に依頼します。業者の査定・買取条件を確認しながら進めたい場合に向いています。</p></article>
+    <article><h4>同時出品</h4><p>複数の販売先への出品を運営に依頼します。販売先を広げたい場合に向いています。申請だけで売却が確定するものではありません。</p></article>
+    <article><h4>業者オークション</h4><p>業者向けオークションへの出品を運営に依頼します。入札による価格で売却を検討したい場合に向いています。売却価格・時期は事前には確定しません。</p></article>
+  </div>
+  <p class="sales-method-guide-flow"><strong>申請後：</strong>運営が内容を確認 → 査定・検品などを進行 → 売却結果・書類を確認。進捗は<a href="{{ url_for('sales_agency_my_requests') }}">販売代行の申請一覧</a>で確認できます。</p>
+  <details><summary>申請前に、費用と取消の扱いを確認する</summary>
+    <p>手数料は、選択した販売方法の手数料と、撮影・梱包・発送代行の手数料を組み合わせて計算します。販売金額に応じた料金設定が適用されます。送料などを含む費用・最終的な受取額は、個別の条件と明細を確認してください。</p>
+    <p>運営の認証前は申請一覧から取消を申請できます。取消申請だけでは取消完了にならず、運営の確認が必要です。認証後の変更・取消や、費用が不明な場合は<a href="{{ url_for('inquiry_new') }}">お問い合わせ</a>からご相談ください。</p>
+  </details>
+</section>
+<style>
+  .sales-method-guide{margin:0 0 20px;padding:16px;background:#f6f8fb;border:1px solid #dbe2ec;border-radius:12px;color:#243247;line-height:1.65;text-align:left}
+  .sales-method-guide h3{margin:0 0 12px;font-size:16px;color:inherit}
+  .sales-method-guide-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+  .sales-method-guide article{padding:12px;border:1px solid #dbe2ec;border-radius:8px;background:#fff}
+  .sales-method-guide h4{margin:0 0 6px;font-size:14px;color:inherit}
+  .sales-method-guide p{margin:0;font-size:13px;color:inherit}
+  .sales-method-guide .sales-method-guide-flow{margin:12px 0}
+  .sales-method-guide details{font-size:13px}
+  .sales-method-guide summary{cursor:pointer;font-weight:600}
+  .sales-method-guide details p{margin-top:8px}
+  .sales-method-guide a{text-decoration:underline;color:#175bb8}
+  @media(max-width:700px){.sales-method-guide-grid{grid-template-columns:1fr}.sales-method-guide{padding:12px}}
+</style>

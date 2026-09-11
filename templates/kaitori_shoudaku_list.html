@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}作成中の買取承諾書 - 株式会社 開花{% endblock %}
+
+{% block content %}
+{% set current_return_url = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">作成中の買取承諾書</h1>
+        <p class="page-subtitle">下書き保存中の買取承諾書だけを表示します。作成完了した書類は書類履歴へ移動します。</p>
+    </div>
+    <div class="header-actions">
+        <a href="{{ url_for('user_document_list') }}" class="btn btn-secondary">書類一覧へ戻る</a>
+        <a href="{{ url_for('user_kaitori_shoudaku_add') }}" class="btn btn-primary">新規作成</a>
+    </div>
+</div>
+
+{% if kaitori_list %}
+<div class="table-container">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>書類番号</th>
+                <th>顧客名</th>
+                <th>発行日</th>
+                <th>合計金額</th>
+                <th>ステータス</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for kaitori in kaitori_list %}
+            {% set status = kaitori.status or 'draft' %}
+            <tr>
+                <td>{{ kaitori.document_no }}</td>
+                <td>{{ kaitori.customer_name }}</td>
+                <td>{{ kaitori.issue_date }}</td>
+                <td>¥{{ "{:,}".format(kaitori.total_amount or 0) }}</td>
+                <td><span class="badge badge-secondary">{% if status == 'in_progress' %}作成中{% else %}下書き{% endif %}</span></td>
+                <td class="actions-cell">
+                    <a href="{{ url_for('user_kaitori_shoudaku_edit', id=kaitori.id) }}" class="btn btn-sm btn-edit">編集</a>
+                    <a href="{{ url_for('user_kaitori_shoudaku_view', id=kaitori.id) }}" class="btn btn-sm btn-secondary">内容を見る</a>
+                    {% if status in ['draft', 'in_progress'] %}
+                    <form method="POST" action="{{ url_for('user_kaitori_shoudaku_delete', id=kaitori.id) }}" class="inline-delete-form" onsubmit="return confirm('削除してもよろしいですか？')">
+                        <input type="hidden" name="next" value="{{ current_return_url }}">
+                        <button type="submit" class="btn btn-sm btn-delete">削除</button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="empty-state">
+    <p>作成中の買取承諾書はありません。</p>
+    <a href="{{ url_for('user_kaitori_shoudaku_add') }}" class="btn btn-primary">買取承諾書を作成</a>
+</div>
+{% endif %}
+
+<style>
+.page-header,
+.header-actions,
+.actions-cell {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.page-subtitle {
+    margin: 0.35rem 0 0;
+    color: #64748b;
+    line-height: 1.7;
+}
+
+.actions-cell {
+    justify-content: flex-start;
+}
+
+.inline-delete-form {
+    margin: 0;
+    display: inline-flex;
+}
+
+.table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.data-table {
+    min-width: 760px;
+}
+
+.data-table th,
+.data-table td {
+    white-space: nowrap;
+}
+</style>
+{% endblock %}
