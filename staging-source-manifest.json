@@ -113,8 +113,8 @@
     },
     {
       "path": "scripts/install_tesseract_render.sh",
-      "sha256": "b2e3143f0d982cecd3dcdb71b81b42b38b6f46018e0fb1aa49b967ccf35ac7f5",
-      "source_sha256": "b2e3143f0d982cecd3dcdb71b81b42b38b6f46018e0fb1aa49b967ccf35ac7f5"
+      "sha256": "9b0631d98e4aea66bae235826db4619d6ac0c523d5c6f066b8b5be87f4cc6079",
+      "source_sha256": "9b0631d98e4aea66bae235826db4619d6ac0c523d5c6f066b8b5be87f4cc6079"
     },
     {
       "path": "scripts/package_staging_release.py",
@@ -1185,9 +1185,14 @@
       "path": "tests/test_staging_package.py",
       "sha256": "3c4f9f67c764b9f60ffab6c7f10af5c190d409a902f37a7f74bccbbd980975d2",
       "source_sha256": "3c4f9f67c764b9f60ffab6c7f10af5c190d409a902f37a7f74bccbbd980975d2"
+    },
+    {
+      "path": "tests/test_tesseract_render_installer.py",
+      "sha256": "051401eb20f12c3594f8fcd2889ca356b81adce5b426c3d68dc0756ec8d930ac",
+      "source_sha256": "051401eb20f12c3594f8fcd2889ca356b81adce5b426c3d68dc0756ec8d930ac"
     }
   ],
-  "included": 237,
+  "included": 238,
   "data_policy": "source only; no database, uploaded business file, credential or Git history",
   "line_endings": "Text files normalized to LF; source_sha256 records the original working-copy bytes.",
   "generated_files": [
@@ -1195,5 +1200,6 @@
     ".gitignore",
     ".gitattributes",
     "README.md"
-  ]
+  ],
+  "updated_at": "2026-09-12T08:42:08.475964+00:00"
 }
