@@ -28,7 +28,8 @@ def source_files(source):
             continue
         if path.is_file() and path.suffix.lower() in PUBLIC_EXTENSIONS:
             candidates.append(path)
-    for name in ('staging-environment.md', 'platform-acceptance.md', 'recovery-runbook.md'):
+    for name in ('staging-environment.md', 'platform-acceptance.md', 'recovery-runbook.md',
+                 'deployed-staging-verification.md', 'tesseract-render-install.md'):
         path = source / 'docs' / name
         if path.is_file():
             candidates.append(path)
