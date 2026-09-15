@@ -145,7 +145,17 @@ def run(args):
         check("native API authenticates against PostgreSQL", response.status_code == 200 and bool(payload.get("token")))
         response = client.get("/api/mobile/v1/items", headers={"Authorization": "Bearer " + payload.get("token", "")}, base_url=base)
         check("native API shares two owned items", response.status_code == 200 and (response.get_json() or {}).get("total") == 2)
-        check("legacy admin remains denied", client.post("/login", data={"username": "admin", "password": "admin123"}, base_url=base).status_code == 403)
+        response = client.post("/login?next=/plans", data={"username": "admin", "password": "rejected-fixture-only", "remember_me": "on"}, base_url=base)
+        check("legacy browser admin returns to fixed login", response.status_code == 303 and response.headers.get("Location") == "/login")
+        with client.session_transaction(base_url=base) as session_state:
+            check("legacy browser admin remains unauthenticated", "_user_id" not in session_state and
+                  "password" not in session_state and "rejected-fixture-only" not in json.dumps(dict(session_state)))
+        response = client.get("/login", base_url=base)
+        check("legacy browser refusal leaves usable HTML login", response.status_code == 200 and
+              response.mimetype == "text/html" and 'name="username"' in response.get_data(as_text=True))
+        response = client.post("/api/mobile/v1/session", json={"username": "admin", "password": "rejected-fixture-only"}, base_url=base)
+        check("legacy native admin remains JSON denied", response.status_code == 403 and
+              (response.get_json() or {}).get("error", {}).get("code") == "staging_test_account_required")
         check("external billing remains denied", client.post("/billing/checkout", base_url=base).status_code == 403)
         check("database health responds", client.get("/healthz", base_url=base).status_code == 200)
         report = {"phase": args.phase, "scope": "Local fictional PostgreSQL fixture over TLS; source-only mirror",

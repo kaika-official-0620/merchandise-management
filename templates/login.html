@@ -6,7 +6,14 @@
     <div class="auth-card">
         <div class="auth-header">
             <h1 class="company-name">株式会社 開花</h1>
+            {% if kaika_staging_test_accounts %}
+            <p>検証用アカウントでログイン</p>
+            <p style="color: #475569; font-size: 0.9rem; line-height: 1.7;">
+                ここは操作確認用のサイトです。通常サイトとはアカウント・パスワードが異なります。
+            </p>
+            {% else %}
             <p>ログインしてください</p>
+            {% endif %}
         </div>
 
         <style>
@@ -59,13 +66,26 @@
             <input type="hidden" name="next" value="{{ next_page }}">
             {% endif %}
             <div class="form-group">
+                {% if kaika_staging_test_accounts %}
+                <label for="username">検証用アカウント</label>
+                <select id="username" name="username" required autofocus autocomplete="username">
+                    <option value="">確認する立場を選んでください</option>
+                    {% for username, display_name, role in kaika_staging_test_accounts %}
+                    <option value="{{ username }}" {% if remembered_username == username %}selected{% endif %}>{{ display_name }}</option>
+                    {% endfor %}
+                </select>
+                {% else %}
                 <label for="username">ユーザー名</label>
                 <input type="text" id="username" name="username" value="{{ remembered_username|default('') }}" required autofocus>
+                {% endif %}
             </div>
 
             <div class="form-group">
                 <label for="password">パスワード</label>
-                <input type="password" id="password" name="password" required>
+                <input type="password" id="password" name="password" required autocomplete="current-password">
+                {% if kaika_staging_test_accounts %}
+                <p class="remember-login-note">選んだ検証用アカウントの専用パスワードを入力してください。</p>
+                {% endif %}
             </div>
 
             <label class="remember-login" for="remember_me">

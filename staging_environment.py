@@ -18,7 +18,7 @@ import socket
 import time
 from urllib.parse import parse_qsl, unquote, urlsplit
 
-from flask import abort, jsonify, redirect, request, url_for
+from flask import abort, flash, jsonify, redirect, request, url_for
 from flask_login import current_user, logout_user
 from werkzeug.security import generate_password_hash
 
@@ -256,6 +256,17 @@ def register_staging_boundary(runtime):
     blocked_prefixes = ("/admin/line", "/line/", "/admin/stripe", "/stripe/", "/api/stripe/",
                         "/api/google-drive/", "/billing/", "/internal/", "/api/plans/store-intent",
                         "/api/plans/store-verify")
+    test_usernames = {value[0] for value in TEST_USERS.values()}
+
+    @app.context_processor
+    def staging_login_context():
+        return {"kaika_staging_test_accounts": tuple(TEST_USERS.values())}
+
+    def test_account_required():
+        if request.path.startswith("/api/"):
+            return jsonify(error={"code": "staging_test_account_required", "message": "指定された検証用アカウントでログインしてください。"}), 403
+        flash("ここは開花の検証サイトです。通常サイトのアカウントは使えません。検証用アカウントを選び、専用のパスワードでログインしてください。", "error")
+        return redirect(url_for("login"), code=303)
 
     def boundary():
         path = request.path
@@ -263,6 +274,11 @@ def register_staging_boundary(runtime):
             return jsonify(error={"code": "staging_disabled", "message": "検証環境では外部連携・実課金・旧データの取込みを停止しています。"}), 403
         if path == "/register":
             return redirect(url_for("login"))
+        if (path not in {"/healthz", "/robots.txt"}
+                and not (path.startswith("/static/") and not path.startswith("/static/uploads/"))
+                and current_user.is_authenticated and current_user.username not in test_usernames):
+            logout_user()
+            return test_account_required()
         if path == "/login" or path == "/api/mobile/v1/session":
             next_page = request.args.get("next", "")
             if next_page and (not next_page.startswith("/") or next_page.startswith("//") or "\\" in next_page):
@@ -286,8 +302,9 @@ def register_staging_boundary(runtime):
                     data = request.form
                 if not hasattr(data, "get"):
                     abort(400, description="ログイン情報の形式を確認してください。")
-                if data.get("username") not in {value[0] for value in TEST_USERS.values()}:
-                    return jsonify(error={"code": "staging_test_account_required", "message": "指定された検証用アカウントでログインしてください。"}), 403
+                username = data.get("username")
+                if not isinstance(username, str) or username not in test_usernames:
+                    return test_account_required()
             return None
         if path == "/healthz" or path == "/robots.txt":
             return None
@@ -301,9 +318,6 @@ def register_staging_boundary(runtime):
             if path.startswith("/api/"):
                 return jsonify(error={"code": "authentication_required", "message": "ログインしてください。"}), 401
             return redirect(url_for("login", next=request.full_path.rstrip("?")))
-        if current_user.username not in {value[0] for value in TEST_USERS.values()}:
-            logout_user()
-            abort(403)
         return None
 
     # Run before existing hooks that query user data or write workflow state.

@@ -12,8 +12,9 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import MagicMock, patch
 
-from flask import Flask, jsonify, redirect, request
+from flask import Flask, jsonify, redirect, render_template_string, request
 from flask_login import LoginManager, UserMixin, login_user
+from flask_login.utils import encode_cookie
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from feature_plans import FeaturePlans
@@ -254,9 +255,13 @@ class StagingBoundaryTests(unittest.TestCase):
         @self.app.route("/login", methods=["GET", "POST"])
         def login():
             if request.method == "POST":
-                login_user(User(request.form["username"]))
+                login_user(User(request.form["username"]), remember=request.form.get("remember_me") == "on")
                 return redirect(request.args.get("next") or "/")
-            return "<html><body>login</body></html>"
+            return render_template_string("""<html><body>login
+                {% for message in get_flashed_messages() %}<p class="fixture-flash">{{ message }}</p>{% endfor %}
+                {% for username, label, role in kaika_staging_test_accounts %}
+                    <option value="{{ username }}">{{ label }}</option>
+                {% endfor %}</body></html>""")
 
         @self.app.get("/")
         def home():
@@ -287,6 +292,19 @@ class StagingBoundaryTests(unittest.TestCase):
     def login(self):
         return self.client.post("/login", data={"username": "staging_normal"}, base_url=self.base)
 
+    def assert_logged_out(self, client):
+        with client.session_transaction(base_url=self.base) as state:
+            self.assertNotIn("_user_id", state)
+        self.assertIsNone(client.get_cookie("kaika_staging_remember", domain="kaika-stage.example.invalid"))
+
+    def seed_legacy_session(self, client, *, remember_only=False):
+        client.set_cookie("kaika_staging_remember", encode_cookie("admin", key=self.app.secret_key),
+                          domain="kaika-stage.example.invalid")
+        if not remember_only:
+            with client.session_transaction(base_url=self.base) as state:
+                state["_user_id"] = "admin"
+                state["_fresh"] = True
+
     def test_private_pages_and_uploads_require_login_health_remains_available(self):
         for path in ("/", "/proxy-service", "/static/uploads/photo.jpg"):
             with self.subTest(path=path):
@@ -302,10 +320,93 @@ class StagingBoundaryTests(unittest.TestCase):
         self.assertEqual(response.headers["X-Kaika-Environment"], "staging")
         self.assertIn("noindex", response.headers["X-Robots-Tag"])
 
-    def test_default_account_and_unknown_native_account_are_rejected(self):
-        self.assertEqual(self.client.post("/login", data={"username": "admin"}, base_url=self.base).status_code, 403)
-        self.assertEqual(self.client.post("/api/mobile/v1/session", json={"username": "admin"}, base_url=self.base).status_code, 403)
+    def test_non_test_browser_login_returns_to_form_without_authentication_or_credentials(self):
+        for username in ("admin", "unknown-fixture-user", ""):
+            with self.subTest(username=username):
+                client = self.app.test_client()
+                password = "rejected-fixture-password-never-retained"
+                response = client.post("/login?next=/private-fixture", data={
+                    "username": username, "password": password, "remember_me": "on"}, base_url=self.base)
+                self.assertEqual(response.status_code, 303)
+                self.assertEqual(response.headers["Location"], "/login")
+                self.assert_logged_out(client)
+                with client.session_transaction(base_url=self.base) as state:
+                    self.assertNotIn(password, json.dumps(dict(state)))
+                    self.assertNotIn("username", state)
+                    self.assertNotIn("password", state)
+                    self.assertNotIn("next", state)
+                response = client.get(response.headers["Location"], base_url=self.base)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.mimetype, "text/html")
+                self.assertIn("検証用", response.get_data(as_text=True))
+                self.assertIn("ログイン", response.get_data(as_text=True))
+                self.assertIn('class="fixture-flash"', response.get_data(as_text=True))
+                self.assertNotIn(password, response.get_data(as_text=True))
+                refreshed = client.get("/login", base_url=self.base)
+                self.assertEqual(refreshed.status_code, 200)
+                self.assertNotIn('class="fixture-flash"', refreshed.get_data(as_text=True))
+                self.assertEqual(client.get("/", base_url=self.base).status_code, 302)
+
+    def test_login_context_lists_only_the_three_test_accounts(self):
+        response = self.client.get("/login", base_url=self.base)
+        self.assertEqual(response.status_code, 200)
+        body = response.get_data(as_text=True)
+        for username in ("staging_admin", "staging_normal", "staging_business"):
+            self.assertIn('value="' + username + '"', body)
+        self.assertNotIn('value="admin"', body)
+
+    def test_legacy_browser_session_and_remember_cookie_return_to_login(self):
+        for path in ("/", "/login", "/private-fixture?next=/other"):
+            for remember_only in (False, True):
+                with self.subTest(path=path, remember_only=remember_only):
+                    client = self.app.test_client()
+                    self.seed_legacy_session(client, remember_only=remember_only)
+                    response = client.get(path, base_url=self.base)
+                    self.assertEqual(response.status_code, 303)
+                    self.assertEqual(response.headers["Location"], "/login")
+                    self.assert_logged_out(client)
+                    response = client.get("/login", base_url=self.base)
+                    self.assertEqual(response.status_code, 200)
+                    self.assertIn("検証用", response.get_data(as_text=True))
+                    self.assertIn('class="fixture-flash"', response.get_data(as_text=True))
+                    self.assertEqual(client.get("/login", base_url=self.base).status_code, 200)
+
+    def test_public_health_robots_and_static_keep_their_exemptions(self):
+        for path, expected in (("/healthz", 200), ("/robots.txt", 200), ("/static/missing-fixture.css", 404)):
+            with self.subTest(path=path):
+                client = self.app.test_client()
+                self.seed_legacy_session(client)
+                response = client.get(path, base_url=self.base)
+                self.assertEqual(response.status_code, expected)
+                self.assertNotIn("Location", response.headers)
+
+    def test_legacy_api_session_is_cleared_without_html_redirect(self):
+        for path in ("/api/plans/me", "/api/mobile/v1/me", "/api/mobile/v1/session"):
+            with self.subTest(path=path):
+                client = self.app.test_client()
+                self.seed_legacy_session(client)
+                response = (client.post(path, json={"username": "staging_business"}, base_url=self.base)
+                            if path.endswith("/session") else client.get(path, base_url=self.base))
+                self.assertEqual(response.status_code, 403)
+                self.assertEqual(response.get_json()["error"]["code"], "staging_test_account_required")
+                self.assertNotIn("Location", response.headers)
+                self.assert_logged_out(client)
+
+    def test_unknown_native_account_stays_json_for_browser_accept_header(self):
+        response = self.client.post("/api/mobile/v1/session", json={"username": "admin"},
+                                    headers={"Accept": "text/html"}, base_url=self.base)
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json()["error"]["code"], "staging_test_account_required")
+        self.assertNotIn("Location", response.headers)
+        self.assert_logged_out(self.client)
+
+    def test_native_login_and_payload_limits_remain_unchanged(self):
         self.assertEqual(self.client.post("/api/mobile/v1/session", json={"username": "staging_business"}, base_url=self.base).status_code, 200)
+        for username in ([], {}, None):
+            with self.subTest(username=username):
+                response = self.client.post("/api/mobile/v1/session", json={"username": username}, base_url=self.base)
+                self.assertEqual(response.status_code, 403)
+                self.assertEqual(response.get_json()["error"]["code"], "staging_test_account_required")
         self.assertEqual(self.client.post("/api/mobile/v1/session", json=["invalid"], base_url=self.base).status_code, 400)
         self.assertEqual(self.client.post("/api/mobile/v1/session", json={"username": "staging_business", "password": "x" * 9000}, base_url=self.base).status_code, 413)
         self.assertEqual(self.client.get("/api/mobile/v1/me", base_url=self.base).status_code, 401)
