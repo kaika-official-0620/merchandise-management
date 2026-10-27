@@ -13,7 +13,7 @@
 .registry .inventory-item-id { margin-top: .45rem; font-size: .78rem; color: #526972; }
 .registry .inventory-item-id summary { font-weight: 400; cursor: pointer; }
 .registry .inventory-item-id code { overflow-wrap: anywhere; }
-@media (max-width: 600px) {
+@media (max-width: 768px) {
   .registry .inventory-card-table { display: block; min-width: 0; }
   .registry .inventory-card-table thead { display: none; }
   .registry .inventory-card-table tbody { display: grid; gap: 1rem; }

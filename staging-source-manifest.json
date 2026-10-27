@@ -1,5 +1,5 @@
 {
-  "created_at": "2026-10-27T08:31:10.687476+00:00",
+  "created_at": "2026-10-27T08:40:25.557132+00:00",
   "source_files": [
     {
       "path": "account_data_inventory.py",
@@ -88,8 +88,8 @@
     },
     {
       "path": "docs/customer-usability-handoff-2026-10-27.md",
-      "sha256": "aa02f96b6faae3e2fefcd108e3df1b4112fea53ebd324f2f56bf4353704e9686",
-      "source_sha256": "40ee5f10b8fa8c8cb131f551af15014b295a4be7011980ec00344968f5f7e487"
+      "sha256": "8f567307ca1353d40fa51face8f60910f7d0d13a8df423cf2770a65f483e7afb",
+      "source_sha256": "166ea2980a5218cf294be8a118b84eba53dc8f0465fc1ae892cdf4e891133add"
     },
     {
       "path": "docs/deployed-staging-verification.md",
@@ -818,8 +818,8 @@
     },
     {
       "path": "static/css/workspace.css",
-      "sha256": "e5c249167456227ea0283d5e67cd91c47c619388de2a84beb564e691657077df",
-      "source_sha256": "e5c249167456227ea0283d5e67cd91c47c619388de2a84beb564e691657077df"
+      "sha256": "5bd6845ef22ec1fe9f33eb33ef5753b4c1be741b58e416fafca9d18323b0abbf",
+      "source_sha256": "5bd6845ef22ec1fe9f33eb33ef5753b4c1be741b58e416fafca9d18323b0abbf"
     },
     {
       "path": "static/favicon-16x16.png",
