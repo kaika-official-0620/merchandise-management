@@ -1,0 +1,43 @@
+<div class="profit-calc-modal" id="profitCalcModal" aria-hidden="true">
+  <div class="profit-calc-overlay" data-profit-close></div>
+  <section class="profit-calc-content" role="dialog" aria-modal="true" aria-labelledby="profit-calculator-title">
+    <header class="profit-calc-header">
+      <h2 id="profit-calculator-title">売上・手残りの試算</h2>
+      <button type="button" class="profit-calc-close" data-profit-close aria-label="計算機を閉じる">×</button>
+    </header>
+    <div class="profit-calc-body">
+      <p class="formula-box">入力した条件だけの試算です。商品・請求には保存されません。費用は税込の合計額を入力し、不明な費用は空欄、費用がないと確認した場合だけ0円にしてください。</p>
+      <form id="profit-estimate-form" novalidate>
+        <div class="calc-input-grid">
+          <div class="calc-input-row full-width"><label for="pe-mode">計算する内容</label><select id="pe-mode" class="calc-select" name="mode"><option value="profit">売上から手残りを確認</option><option value="target">目標の手残りから売上を逆算</option><option value="return">原価に対する目標手残り率から逆算</option></select></div>
+          <div class="calc-input-row" data-profit-mode="profit"><label for="pe-sale">売上（税込・円）</label><input id="pe-sale" name="sale" type="number" min="0" max="1000000000000" step="1" inputmode="numeric"></div>
+          <div class="calc-input-row" data-profit-mode="target" hidden><label for="pe-target">目標の手残り（円・月額配分後）</label><input id="pe-target" name="target" type="number" min="0" max="1000000000000" step="1" inputmode="numeric"></div>
+          <div class="calc-input-row" data-profit-mode="return" hidden><label for="pe-return">原価に対する目標手残り率（%）</label><input id="pe-return" name="returnRate" type="number" min="0" max="10000" step="0.01" inputmode="decimal"></div>
+          <div class="calc-input-row"><label for="pe-purchase">仕入原価（税込・円）</label><input id="pe-purchase" name="purchase" type="number" min="0" max="1000000000000" step="1" inputmode="numeric"></div>
+          <div class="calc-input-row full-width"><label for="pe-fee-mode">販売先手数料の入力方法</label><select id="pe-fee-mode" name="feeMode" class="calc-select"><option value="amount">明細・見積もりの金額を入力</option><option value="rate">手数料率から仮計算</option></select></div>
+          <div class="calc-input-row" data-profit-fee="amount"><label for="pe-fee">販売先手数料（税込・円）</label><input id="pe-fee" name="fee" type="number" min="0" max="1000000000000" step="1" inputmode="numeric"></div>
+          <div class="calc-input-row" data-profit-fee="rate" hidden><label for="pe-fee-rate">仮の手数料率（%）</label><input id="pe-fee-rate" name="feeRate" type="number" min="0" max="99.99" step="0.01" inputmode="decimal"></div>
+          <div class="calc-input-row"><label for="pe-kaika">開花の作業料・販売料の合計（税込・円）</label><input id="pe-kaika" name="kaika" type="number" min="0" max="1000000000000" step="1" inputmode="numeric"></div>
+          <div class="calc-input-row"><label for="pe-shipping">送料（税込・円）</label><input id="pe-shipping" name="shipping" type="number" min="0" max="1000000000000" step="1" inputmode="numeric"></div>
+          <div class="calc-input-row"><label for="pe-materials">資材・その他の費用（税込・円）</label><input id="pe-materials" name="materials" type="number" min="0" max="1000000000000" step="1" inputmode="numeric"></div>
+          <div class="calc-input-row"><label for="pe-adjustment">返品等の調整（円・減額はマイナス）</label><input id="pe-adjustment" name="adjustment" type="text" inputmode="text" maxlength="14" value="0" autocomplete="off"></div>
+          <div class="calc-input-row"><label for="pe-monthly">この商品に配分する月額（税込・円）</label><input id="pe-monthly" name="monthly" type="number" min="0" max="1000000000000" step="1" value="0" inputmode="numeric"></div>
+        </div>
+        <p class="formula-box">同じ送料や手数料を重ねて入力しないでください。開花料金は合意した税込額を入力します。逆算では入力した費用額を固定します。販売額により料金が変わる場合は、結果に応じて費用を入れ直してください。</p>
+        <p class="formula-box" data-profit-fee="rate" hidden>率からの仮計算は「売上 × 入力した率」の1円未満を切り捨てます。販売先ごとの実際の丸め方・課金対象とは異なることがあるため、明細で確認してください。</p>
+        <div class="form-actions"><button type="submit" class="btn btn-primary">この条件で計算する</button><button type="reset" class="btn btn-secondary">入力をリセット</button></div>
+      </form>
+      <p id="pe-message" role="status" aria-live="polite">必要な金額を入力してください。空欄の費用を0円として計算しません。</p>
+      <div id="pe-results" class="calc-result-grid" hidden aria-live="polite">
+        <div class="calc-result-row"><span class="result-label" id="pe-sale-label">売上（税込）</span><output class="result-value" id="pe-result-sale"></output></div>
+        <div class="calc-result-row"><span class="result-label">販売先手数料</span><output class="result-value" id="pe-result-fee"></output></div>
+        <div class="calc-result-row highlight"><span class="result-label">商品ごとの手残り（月額配分前）</span><output class="result-value" id="pe-result-product"></output></div>
+        <div class="calc-result-row highlight"><span class="result-label">月額配分後の手残り</span><output class="result-value" id="pe-result-net"></output></div>
+        <div class="calc-result-row"><span class="result-label">売上に対する手残り率（月額配分後）</span><output class="result-value" id="pe-result-margin"></output></div>
+        <div class="calc-result-row"><span class="result-label">原価に対する手残り率（月額配分後）</span><output class="result-value" id="pe-result-return"></output></div>
+      </div>
+      <details class="calc-formula-section"><summary>計算方法・費用の見方</summary><p>商品ごとの手残り ＝ 売上 − 仕入原価 − 販売先手数料 − 開花料金 − 送料 − 資材等 ＋ 返品等の調整</p><p>月額配分後の手残り ＝ 商品ごとの手残り − 月額配分</p><p>売上に対する手残り率 ＝ 手残り ÷ 売上 × 100<br>原価に対する手残り率 ＝ 手残り ÷ 仕入原価 × 100</p><p>分母が0円の割合は計算できません。表示は小数第1位に丸めます。逆算は条件を満たす最小の1円単位の売上を求めます。</p></details>
+    </div>
+  </section>
+</div>
+<script src="{{ url_for('static', filename='js/profit-calculator.js') }}" defer></script>

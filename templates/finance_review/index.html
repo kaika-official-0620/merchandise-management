@@ -2,6 +2,7 @@
 {% block finance_content %}
 <h1>利益・請求下書き</h1>
 <p>商品ごとの金額と根拠を確認し、売却・発送済みの商品から請求候補を整理します。</p>
+{% include 'finance_review/_profit_guide.html' %}
 {% if staff %}<section class="card"><h2>顧客ごとの月次確認</h2>{% for customer in customers %}<p><a href="{{ url_for('finance_review.customer', customer_id=customer.id) }}">{{ customer.display_name or customer.username }} — 請求・資金記録</a></p>{% else %}<p>対象の顧客がいません。</p>{% endfor %}</section>{% endif %}
 <section class="card"><h2>商品ごとの利益明細</h2><div class="scroll"><table><thead><tr><th>商品</th><th>保管</th><th>状態</th><th>確認</th></tr></thead><tbody>{% for item in items %}<tr><td>{{ item.title }}</td><td>{{ '開花' if item.custodian == 'kaika' else 'お客様' if item.custodian == 'customer' else '未確認' }}</td><td>{{ '発送済み' if item.shipped_at else '売却済み・未発送' if item.sold_at else '未売却' }}</td><td><a href="{{ url_for('finance_review.item', item_id=item.physical_item_id) }}">金額・利益・請求候補</a></td></tr>{% else %}<tr><td colspan="4">個品の登録・照合後に表示します。</td></tr>{% endfor %}</tbody></table></div></section>
 {% endblock %}

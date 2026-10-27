@@ -580,3 +580,7 @@ register_stage7_web(module)
 # Read-only customer navigation groups existing destinations without changing access.
 from customer_navigation import register_customer_navigation
 register_customer_navigation(module)
+
+# Keep customer document completion separate from private delivery to Kaika.
+from document_workflow import register_document_workflow
+register_document_workflow(module)

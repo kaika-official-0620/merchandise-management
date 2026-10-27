@@ -91,7 +91,7 @@
             <div class="card-header">
                 <span class="doc-no">{{ doc.document_no }}</span>
                 <span class="status-badge status-{{ status }}">
-                    {% if status == 'completed' %}作成済み
+                    {% if status == 'completed' %}作成済み・未送信
                     {% elif status == 'draft' %}下書き
                     {% elif status == 'in_progress' %}作成中
                     {% elif status == 'submitted' or status == 'sent' %}送付済み
@@ -115,7 +115,7 @@
                 {% endif %}
             </div>
             <div class="card-actions">
-                <a href="{{ url_for('user_mitsumori_view', id=doc.id) }}" class="btn btn-info">内容を見る</a>
+                <a href="{{ url_for('user_mitsumori_view', id=doc.id) }}" class="btn btn-info">{% if status == 'completed' %}内容確認・送信{% else %}内容を見る{% endif %}</a>
                 {% if doc.can_user_edit %}
                 <a href="{{ url_for('user_mitsumori_edit', id=doc.id) }}" class="btn btn-secondary">編集</a>
                 {% endif %}
@@ -150,7 +150,7 @@
             <div class="card-header">
                 <span class="doc-no">{{ doc.document_no }}</span>
                 <span class="status-badge status-{{ status }}">
-                    {% if status == 'completed' %}作成済み
+                    {% if status == 'completed' %}作成済み・未送信
                     {% elif status == 'draft' %}下書き
                     {% elif status == 'in_progress' %}作成中
                     {% elif status == 'sent' or status == 'submitted' %}送付済み
@@ -166,7 +166,7 @@
                 <div class="info-row total"><span>合計金額</span><strong>¥{{ "{:,}".format(doc.total_amount or 0) }}</strong></div>
             </div>
             <div class="card-actions">
-                <a href="{{ url_for('user_kaitori_shoudaku_view', id=doc.id) }}" class="btn btn-info">内容を見る</a>
+                <a href="{{ url_for('user_kaitori_shoudaku_view', id=doc.id) }}" class="btn btn-info">{% if status == 'completed' %}内容確認・送信{% else %}内容を見る{% endif %}</a>
                 {% if doc.can_user_edit %}
                 <a href="{{ url_for('user_kaitori_shoudaku_edit', id=doc.id) }}" class="btn btn-secondary">編集</a>
                 {% endif %}

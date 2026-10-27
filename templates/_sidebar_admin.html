@@ -157,6 +157,9 @@
         <div class="sidebar-subcategory">
             <div class="subcategory-label">書類</div>
             <a href="{{ url_for('admin_documents_dashboard') }}" class="{% if request.endpoint in document_dashboard_endpoints %}active{% endif %}">書類管理</a>
+            {% if customer_document_workflow_available|default(false) and current_user.has_permission('invoices') %}
+            <a href="{{ url_for('admin_customer_submissions') }}" class="{% if request.endpoint == 'admin_customer_submissions' %}active{% endif %}">お客様から届いた書類</a>
+            {% endif %}
             <a href="{{ url_for('admin_documents_history') }}" class="{% if request.endpoint in ['admin_documents_history', 'admin_documents_history_category'] %}active{% endif %}">書類履歴</a>
         </div>
         <div class="sidebar-subcategory">

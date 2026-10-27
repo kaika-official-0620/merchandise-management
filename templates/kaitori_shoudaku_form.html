@@ -146,16 +146,18 @@
 
     <div class="form-section preview-confirm-section">
         <div>
-            <h2>書類プレビュー確認</h2>
-            <p>入力内容から買取承諾書を確認できます。書類画面は確認専用にし、修正はこの入力画面で行います。</p>
+            <h2>仕上がりを確認する（任意）</h2>
+            <p>入力内容をデモ表示します。プレビューを開かずに「作成完了」を押すこともできます。</p>
         </div>
-        <button type="button" class="btn btn-secondary" id="open-kaitori-preview-btn">プレビューを確認する</button>
+        <button type="button" class="btn btn-secondary" id="open-kaitori-preview-btn">プレビューで確認</button>
     </div>
 
     <div class="form-actions">
         <button type="submit" name="status" value="draft" class="btn btn-secondary">下書き保存</button>
+        <button type="submit" name="status" value="completed" id="complete-document-btn" class="btn btn-primary">{% if mode == 'edit' %}更新完了{% else %}作成完了{% endif %}</button>
         <a href="{{ url_for('user_document_list') }}" class="btn btn-secondary">キャンセル</a>
     </div>
+    <p class="preview-muted">作成完了だけでは開花へ送信されません。作成後の画面で送付先を確認して申請してください。</p>
 </form>
 
 <div class="document-preview-modal" id="kaitori-preview-modal" aria-hidden="true">
@@ -164,7 +166,7 @@
         <div class="document-preview-toolbar">
             <div>
                 <h3 id="kaitori-preview-title">買取承諾書プレビュー</h3>
-                <p>内容を確認し、問題なければ作成を完了してください。</p>
+                <p>書類のデモ表示です。作成を完了しても、この操作だけでは送信されません。</p>
             </div>
             <button type="button" class="btn btn-secondary" data-close-kaitori-preview>閉じる</button>
         </div>
@@ -708,7 +710,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function openPreview() {
-        if (!form.reportValidity()) {
+        if (!validateForCompletion()) {
             return;
         }
         renderPreview();
@@ -722,14 +724,23 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function submitFromPreview() {
-        form.querySelectorAll('input[data-preview-status]').forEach((input) => input.remove());
-        const statusInput = document.createElement('input');
-        statusInput.type = 'hidden';
-        statusInput.name = 'status';
-        statusInput.value = 'completed';
-        statusInput.dataset.previewStatus = 'true';
-        form.appendChild(statusInput);
-        form.submit();
+        form.requestSubmit(document.getElementById('complete-document-btn'));
+    }
+
+    function validateForCompletion() {
+        if (!form.reportValidity()) return false;
+        const items = collectPreviewItems();
+        if (!items.length || items.some(item => !item.productName)) {
+            alert('商品名を1件以上入力し、金額を入力した行には商品名も入力してください。');
+            return false;
+        }
+        if (items.some(item => !Number.isSafeInteger(item.quantity) || item.quantity < 1
+                || !Number.isSafeInteger(item.unitPrice) || item.unitPrice < 0 || !Number.isSafeInteger(item.amount))
+                || !Number.isSafeInteger(items.reduce((sum, item) => sum + item.amount, 0))) {
+            alert('数量は1以上、単価は0以上の整数で入力し、金額を確認してください。');
+            return false;
+        }
+        return true;
     }
     
     // 初期化
@@ -737,6 +748,9 @@ document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('.item-row').forEach(attachPriceHandler);
     openPreviewBtn.addEventListener('click', openPreview);
     submitPreviewBtn.addEventListener('click', submitFromPreview);
+    form.addEventListener('submit', event => {
+        if (event.submitter?.value === 'completed' && !validateForCompletion()) event.preventDefault();
+    });
     previewModal.querySelectorAll('[data-close-kaitori-preview]').forEach(button => {
         button.addEventListener('click', closePreview);
     });

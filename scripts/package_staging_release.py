@@ -22,6 +22,7 @@ def source_files(source):
     candidates.extend(source.joinpath('templates').rglob('*.html'))
     candidates.extend(p for p in source.joinpath('scripts').iterdir() if p.suffix in {'.sh', '.py', '.ps1', '.cjs'})
     candidates.extend(source.joinpath('tests').glob('test_*.py'))
+    candidates.extend(source.joinpath('tests').glob('test_*.cjs'))
     for path in source.joinpath('static').rglob('*'):
         relative = path.relative_to(source)
         if any(part.startswith('.') or part.lower() in {'uploads', 'backups', '__pycache__'} for part in relative.parts):
@@ -30,7 +31,8 @@ def source_files(source):
             candidates.append(path)
     for name in ('staging-environment.md', 'platform-acceptance.md', 'recovery-runbook.md',
                  'deployed-staging-verification.md', 'tesseract-render-install.md',
-                 'customer-navigation-handoff-2026-10-26.md', 'cloud-staging-handoff-2026-10-27.md'):
+                 'customer-navigation-handoff-2026-10-26.md', 'cloud-staging-handoff-2026-10-27.md',
+                 'customer-usability-handoff-2026-10-27.md'):
         path = source / 'docs' / name
         if path.is_file():
             candidates.append(path)

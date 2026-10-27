@@ -27777,9 +27777,11 @@ def user_invoice_add():
         bank_info = request.form.get('bank_info', '')
         notes = request.form.get('notes', '')
         status = request.form.get('status', 'draft')
-        service_type = request.form.get('service_type', 'normal')
-        commission_amount = int(request.form.get('commission_amount', 0) or 0)
-        commission_rate = float(request.form.get('commission_rate', 10) or 10)
+        # Unapproved legacy rates are never activated by a new customer form.
+        # Zero is a stored placeholder under an explicit pending status, not a quoted fee.
+        service_type = 'pending_review'
+        commission_amount = 0
+        commission_rate = 0
         
         # 明細データ取得
         tax_categories = request.form.getlist('tax_category[]')
@@ -27823,8 +27825,8 @@ def user_invoice_add():
                     'amount': amount
                 })
         
-        tax_amount_8 = int(subtotal_8 * 0.08)
-        tax_amount_10 = int(subtotal_10 * 0.10)
+        tax_amount_8 = subtotal_8 * 8 // 100
+        tax_amount_10 = subtotal_10 * 10 // 100
         total_amount = subtotal + tax_amount_8 + tax_amount_10 + commission_amount
         invoice_no = generate_invoice_no()
         
@@ -27874,10 +27876,10 @@ def user_invoice_add():
         cur.close()
         conn.close()
         
-        if status == 'sent':
-            flash(f'買取明細書 {invoice_no} を作成・送信しました', 'success')
-        else:
-            flash(f'買取明細書 {invoice_no} を下書き保存しました', 'success')
+        if status == 'completed':
+            flash(f'買取明細書 {invoice_no} を参考書類として作成しました。料金確認まで送信は保留です。', 'success')
+            return redirect(url_for('user_invoice_view', id=invoice_id))
+        flash(f'買取明細書 {invoice_no} を下書き保存しました', 'success')
         return redirect(url_for('user_invoice_list'))
     
     # GETリクエストの場合はconnを閉じる
@@ -27965,9 +27967,12 @@ def user_invoice_edit(id):
                     'amount': amount
                 })
         
-        tax_amount_8 = int(subtotal_8 * 0.08)
-        tax_amount_10 = int(subtotal_10 * 0.10)
-        total_amount = subtotal + tax_amount_8 + tax_amount_10
+        tax_amount_8 = subtotal_8 * 8 // 100
+        tax_amount_10 = subtotal_10 * 10 // 100
+        # Retain the previously saved fee during an explicit draft edit.
+        # The request cannot replace it and this reference document cannot be sent yet.
+        commission_amount = int(invoice.get('commission_amount') or 0)
+        total_amount = subtotal + tax_amount_8 + tax_amount_10 + commission_amount
         
         if DATABASE_URL:
             cur.execute("""
@@ -28258,7 +28263,7 @@ def user_mitsumori_add():
         flash('見積依頼書を作成しました', 'success')
         if status == 'draft':
             return redirect(url_for('user_document_list'))
-        return redirect(url_for('documents', tab='mitsumori') + '#document-history-tabs')
+        return redirect(url_for('user_mitsumori_view', id=mitsumori_id))
     
     # GETリクエスト
     today = get_jst_now().strftime('%Y-%m-%d')
@@ -29467,6 +29472,7 @@ def invoice_download(id):
         return redirect(url_for('user_invoice_list'))
     
     step4_tax = invoice_tax_context(invoice, items)
+    pending_review = invoice.get('service_type') == 'pending_review'
     # CSV作成
     output = io.StringIO()
     writer = csv.writer(output, quoting=csv.QUOTE_ALL)
@@ -29479,11 +29485,15 @@ def invoice_download(id):
     writer.writerow([''])
     writer.writerow(['', '', '', '支払期限', invoice['payment_due_date'] or ''])
     writer.writerow([''])
-    writer.writerow(['請求金額 (税込)', '', '', '', '', '', ''])
+    writer.writerow(['参考合計・請求未確定' if pending_review else '請求金額 (税込)', '', '', '', '', '', ''])
     writer.writerow([f"¥{invoice['total_amount']:,}"])
     writer.writerow([''])
-    writer.writerow(['「8%」…軽減税率対象、「10」…標準税率'])
-    writer.writerow(['税区分', '日付', '品名・品番', '数量', '単位', '単価', '合計'])
+    if pending_review:
+        writer.writerow(['単価の税込・税抜は未確認。入力単価を税抜と仮定した保存済みの参考計算です。請求額ではありません。'])
+        writer.writerow(['開花料金', '未確認'])
+    else:
+        writer.writerow(['「8%」…軽減税率対象、「10」…標準税率'])
+    writer.writerow(['入力税率（参考）' if pending_review else '税区分', '日付', '品名・品番', '数量', '単位', '単価（入力値）' if pending_review else '単価', '合計'])
     
     for item in items:
         writer.writerow([
@@ -29498,7 +29508,12 @@ def invoice_download(id):
     
     writer.writerow([''])
     writer.writerow(['備考', invoice['notes'] or ''])
-    if step4_tax:
+    if pending_review:
+        writer.writerow(['明細小計（入力値）', f"¥{invoice['subtotal']:,}"])
+        writer.writerow(['税計算の参考値（8%）', f"¥{invoice['tax_amount_8']:,}"])
+        writer.writerow(['税計算の参考値（10%）', f"¥{invoice['tax_amount_10']:,}"])
+        writer.writerow(['参考合計・請求未確定', f"¥{invoice['total_amount']:,}"])
+    elif step4_tax:
         for tax_row in step4_tax['rows']:
             amount = f"¥{tax_row['amount']:,}" if tax_row['amount'] is not None else '未確認'
             writer.writerow(['', '', '', tax_row['label'], '', '', amount])
@@ -29513,7 +29528,7 @@ def invoice_download(id):
     
     if invoice['bank_info']:
         writer.writerow([''])
-        writer.writerow(['振込先', invoice['bank_info']])
+        writer.writerow(['参考入力の口座情報（支払い依頼ではありません）' if pending_review else '振込先', invoice['bank_info']])
     
     output.seek(0)
     
@@ -35156,7 +35171,7 @@ def user_kaitori_shoudaku_add():
         flash('買取承諾書を作成しました', 'success')
         if status == 'draft':
             return redirect(url_for('user_document_list'))
-        return redirect(url_for('documents') + '#document-history-tabs')
+        return redirect(url_for('user_kaitori_shoudaku_view', id=kaitori_id))
     
     # GETリクエスト
     cur.close()
@@ -35388,7 +35403,7 @@ def user_kaitori_shoudaku_edit(id):
         flash('買取承諾書を更新しました', 'success')
         if status == 'draft':
             return redirect(url_for('user_document_list'))
-        return redirect(url_for('documents') + '#document-history-tabs')
+        return redirect(url_for('user_kaitori_shoudaku_view', id=id))
     
     # GETリクエスト - 明細取得
     if DATABASE_URL:

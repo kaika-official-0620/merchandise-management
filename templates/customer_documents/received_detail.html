@@ -1,0 +1,15 @@
+{% extends 'base.html' %}
+{% block title %}受け付けた{{ title }} - 開花{% endblock %}
+{% block content %}
+<a class="btn btn-secondary" href="{{ url_for('admin_customer_submissions') }}">お客様から届いた書類へ戻る</a>
+<h1>{{ title }}</h1>
+<p>送信者：{{ document.customer_display_name }} ／ 書類番号：{{ document.document_no or document.invoice_no }} ／ 状態：開花へ送信済み</p>
+<p>送付先：株式会社 開花（書類受付）</p>
+<p>{{ document.subject or '' }}</p>
+<div style="overflow-x:auto"><table class="table"><thead><tr><th>商品・内容</th><th>数量</th><th>単価</th><th>金額</th></tr></thead><tbody>
+{% for item in details %}<tr><td>{{ item.item_name or item.product_name }}</td><td>{{ item.quantity }}</td><td>{{ item.unit_price }}</td><td>{{ item.amount }}</td></tr>{% endfor %}
+</tbody></table></div>
+<p>書類に記載された合計：¥{{ '{:,}'.format(document.total_amount or 0) }}</p>
+<p style="white-space:pre-wrap">{{ document.notes or '' }}</p>
+<p>この画面は受領内容の確認用です。商品の売却・発送・料金の確定は行いません。</p>
+{% endblock %}

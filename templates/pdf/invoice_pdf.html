@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 {% set user_created_invoice = invoice and invoice.document_scope == 'user_created' %}
+{% set pending_review = invoice and invoice.service_type == 'pending_review' %}
 {% set step4_tax = invoice_tax_context(invoice, items) %}
 {% set blank_row_limit = 8 if step4_tax else 15 %}
 {% set quantity_total = namespace(value=0) %}
@@ -358,7 +359,7 @@
 <body>
     {% include "pdf/_pdf_toolbar.html" %}
     <div class="container">
-        <h1 class="document-title">買 取 明 細 書</h1>
+        <h1 class="document-title">買 取 明 細 書{% if pending_review %}（参考・未確定）{% endif %}</h1>
         
         <div class="header-section">
             <div class="header-left">
@@ -369,20 +370,24 @@
             
             <div class="header-right">
                 <div class="header-right-row">No.：{{ invoice.invoice_no if invoice else '' }}</div>
-                <div class="header-right-row">請求日：{{ invoice.issue_date if invoice else '' }}</div>
+                <div class="header-right-row">{{ '作成日' if pending_review else '請求日' }}：{{ invoice.issue_date if invoice else '' }}</div>
             </div>
         </div>
         
-        <div class="request-text">下記の通りご請求申し上げます。</div>
+        <div class="request-text">{% if pending_review %}入力内容の参考書類です。請求は確定していません。{% else %}下記の通りご請求申し上げます。{% endif %}</div>
         
         <!-- 請求金額（左）と会社情報（右）を一列に -->
         <div class="amount-company-row">
             <div class="request-amount-box">
-                <div class="request-label">請求金額</div>
-                <div class="request-amount">¥{{ "{:,}".format(invoice.total_amount if invoice else 0) }} (税込)</div>
+                <div class="request-label">{{ '参考合計・請求未確定' if pending_review else '請求金額' }}</div>
+                <div class="request-amount">¥{{ "{:,}".format(invoice.total_amount if invoice else 0) }}{% if not pending_review %} (税込){% endif %}</div>
             </div>
             
             <div class="company-info">
+                {% if pending_review %}
+                <div class="company-name">利用者が入力した参考書類</div>
+                <div class="company-address">開花料金：未確認<br>請求書・支払依頼ではありません。</div>
+                {% else %}
                 <div class="company-name">株式会社 開花</div>
                 <div class="company-address">
                     〒140-0015<br>
@@ -390,6 +395,7 @@
                     オーキッドレジデンス西大井602
                 </div>
                 <div class="invoice-number">インボイス番号：T3010701047914</div>
+                {% endif %}
             </div>
         </div>
         
@@ -400,7 +406,7 @@
                     <th class="col-name">商品名／品名</th>
                     <th class="col-date">仕入れ日</th>
                     <th class="col-code">商品番号</th>
-                    <th class="col-amount">{{ '金額(税抜)' if user_created_invoice else '金額(税込)' }}</th>
+                    <th class="col-amount">{{ '金額（入力値）' if pending_review else ('金額(税抜)' if user_created_invoice else '金額(税込)') }}</th>
                 </tr>
             </thead>
             <tbody>
@@ -449,7 +455,11 @@
                     <td class="label">{{ '明細合計' if step4_tax else '小計' }}</td>
                     <td class="text-right">¥{{ "{:,}".format(invoice.subtotal if invoice else 0) }}</td>
                 </tr>
-                {% if step4_tax %}
+                {% if pending_review %}
+                <tr><td class="label">税計算の参考値（8%）</td><td class="text-right">¥{{ "{:,}".format(invoice.tax_amount_8 or 0) }}</td></tr>
+                <tr><td class="label">税計算の参考値（10%）</td><td class="text-right">¥{{ "{:,}".format(invoice.tax_amount_10 or 0) }}</td></tr>
+                <tr><td class="label">開花料金</td><td class="text-right">未確認</td></tr>
+                {% elif step4_tax %}
                 {% include '_invoice_tax_summary_rows.html' %}
                 {% elif user_created_invoice %}
                 <tr>
@@ -473,7 +483,7 @@
                 </tr>
                 {% endif %}
                 <tr class="total-row">
-                    <td class="label">合計（税込）</td>
+                    <td class="label">{{ '参考合計・請求未確定' if pending_review else '合計（税込）' }}</td>
                     <td class="text-right value">¥{{ "{:,}".format(invoice.total_amount if invoice else 0) }}</td>
                 </tr>
             </table>
@@ -483,7 +493,9 @@
             {% if invoice and invoice.notes %}
             <div>備考：{{ invoice.notes }}</div>
             {% endif %}
-            {% if step4_tax %}
+            {% if pending_review %}
+            単価が税込か税抜かは未確認です。表示合計は入力単価を税抜と仮定した保存済みの参考計算で、請求額ではありません。開花料金は未確認です。
+            {% elif step4_tax %}
             {{ step4_tax.message }}
             {% elif user_created_invoice %}
             備考欄：明細金額は税抜です。合計金額には消費税と手数料を含みます。

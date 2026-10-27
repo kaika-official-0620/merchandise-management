@@ -184,6 +184,242 @@ def verify_access(runtime, config, access, state, state_path, users, phase_name,
         check('access_pending_token_prepared_for_restart', row(state['pending_access_token'])[5] is None)
 
 
+def verify_documents(runtime, state, state_path, users, clients, phase_name, check):
+    """Real fixture HTTP creation, independent submission and PG item locking.
+
+    Only the four existing fictional fixture products are referenced. The
+    records created here have no billing, outbound delivery or customer data.
+    """
+    app, base = runtime.app, 'https://' + HTTP_HOST
+    normal, other, admin = clients['normal'], clients['business'], clients['admin']
+
+    class Tokens(HTMLParser):
+        value = ''
+
+        def handle_starttag(self, tag, attrs):
+            attrs = dict(attrs)
+            if tag == 'meta' and attrs.get('name') == 'kaika-security-csrf':
+                self.value = attrs.get('content', '')
+
+    def fetch_rows(sql, values=()):
+        with closing(runtime.get_db()) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(sql, values)
+                return cursor.fetchall()
+
+    def token(client):
+        response = client.get('/mitsumori/add', base_url=base)
+        parsed = Tokens()
+        parsed.feed(response.get_data(as_text=True))
+        check('document_form_get_' + ('owner' if client is normal else 'other'),
+              response.status_code == 200 and len(parsed.value) == 43)
+        return parsed.value
+
+    owner_token, other_token = token(normal), token(other)
+
+    def candidates(client):
+        response = client.get('/api/document-products?inventory_only=1', base_url=base)
+        check('document_candidate_api_http_' + ('owner' if client is normal else 'other'), response.status_code == 200)
+        return {int(row['id']) for row in (response.get_json() or [])}
+
+    def send(client, document_id, csrf=owner_token, destination='kaika'):
+        return client.post('/documents/submit/estimate/' + str(document_id), base_url=base,
+            data={'security_csrf_token': csrf, 'destination': destination})
+
+    def event_count(document_id):
+        return fetch_rows("SELECT COUNT(*) FROM final_document_events WHERE document_kind='user_mitsumori' AND document_id=%s AND action='customer_submit'", (document_id,))[0][0]
+
+    check('document_workflow_registered', 'kaika_document_workflow' in app.extensions)
+    owner_ids = {row[0] for row in fetch_rows("SELECT id FROM merchandise WHERE user_id=%s AND scope='user'", (users['normal']['id'],))}
+    other_ids = {row[0] for row in fetch_rows("SELECT id FROM merchandise WHERE user_id=%s AND scope='user'", (users['business']['id'],))}
+    check('document_candidates_private_to_owner', candidates(normal).issubset(owner_ids) and not candidates(normal) & other_ids)
+    check('document_candidates_private_to_other', candidates(other).issubset(other_ids) and not candidates(other) & owner_ids)
+    check('document_candidate_filter_rejects_invalid', normal.get('/api/document-products?sold_days=bad', base_url=base).status_code == 400)
+    check('document_staff_candidate_api_denied', admin.get('/api/document-products', base_url=base).status_code == 403)
+    check('document_customer_staff_inbox_denied', normal.get('/admin/customer-submissions', base_url=base).status_code == 403)
+
+    if phase_name == 'initialize':
+        subject = 'fictional-document-review-' + secrets.token_hex(6)
+        form = {'status': 'completed', 'issue_date': '2026-10-27', 'company_name': 'fictional-kaika',
+                'subject': subject, 'item_name[]': ['fictional-preserve-on-reboot'],
+                'merchandise_id[]': [str(state['legacy_id'])], 'quantity[]': ['1'],
+                'unit[]': ['item'], 'unit_price[]': ['1000'], 'security_csrf_token': owner_token}
+        check('document_save_forged_submission_rejected', normal.post('/mitsumori/add', base_url=base,
+              data={**form, 'status': 'submitted'}).status_code == 400)
+        check('document_save_other_customer_product_rejected', normal.post('/mitsumori/add', base_url=base,
+              data={**form, 'merchandise_id[]': [str(next(iter(other_ids)))]}).status_code == 404)
+        check('document_invalid_price_rejected_before_save', normal.post('/mitsumori/add', base_url=base,
+              data={**form, 'unit_price[]': ['1.5']}).status_code == 400)
+        for number in range(2):
+            saved = normal.post('/mitsumori/add', base_url=base, data=form)
+            check('document_direct_completion_without_preview_' + str(number), saved.status_code == 302)
+        rows = fetch_rows('SELECT id,status,total_amount,document_no FROM user_mitsumori WHERE user_id=%s AND subject=%s ORDER BY id',
+                          (users['normal']['id'], subject))
+        check('document_two_distinct_completed_unsent', len(rows) == 2 and all(row[1] == 'completed' and row[2] == 1000 for row in rows))
+        if len(rows) != 2:
+            raise AssertionError('Fixture document creation did not return two saved documents')
+        first, second = rows[0][0], rows[1][0]
+        check('document_save_does_not_submit_or_emit_event', event_count(first) == 0 and event_count(second) == 0)
+        check('document_completed_unsent_product_still_available', state['legacy_id'] in candidates(normal))
+        inbox = admin.get('/admin/customer-submissions', base_url=base)
+        check('document_staff_inbox_excludes_unsent', inbox.status_code == 200 and
+              ('/admin/customer-submissions/estimate/' + str(first)) not in inbox.get_data(as_text=True))
+        check('document_staff_unsent_detail_denied', admin.get('/admin/customer-submissions/estimate/' + str(first), base_url=base).status_code == 404)
+        detail = normal.get('/mitsumori/view/' + str(first), base_url=base)
+        check('document_completed_detail_has_separate_send', detail.status_code == 200 and
+              ('/documents/submit/estimate/' + str(first)) in detail.get_data(as_text=True))
+        check('document_other_customer_submission_denied', send(other, first, other_token).status_code == 404)
+        check('document_invalid_csrf_denied', send(normal, first, 'fictional-invalid').status_code == 400)
+        check('document_invalid_destination_denied', send(normal, first, destination='outside').status_code == 400)
+        check('document_invalid_requests_preserve_completed', fetch_rows('SELECT status FROM user_mitsumori WHERE id=%s', (first,))[0][0] == 'completed')
+
+        # Both independent HTTP submissions wait on the same actual PG item
+        # lock. Releasing it must permit only one distinct document to submit.
+        with normal.session_transaction(base_url=base) as session:
+            original_session = dict(session)
+
+        def concurrent_submit(document_id):
+            contender = app.test_client()
+            with contender.session_transaction(base_url=base) as session:
+                session.update(original_session)
+            return send(contender, document_id).status_code
+
+        with closing(runtime.get_db()) as blocker:
+            with blocker.cursor() as cursor:
+                cursor.execute('SELECT id FROM merchandise WHERE id=%s FOR UPDATE', (state['legacy_id'],))
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                pending = [pool.submit(concurrent_submit, value) for value in (first, second)]
+                try:
+                    waiting = False
+                    deadline = time.monotonic() + 10
+                    while time.monotonic() < deadline:
+                        waiting_count = fetch_rows("SELECT COUNT(*) FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock'")[0][0]
+                        if waiting_count >= 2:
+                            waiting = True
+                            break
+                        if all(task.done() for task in pending):
+                            break
+                        time.sleep(.05)
+                    check('document_two_submissions_wait_on_actual_pg_lock', waiting)
+                finally:
+                    blocker.rollback()
+                statuses = sorted(task.result(timeout=15) for task in pending)
+            check('document_same_item_exactly_one_submission', statuses == [302, 409])
+        final_rows = fetch_rows('SELECT id,status,document_no FROM user_mitsumori WHERE id IN (%s,%s) ORDER BY id', (first, second))
+        winners = [row for row in final_rows if row[1] == 'submitted']
+        losers = [row for row in final_rows if row[1] == 'completed']
+        check('document_competing_draft_kept_without_submission', len(winners) == 1 and len(losers) == 1)
+        if len(winners) != 1 or len(losers) != 1:
+            raise AssertionError('Fixture document submission did not have exactly one winner')
+        state['document_review'] = {'winner': winners[0][0], 'loser': losers[0][0], 'number': winners[0][2], 'subject': subject}
+        write_report(state_path, state)
+    else:
+        saved = state['document_review']
+        persisted = dict(fetch_rows('SELECT id,status FROM user_mitsumori WHERE id IN (%s,%s)', (saved['winner'], saved['loser'])))
+        check('document_restart_submission_and_unsent_preserved', persisted == {saved['winner']: 'submitted', saved['loser']: 'completed'})
+
+    saved = state['document_review']
+    winner, loser = saved['winner'], saved['loser']
+    check('document_replay_is_safe', send(normal, winner).status_code == 302)
+    check('document_one_submission_event_only', event_count(winner) == 1 and event_count(loser) == 0)
+    check('document_other_saved_document_conflicts', send(normal, loser).status_code == 409)
+    check('document_sent_product_excluded_from_candidates', state['legacy_id'] not in candidates(normal))
+    inbox = admin.get('/admin/customer-submissions', base_url=base)
+    check('document_staff_inbox_receives_winner', inbox.status_code == 200 and
+          ('/admin/customer-submissions/estimate/' + str(winner)) in inbox.get_data(as_text=True) and
+          ('/admin/customer-submissions/estimate/' + str(loser)) not in inbox.get_data(as_text=True))
+    received = admin.get('/admin/customer-submissions/estimate/' + str(winner), base_url=base)
+    check('document_staff_received_detail_matches_saved', received.status_code == 200 and saved['number'] in received.get_data(as_text=True))
+    check('document_other_customer_received_detail_denied', other.get('/admin/customer-submissions/estimate/' + str(winner), base_url=base).status_code == 403)
+    check('document_customer_cannot_change_sent_document', normal.post('/mitsumori/edit/' + str(winner), base_url=base,
+          data={'status': 'completed', 'item_name[]': ['changed'], 'quantity[]': ['1'], 'unit_price[]': ['1']}).status_code == 409)
+    check('document_fixture_products_not_deleted_or_added', fetch_rows('SELECT COUNT(*) FROM merchandise')[0][0] == 4)
+
+
+def verify_source_documents(runtime, state, state_path, users, clients, phase_name, check):
+    """An already-sent fictional invoice may continue into its own estimate.
+
+    The invoice fixture is inserted only into this newly owned database: real
+    invoice sending remains disabled. Its item cannot be selected generally,
+    and neither another source invoice nor a mismatched snapshot is exempted.
+    """
+    base = 'https://' + HTTP_HOST
+    business, normal, admin = clients['business'], clients['normal'], clients['admin']
+    with business.session_transaction(base_url=base) as session:
+        token = session['_security_csrf']
+    with normal.session_transaction(base_url=base) as session:
+        other_token = session['_security_csrf']
+
+    def query(sql, values=(), write=False):
+        with closing(runtime.get_db()) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(sql, values)
+                rows = cursor.fetchall() if cursor.description else []
+            if write:
+                connection.commit()
+            return rows
+
+    def send(document_id, client=business, csrf=token):
+        return client.post('/documents/submit/estimate/' + str(document_id), base_url=base,
+            data={'security_csrf_token': csrf, 'destination': 'kaika'})
+
+    if phase_name == 'initialize':
+        item_id = query("SELECT id FROM merchandise WHERE user_id=%s AND scope='user' ORDER BY id LIMIT 1", (users['business']['id'],))[0][0]
+        # A sold item is deliberately used to exercise the explicit source
+        # exception. This does not change any of the normal-user fixtures.
+        query("UPDATE merchandise SET sale_date='2026-10-26' WHERE id=%s", (item_id,), write=True)
+        prefix = 'KT-FIXTURE-' + secrets.token_hex(5)
+        invoice_ids, source_rows = [], []
+        for suffix in ('SOURCE', 'OTHER'):
+            invoice_id = query("INSERT INTO invoices (invoice_no,sender_id,issue_date,subtotal,total_amount,status,document_scope,service_type,commission_rate,commission_amount) VALUES (%s,%s,'2026-10-27',30000,30000,'sent','client_outgoing','pending_review',0,0) RETURNING id",
+                (prefix + '-' + suffix, users['business']['id']), write=True)[0][0]
+            source_row = query("INSERT INTO invoice_items (invoice_id,item_no,product_name,merchandise_id,quantity,unit,unit_price,amount) VALUES (%s,1,'fictional-source-product',%s,1,'点',30000,30000) RETURNING id",
+                (invoice_id, item_id), write=True)[0][0]
+            invoice_ids.append(invoice_id)
+            source_rows.append(source_row)
+        invoice_id, unrelated_id = invoice_ids
+        path = '/mitsumori/add?source_invoice_id=' + str(invoice_id)
+        form = {'status': 'completed', 'source_invoice_id': str(invoice_id),
+                'source_invoice_item_id[]': [str(source_rows[0])],
+                'subject': 'fictional-source-continuation', 'security_csrf_token': token}
+        page = business.get(path, base_url=base)
+        check('document_source_owned_form_available', page.status_code == 200 and 'fictional-source-product' in page.get_data(as_text=True))
+        check('document_source_other_owner_post_denied', normal.post(path, base_url=base,
+            data={**form, 'security_csrf_token': other_token}).status_code == 404)
+        check('document_source_other_invoice_row_denied', business.post(path, base_url=base,
+            data={**form, 'source_invoice_item_id[]': [str(source_rows[1])]}).status_code == 400)
+        check('document_source_excludes_only_its_own_invoice', business.post(path, base_url=base, data=form).status_code == 409)
+        query("UPDATE invoices SET status='cancelled' WHERE id=%s", (unrelated_id,), write=True)
+        saved = business.post(path, base_url=base, data=form)
+        check('document_source_direct_completion_allowed', saved.status_code == 302)
+        rows = query('SELECT id,status,source_document_id,source_document_type FROM user_mitsumori WHERE user_id=%s AND source_invoice_id=%s', (users['business']['id'], invoice_id))
+        check('document_source_saved_relation_and_unsent_state', len(rows) == 1 and rows[0][1:] == ('completed', invoice_id, 'invoice'))
+        if len(rows) != 1:
+            raise AssertionError('The explicit source fixture did not produce one estimate')
+        document_id = rows[0][0]
+        query('UPDATE user_mitsumori_items SET amount=29999 WHERE mitsumori_id=%s', (document_id,), write=True)
+        check('document_source_snapshot_change_denied', send(document_id).status_code == 409)
+        query('UPDATE user_mitsumori_items SET amount=30000 WHERE mitsumori_id=%s', (document_id,), write=True)
+        query("UPDATE invoices SET status='draft' WHERE id=%s", (invoice_id,), write=True)
+        check('document_source_status_rechecked_before_send', send(document_id).status_code == 409)
+        query("UPDATE invoices SET status='sent' WHERE id=%s", (invoice_id,), write=True)
+        check('document_source_explicit_send_succeeds', send(document_id).status_code == 302)
+        state['document_source_review'] = {'invoice_id': invoice_id, 'unrelated_id': unrelated_id,
+            'document_id': document_id, 'item_id': item_id}
+        write_report(state_path, state)
+    saved = state['document_source_review']
+    document_id = saved['document_id']
+    check('document_source_sent_state_preserved', query('SELECT status FROM user_mitsumori WHERE id=%s', (document_id,))[0][0] == 'submitted')
+    check('document_source_original_keeps_its_own_state', query('SELECT status FROM invoices WHERE id=%s', (saved['invoice_id'],))[0][0] == 'sent')
+    check('document_source_replay_safe', send(document_id).status_code == 302)
+    check('document_source_exactly_one_submit_event', query("SELECT COUNT(*) FROM final_document_events WHERE document_kind='user_mitsumori' AND document_id=%s AND action='customer_submit'", (document_id,))[0][0] == 1)
+    check('document_source_other_customer_send_denied', send(document_id, normal, other_token).status_code == 404)
+    check('document_source_staff_received_detail', admin.get('/admin/customer-submissions/estimate/' + str(document_id), base_url=base).status_code == 200)
+    listed = business.get('/api/document-products', base_url=base)
+    check('document_source_product_not_generally_selectable', listed.status_code == 200 and
+          saved['item_id'] not in {int(row['id']) for row in (listed.get_json() or [])})
+
+
 def phase(args):
     import psycopg2
     import run_app_preview as sandbox
@@ -366,6 +602,8 @@ def phase(args):
         mobile = anon.get('/api/mobile/v1/items', headers={'Authorization': 'Bearer ' + token}, base_url=base)
         check('native_api_same_legacy_inventory', token_response.status_code == 200 and mobile.status_code == 200 and (mobile.get_json() or {}).get('total') == 2)
         verify_access(runtime, config, access, state, state_path, users, args.phase, check)
+        verify_documents(runtime, state, state_path, users, clients, args.phase, check)
+        verify_source_documents(runtime, state, state_path, users, clients, args.phase, check)
         try:
             with socket.socket() as denied:
                 denied.connect(('203.0.113.1', 443))
@@ -413,7 +651,7 @@ def parent(args):
             with (root / (name + '-private.log')).open('wb') as log:
                 completed = subprocess.run([sys.executable, str(Path(__file__).resolve()), '--phase', name,
                     '--workspace', str(root)], stdin=subprocess.DEVNULL, stdout=log, stderr=log,
-                    timeout=180, shell=False, creationflags=0x08000000 if os.name == 'nt' else 0)
+                    timeout=300, shell=False, creationflags=0x08000000 if os.name == 'nt' else 0)
             path = root / (name + '-report.json')
             report = json.loads(path.read_text(encoding='utf-8')) if path.exists() else {'phase': name, 'failed': 1, 'missing_report': True}
             result['phases'].append(report)

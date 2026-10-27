@@ -1,0 +1,23 @@
+{% if document_delivery is defined %}
+<section class="document-delivery-panel" aria-labelledby="document-delivery-heading">
+  <div><h2 id="document-delivery-heading">開花への送信</h2>
+  <p>作成完了と送信は別の操作です。送信すると、開花の担当者が書類受付で確認できます。</p></div>
+  {% if document_delivery.sent %}
+  <p class="document-delivery-status"><strong>送信済み</strong> · 送付先：株式会社 開花（書類受付）</p>
+  {% elif document_delivery.hold_reason %}
+  <p class="document-delivery-status">{{ document_delivery.hold_reason }}</p>
+  {% elif document_delivery.can_send %}
+  <form method="post" action="{{ url_for('customer_document_submit', kind=document_delivery.kind, document_id=document_delivery.id) }}" class="document-delivery-form">
+    <input type="hidden" name="security_csrf_token" value="{{ security_form_token }}">
+    <label>送付先<select name="destination" required><option value="kaika">株式会社 開花（書類受付）</option></select></label>
+    <button type="submit" class="btn btn-primary">{{ document_delivery.title }}を開花へ送る</button>
+  </form>
+  <p class="document-delivery-note">まだ送信されていません。上のボタンを押すと送信されます。メールやLINEへの外部配信は行いません。</p>
+  {% else %}
+  <p class="document-delivery-status">{% if document_delivery.status in ['draft', 'in_progress'] %}下書きです。入力画面で作成を完了すると、送付先と送信ボタンが表示されます。{% else %}この状態の書類は送信できません。{% endif %}</p>
+  {% endif %}
+</section>
+<style>
+.document-delivery-panel{margin:1.25rem 0;padding:1.25rem;border:1px solid #cadbd5;border-radius:14px;background:#f7fbf9;color:#243f38}.document-delivery-panel h2{margin:0 0 .5rem;font-size:1.15rem}.document-delivery-panel p{line-height:1.65}.document-delivery-form{display:flex;gap:1rem;align-items:end;flex-wrap:wrap}.document-delivery-form label{display:grid;gap:.4rem;flex:1;min-width:220px}.document-delivery-form select{background:white;color:#243f38;border:1px solid #b1c5bc;padding:.7rem;border-radius:8px}.document-delivery-form button{background:#246b55!important;color:white!important;border:1px solid #246b55!important;min-height:44px}.document-delivery-note{font-size:.875rem;color:#566d64}.document-delivery-status{background:#e9f3ee;padding:.8rem;border-radius:8px}@media(max-width:600px){.document-delivery-form>*{width:100%}}
+</style>
+{% endif %}

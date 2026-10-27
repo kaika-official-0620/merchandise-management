@@ -7,7 +7,12 @@
     <a href="{{ url_for('user_invoice_list') }}" class="btn btn-secondary">← 一覧に戻る</a>
 </div>
 
-<form method="POST" class="invoice-form" id="invoice-form">
+<form method="POST" class="invoice-form" id="invoice-form" data-existing-invoice="{{ '1' if invoice else '0' }}">
+    <div class="form-section">
+        <h3>料金条件の確認待ち・保存のみ</h3>
+        <p class="help-text">この買取明細書は、契約・料金条件の確認が済むまで開花への送信を保留しています。作成完了は記録の保存です。実際の請求や支払いは行いません。</p>
+        <p class="help-text">{% if invoice %}以前に保存した手数料は参考額として保持します。明細を編集しても、旧料率で自動計算し直しません。{% else %}開花料金は未確定です。表示する参考合計には商品明細と消費税だけを含めます。{% endif %}</p>
+    </div>
     <div class="form-section">
         <h3>基本情報</h3>
         <div class="form-grid">
@@ -20,13 +25,11 @@
                 <input type="text" id="recipient_name" name="recipient_name" value="{{ invoice.recipient_name if invoice else '' }}" class="form-control" placeholder="株式会社○○">
             </div>
             <div class="form-group">
-                <label for="service_type">サービス種別 *</label>
-                <select id="service_type" name="service_type" class="form-control" required>
-                    <option value="normal" {% if not invoice or invoice.service_type == 'normal' %}selected{% endif %}>通常精算（手数料10%）</option>
-                    <option value="photo_packing" {% if invoice and invoice.service_type == 'photo_packing' %}selected{% endif %}>撮影梱包等代行（25,000円以上:2%, 未満:500円）</option>
-                    <option value="wholesale" {% if invoice and invoice.service_type == 'wholesale' %}selected{% endif %}>業者卸販売（手数料10%）</option>
-                    <option value="multi_listing" {% if invoice and invoice.service_type == 'multi_listing' %}selected{% endif %}>同時出品サービス（手数料3%）</option>
-                    <option value="auction" {% if invoice and invoice.service_type == 'auction' %}selected{% endif %}>オークション流し（手数料5%）</option>
+                <label for="service_type">料金条件</label>
+                {% set service_labels = {'normal':'通常精算', 'photo_packing':'撮影梱包等代行', 'wholesale':'業者卸販売', 'multi_listing':'同時出品サービス', 'auction':'オークション流し', 'pending_review':'要確認'} %}
+                <select id="service_type" name="service_type" class="form-control" aria-readonly="true">
+                    {% if invoice %}<option value="{{ invoice.service_type or 'pending_review' }}">{{ service_labels.get(invoice.service_type, '保存済みの種別') }}（保存済み・条件確認待ち）</option>
+                    {% else %}<option value="pending_review">要確認（開花料金は未確定）</option>{% endif %}
                 </select>
             </div>
             <div class="form-group">
@@ -43,14 +46,18 @@
     <div class="form-section">
         <h3>明細</h3>
         <p class="help-text">※「8%」は軽減税率対象、「10」は標準税率です</p>
+        <div class="form-group">
+            <label for="invoice-product-search">商品を検索</label>
+            <input type="search" id="invoice-product-search" class="form-control" placeholder="商品名・ブランド・管理番号" autocomplete="off">
+        </div>
         <div class="product-selector">
-            <label>登録商品から追加：</label>
-            <select id="product-filter" class="form-control" style="max-width: 150px;">
+            <label for="product-select">登録商品から追加：</label>
+            <select id="product-filter" class="form-control" style="max-width: 150px;" aria-label="在庫・売却状況">
                 <option value="">すべて</option>
                 <option value="sold">売却済みのみ</option>
                 <option value="inventory">在庫のみ</option>
             </select>
-            <select id="sold-days-filter" class="form-control" style="max-width: 170px;">
+            <select id="sold-days-filter" class="form-control" style="max-width: 170px;" aria-label="売却日の範囲">
                 <option value="">売却日: すべて</option>
                 <option value="7">直近7日以内</option>
                 <option value="30">直近30日以内</option>
@@ -59,8 +66,9 @@
             <select id="product-select" class="form-control">
                 <option value="">-- 商品を選択 --</option>
             </select>
-            <button type="button" class="btn btn-info" id="add-product-btn">追加</button>
+            <button type="button" class="btn btn-secondary" id="add-product-btn" disabled>明細に追加</button>
         </div>
+        <p id="invoice-product-status" class="help-text" role="status" aria-live="polite">商品一覧を読み込んでいます。</p>
         <div class="table-responsive">
             <table class="items-table" id="items-table">
                 <thead>
@@ -101,7 +109,7 @@
                         </tr>
                         {% endfor %}
                     {% else %}
-                        {% for i in range(5) %}
+                        {% for i in range(1) %}
                         <tr class="item-row">
                             <td>
                                 <select name="tax_category[]" class="form-control tax-category">
@@ -152,15 +160,15 @@
                     </tr>
                     <tr class="totals-row commission-row">
                         <td colspan="5"></td>
-                        <td class="text-right"><strong>手数料 <span id="commission-rate-label">(10%)</span></strong></td>
-                        <td id="commission-amount">¥0</td>
+                        <td class="text-right"><strong>開花料金 <span id="commission-rate-label">{% if invoice %}（保存済み参考額）{% else %}（未確定）{% endif %}</span></strong></td>
+                        <td id="commission-amount">{% if invoice %}¥{{ "{:,}".format((invoice.commission_amount or 0)|int) }}{% else %}要確認{% endif %}</td>
                         <td></td>
                     </tr>
-                    <input type="hidden" name="commission_amount" id="commission-input" value="0">
-                    <input type="hidden" name="commission_rate" id="commission-rate-input" value="10">
+                    <input type="hidden" name="commission_amount" id="commission-input" value="{{ (invoice.commission_amount or 0)|int if invoice else 0 }}">
+                    <input type="hidden" name="commission_rate" id="commission-rate-input" value="{{ invoice.commission_rate or 0 if invoice else 0 }}">
                     <tr class="totals-row total-final">
                         <td colspan="5"></td>
-                        <td class="text-right"><strong>請求金額（税込・手数料込）</strong></td>
+                        <td class="text-right"><strong>{% if invoice %}参考合計（保存済み手数料を含む）{% else %}商品明細・税の参考合計{% endif %}</strong></td>
                         <td id="total-amount">¥0</td>
                         <td></td>
                     </tr>
@@ -185,15 +193,17 @@
 
     <div class="form-section preview-confirm-section">
         <div>
-            <h3>書類プレビュー確認</h3>
-            <p class="help-text">基本情報・宛名・明細・手数料を確認してから送信できます。</p>
+            <h3>仕上がりを確認する（任意）</h3>
+            <p class="help-text">入力内容をデモ表示します。プレビューを開かずに「作成完了」を押すこともできます。</p>
         </div>
-        <button type="button" class="btn btn-info" id="open-invoice-preview-btn">プレビューを確認する</button>
+        <button type="button" class="btn btn-secondary" id="open-invoice-preview-btn">プレビューで確認</button>
     </div>
 
     <div class="form-actions">
         <button type="submit" name="status" value="draft" class="btn btn-secondary">下書き保存</button>
+        <button type="submit" name="status" value="completed" id="complete-document-btn" class="btn btn-primary">{% if invoice %}更新完了{% else %}作成完了{% endif %}</button>
     </div>
+    <p class="help-text">作成完了だけでは開花へ送信されません。この書類の送信は、契約・料金条件の確認が済むまで保留です。</p>
 </form>
 
 <div class="document-preview-modal" id="invoice-preview-modal" aria-hidden="true">
@@ -202,7 +212,7 @@
         <div class="document-preview-toolbar">
             <div>
                 <h3 id="invoice-preview-title">買取明細書プレビュー</h3>
-                <p>内容に問題がなければ、この画面から送信を確定してください。</p>
+                <p>書類のデモ表示です。作成を完了しても、この操作だけでは送信されません。</p>
             </div>
             <button type="button" class="btn btn-secondary" data-close-invoice-preview>閉じる</button>
         </div>
@@ -223,7 +233,7 @@
             </div>
             <div class="preview-amount-row">
                 <div class="preview-amount-box">
-                    <span>請求金額</span>
+                    <span>参考合計・請求未確定</span>
                     <strong id="invoice-preview-total">¥0</strong>
                 </div>
                 <div class="preview-sender-box">
@@ -256,14 +266,14 @@
                     <tr><th>小計</th><td id="invoice-preview-subtotal">¥0</td></tr>
                     <tr><th>消費税(8%)</th><td id="invoice-preview-tax8">¥0</td></tr>
                     <tr><th>消費税(10%)</th><td id="invoice-preview-tax10">¥0</td></tr>
-                    <tr><th>手数料</th><td id="invoice-preview-commission">¥0</td></tr>
-                    <tr class="preview-summary-total"><th>請求金額</th><td id="invoice-preview-total-summary">¥0</td></tr>
+                    <tr><th>開花料金{% if invoice %}（保存済み参考額）{% else %}（未確定）{% endif %}</th><td id="invoice-preview-commission">要確認</td></tr>
+                    <tr class="preview-summary-total"><th>参考合計・請求未確定</th><td id="invoice-preview-total-summary">¥0</td></tr>
                 </table>
             </div>
         </div>
         <div class="document-preview-actions">
             <button type="button" class="btn btn-secondary" data-close-invoice-preview>修正する</button>
-            <button type="button" class="btn btn-primary" id="send-invoice-from-preview-btn">この内容で送信する</button>
+            <button type="button" class="btn btn-primary" id="send-invoice-from-preview-btn">この内容で作成完了</button>
         </div>
     </div>
 </div>
@@ -805,6 +815,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const itemsBody = document.getElementById('items-body');
     const addRowBtn = document.getElementById('add-row');
     const productSelect = document.getElementById('product-select');
+    const productSearch = document.getElementById('invoice-product-search');
+    const productStatus = document.getElementById('invoice-product-status');
     const productFilter = document.getElementById('product-filter');
     const soldDaysFilter = document.getElementById('sold-days-filter');
     const addProductBtn = document.getElementById('add-product-btn');
@@ -813,50 +825,18 @@ document.addEventListener('DOMContentLoaded', function() {
     const previewModal = document.getElementById('invoice-preview-modal');
     const openPreviewBtn = document.getElementById('open-invoice-preview-btn');
     const sendFromPreviewBtn = document.getElementById('send-invoice-from-preview-btn');
+    const isExistingInvoice = form.dataset.existingInvoice === '1';
+    const savedCommission = Number(document.getElementById('commission-input').value || 0);
+    const savedCommissionRate = Number(document.getElementById('commission-rate-input').value || 0);
     
     let products = [];
+    let productLoadSequence = 0;
     
-    // 手数料計算関数
-    function calculateCommission(subtotal, serviceType) {
-        let rate = 10;
-        let commission = 0;
-        let rateLabel = '10%';
-        
-        switch(serviceType) {
-            case 'normal':
-                rate = 10;
-                commission = Math.floor(subtotal * 0.10);
-                rateLabel = '10%';
-                break;
-            case 'photo_packing':
-                if (subtotal >= 25000) {
-                    rate = 2;
-                    commission = Math.floor(subtotal * 0.02);
-                    rateLabel = '2%';
-                } else {
-                    rate = 0;
-                    commission = 500;
-                    rateLabel = '500円固定';
-                }
-                break;
-            case 'wholesale':
-                rate = 10;
-                commission = Math.floor(subtotal * 0.10);
-                rateLabel = '10%';
-                break;
-            case 'multi_listing':
-                rate = 3;
-                commission = Math.floor(subtotal * 0.03);
-                rateLabel = '3%';
-                break;
-            case 'auction':
-                rate = 5;
-                commission = Math.floor(subtotal * 0.05);
-                rateLabel = '5%';
-                break;
-        }
-        
-        return { rate, commission, rateLabel };
+    // 新しい料金を推定しない。既存書類は保存額を参考表示として保持する。
+    function calculateCommission() {
+        return { rate: isExistingInvoice ? savedCommissionRate : 0,
+            commission: isExistingInvoice ? savedCommission : 0,
+            rateLabel: isExistingInvoice ? '保存済み参考額' : '未確定' };
     }
     
     // サービスタイプ変更時
@@ -866,8 +846,13 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 商品一覧を取得
     async function loadProducts() {
+        const sequence = ++productLoadSequence;
+        products = [];
+        productSelect.disabled = true;
+        addProductBtn.disabled = true;
+        productStatus.textContent = '商品一覧を読み込んでいます。';
         try {
-            let url = '/api/products';
+            let url = '/api/document-products';
             const params = new URLSearchParams();
             
             // フィルター条件を追加
@@ -887,24 +872,43 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             const response = await fetch(url);
-            products = await response.json();
+            if (!response.ok) throw new Error('products_unavailable');
+            const result = await response.json();
+            if (!Array.isArray(result)) throw new Error('invalid_products');
+            if (sequence !== productLoadSequence) return;
+            products = result;
             updateProductSelect();
         } catch (error) {
-            console.error('商品一覧の取得に失敗しました:', error);
+            if (sequence !== productLoadSequence) return;
+            products = [];
+            updateProductSelect();
+            productStatus.textContent = '商品一覧を取得できませんでした。ページを読み直してからお試しください。';
         }
     }
     
     // 商品選択肢を更新
     function updateProductSelect() {
-        productSelect.innerHTML = '<option value="">-- 商品を選択 --</option>';
-        products.forEach(product => {
+        const selectedValue = productSelect.value;
+        const added = new Set(Array.from(itemsBody.querySelectorAll('input[name="merchandise_id[]"]')).map(input => String(input.value)).filter(Boolean));
+        const normalize = value => String(value || '').normalize('NFKC').toLocaleLowerCase('ja-JP');
+        const terms = normalize(productSearch.value).trim().split(/\s+/).filter(Boolean);
+        const visible = products.filter(product => !added.has(String(product.id)) && terms.every(term => normalize([
+            product.id, product.product_name, product.brand_name, product.management_number, product.product_code, product.kaika_product_code
+        ].join(' ')).includes(term)));
+        productSelect.replaceChildren(new Option(visible.length ? '-- 商品を選択 --' : '該当する商品はありません', ''));
+        visible.forEach(product => {
             const price = product.sale_price || product.listing_price || product.purchase_price || 0;
             const soldLabel = product.sale_date ? ' [売却済]' : '';
             const option = document.createElement('option');
-            option.value = JSON.stringify(product);
-            option.textContent = `${product.product_name}${product.brand_name ? ' (' + product.brand_name + ')' : ''} - ¥${price.toLocaleString()}${soldLabel}`;
+            option.value = String(product.id);
+            option.textContent = `${product.product_name}${product.brand_name ? ' (' + product.brand_name + ')' : ''}［${product.management_number || product.kaika_product_code || product.product_code || product.id}］ - ¥${Number(price).toLocaleString('ja-JP')}${soldLabel}`;
             productSelect.appendChild(option);
         });
+        if (visible.some(product => String(product.id) === selectedValue)) productSelect.value = selectedValue;
+        productSelect.disabled = visible.length === 0;
+        addProductBtn.disabled = !productSelect.value;
+        productStatus.textContent = visible.length ? `追加候補 ${visible.length}点。申請済み・この明細へ追加済みの商品は除いています。`
+            : '追加できる商品がありません。検索条件を変えるか、作成済み・申請済みの書類を確認してください。';
     }
     
     // フィルター変更時に商品一覧を更新
@@ -914,6 +918,9 @@ document.addEventListener('DOMContentLoaded', function() {
     soldDaysFilter.addEventListener('change', function() {
         loadProducts();
     });
+    productSearch.addEventListener('input', updateProductSelect);
+    productSearch.addEventListener('keydown', event => { if (event.key === 'Enter') event.preventDefault(); });
+    productSelect.addEventListener('change', () => { addProductBtn.disabled = !productSelect.value; });
     
     // 初期ロード
     loadProducts();
@@ -922,16 +929,33 @@ document.addEventListener('DOMContentLoaded', function() {
     addProductBtn.addEventListener('click', function() {
         if (!productSelect.value) return;
         
-        const product = JSON.parse(productSelect.value);
+        const product = products.find(product => String(product.id) === productSelect.value);
+        if (!product || Array.from(itemsBody.querySelectorAll('input[name="merchandise_id[]"]')).some(input => String(input.value) === String(product.id))) {
+            updateProductSelect();
+            return;
+        }
         const price = product.sale_price || product.listing_price || product.purchase_price || 0;
-        const today = new Date().toISOString().split('T')[0];
-        
-        addRow('10', today, product.product_name, '', 1, '個', price, product.id);
+        const purchaseDate = product.purchase_date ? String(product.purchase_date).slice(0, 10) : '';
+        addRow('10', purchaseDate, product.product_name, product.management_number || product.kaika_product_code || product.product_code || '', 1, '個', price, product.id);
         productSelect.value = '';
+        updateProductSelect();
     });
     
     // 行を追加
     function addRow(taxCat = '10', date = '', name = '', code = '', qty = 1, unit = '個', price = 0, merchId = '') {
+        const blankRow = name && Array.from(itemsBody.querySelectorAll('.item-row')).find(row =>
+            !row.querySelector('.item-name').value.trim()
+            && !row.querySelector('input[name="merchandise_id[]"]').value
+            && !Number(row.querySelector('.item-price').value || 0));
+        if (blankRow) {
+            const values = {'product_date[]': date, 'product_name[]': name, 'product_code[]': code,
+                'quantity[]': qty, 'unit[]': unit || '点', 'unit_price[]': price, 'merchandise_id[]': merchId};
+            Object.entries(values).forEach(([field, value]) => { blankRow.querySelector(`input[name="${field}"]`).value = value; });
+            blankRow.querySelector('.tax-category').value = taxCat;
+            calculateRowAmount(blankRow);
+            calculateTotals();
+            return;
+        }
         const newRow = document.createElement('tr');
         newRow.className = 'item-row';
         newRow.innerHTML = `
@@ -941,22 +965,26 @@ document.addEventListener('DOMContentLoaded', function() {
                     <option value="8" ${taxCat === '8' ? 'selected' : ''}>8%</option>
                 </select>
             </td>
-            <td><input type="date" name="product_date[]" value="${date}" class="form-control"></td>
-            <td><input type="text" name="product_name[]" value="${name}" class="form-control item-name"></td>
-            <td><input type="text" name="product_code[]" value="${code}" class="form-control" placeholder="ABC-123"></td>
+            <td><input type="date" name="product_date[]" class="form-control"></td>
+            <td><input type="text" name="product_name[]" class="form-control item-name"></td>
+            <td><input type="text" name="product_code[]" class="form-control" placeholder="ABC-123"></td>
             <td>
-                <input type="number" name="quantity[]" value="${qty}" class="form-control item-qty" min="1">
-                <input type="hidden" name="unit[]" value="${unit || '点'}">
+                <input type="number" name="quantity[]" class="form-control item-qty" min="1">
+                <input type="hidden" name="unit[]">
             </td>
-            <td><input type="number" name="unit_price[]" value="${price}" class="form-control item-price" min="0"></td>
-            <td class="item-amount">¥${(qty * price).toLocaleString()}</td>
+            <td><input type="number" name="unit_price[]" class="form-control item-price" min="0"></td>
+            <td class="item-amount">¥0</td>
             <td>
-                <input type="hidden" name="merchandise_id[]" value="${merchId}">
+                <input type="hidden" name="merchandise_id[]">
                 <button type="button" class="btn btn-danger btn-sm remove-row">×</button>
             </td>
         `;
+        const values = {'product_date[]': date, 'product_name[]': name, 'product_code[]': code,
+            'quantity[]': qty, 'unit[]': unit || '点', 'unit_price[]': price, 'merchandise_id[]': merchId};
+        Object.entries(values).forEach(([field, value]) => { newRow.querySelector(`input[name="${field}"]`).value = value; });
         itemsBody.appendChild(newRow);
         attachRowEvents(newRow);
+        calculateRowAmount(newRow);
         calculateTotals();
     }
     
@@ -974,6 +1002,7 @@ document.addEventListener('DOMContentLoaded', function() {
         removeBtn.addEventListener('click', function() {
             row.remove();
             calculateTotals();
+            updateProductSelect();
         });
         
         qtyInput.addEventListener('input', function() {
@@ -1020,8 +1049,8 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
         
-        const tax8 = Math.floor(subtotal8 * 0.08);
-        const tax10 = Math.floor(subtotal10 * 0.10);
+        const tax8 = Math.floor(subtotal8 * 8 / 100);
+        const tax10 = Math.floor(subtotal10 * 10 / 100);
         const subtotalWithTax = subtotal + tax8 + tax10;
         
         // 手数料計算
@@ -1034,7 +1063,7 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('tax-8').textContent = '¥' + tax8.toLocaleString();
         document.getElementById('tax-10').textContent = '¥' + tax10.toLocaleString();
         document.getElementById('commission-rate-label').textContent = '(' + rateLabel + ')';
-        document.getElementById('commission-amount').textContent = '¥' + commission.toLocaleString();
+        document.getElementById('commission-amount').textContent = isExistingInvoice ? '¥' + commission.toLocaleString() : '要確認';
         document.getElementById('commission-input').value = commission;
         document.getElementById('commission-rate-input').value = rate;
         document.getElementById('total-amount').textContent = '¥' + totalAmount.toLocaleString();
@@ -1133,7 +1162,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function openInvoicePreview() {
-        if (!form.reportValidity()) {
+        if (!validateForCompletion()) {
             return;
         }
         renderInvoicePreview();
@@ -1147,13 +1176,28 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function submitInvoiceFromPreview() {
-        form.querySelectorAll('input[name="status"][type="hidden"]').forEach((input) => input.remove());
-        const statusInput = document.createElement('input');
-        statusInput.type = 'hidden';
-        statusInput.name = 'status';
-        statusInput.value = 'sent';
-        form.appendChild(statusInput);
-        form.submit();
+        form.requestSubmit(document.getElementById('complete-document-btn'));
+    }
+
+    function validateForCompletion() {
+        if (!form.reportValidity()) return false;
+        const data = collectInvoicePreviewData();
+        if (!data.items.length || data.items.some(item => !item.name)) {
+            alert('商品名を1件以上入力し、金額を入力した行には商品名も入力してください。');
+            return false;
+        }
+        if (data.items.some(item => !Number.isSafeInteger(item.quantity) || item.quantity < 1
+                || !Number.isSafeInteger(item.unitPrice) || item.unitPrice < 0 || !Number.isSafeInteger(item.amount))
+                || !Number.isSafeInteger(data.items.reduce((sum, item) => sum + item.amount, 0))) {
+            alert('数量は1以上、単価は0以上の整数で入力し、金額を確認してください。');
+            return false;
+        }
+        const selectedIds = Array.from(itemsBody.querySelectorAll('input[name="merchandise_id[]"]')).map(input => input.value).filter(Boolean);
+        if (new Set(selectedIds).size !== selectedIds.length) {
+            alert('同じ商品が複数の明細に入っています。重複した行を削除してください。');
+            return false;
+        }
+        return true;
     }
     
     // 既存の行にイベントを付与
@@ -1163,6 +1207,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     openPreviewBtn.addEventListener('click', openInvoicePreview);
     sendFromPreviewBtn.addEventListener('click', submitInvoiceFromPreview);
+    form.addEventListener('submit', event => {
+        if (event.submitter?.value === 'completed' && !validateForCompletion()) event.preventDefault();
+    });
     previewModal.querySelectorAll('[data-close-invoice-preview]').forEach((button) => {
         button.addEventListener('click', closeInvoicePreview);
     });

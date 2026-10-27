@@ -5,6 +5,7 @@
 {% block content %}
 {% include "admin/_document_detail_styles.html" %}
 {% set status = mitsumori.status or 'draft' %}
+{% include 'customer_documents/delivery.html' %}
 
 <div class="admin-doc-page">
     <div class="admin-doc-toolbar">
@@ -39,7 +40,8 @@
                 <span class="status-badge status-{{ status }}">
                     {% if status == 'draft' %}下書き
                     {% elif status == 'in_progress' %}作成中
-                    {% elif status in ['completed', 'submitted', 'sent'] %}作成済み
+                    {% elif status == 'completed' %}作成済み・未送信
+                    {% elif status in ['submitted', 'sent'] %}送信済み
                     {% elif status == 'approved' %}承認済み
                     {% elif status == 'rejected' %}差し戻し
                     {% else %}{{ status }}

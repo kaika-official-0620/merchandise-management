@@ -1,0 +1,217 @@
+/* One customer palette across the legacy forms and the newer workspaces.
+   Staff pages and the printable document sheets keep their own styling. */
+.customer-workspace {
+  --primary: #186b66;
+  --primary-dark: #11534f;
+  --primary-light: #e7f2ef;
+  --text-primary: #223c48;
+  --text-secondary: #526972;
+  --text-muted: #60747a;
+  --bg-main: #f6f9f8;
+  --border: #dbe5e3;
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-lg: 14px;
+  color: var(--text-primary);
+}
+
+.customer-workspace .btn {
+  min-height: 44px;
+  border-radius: 8px !important;
+  line-height: 1.5 !important;
+  text-decoration: none;
+  white-space: normal !important;
+  overflow-wrap: anywhere;
+  text-align: center;
+  box-shadow: none;
+}
+
+/* Several older pages use important blue overrides; keep these scoped and
+   explicit so an anchor's ordinary link color cannot obscure its label. */
+.customer-workspace .btn.btn-primary,
+.customer-workspace .btn.btn-client-send,
+.customer-workspace .btn.btn-success,
+.customer-workspace .btn.btn-search,
+.customer-workspace .btn-sale-request,
+.customer-workspace .btn-shipping-request,
+.customer-workspace .btn-completion-request,
+.customer-workspace .detail-action-btn.shipping,
+.customer-workspace .detail-action-btn.completion {
+  background: var(--primary) !important;
+  border-color: var(--primary) !important;
+  color: #fff !important;
+}
+.customer-workspace .btn.btn-primary:hover,
+.customer-workspace .btn.btn-client-send:hover,
+.customer-workspace .btn.btn-success:hover,
+.customer-workspace .btn.btn-search:hover,
+.customer-workspace .btn-sale-request:hover,
+.customer-workspace .btn-shipping-request:hover,
+.customer-workspace .btn-completion-request:hover,
+.customer-workspace .detail-action-btn.shipping:hover,
+.customer-workspace .detail-action-btn.completion:hover {
+  background: var(--primary-dark) !important;
+  border-color: var(--primary-dark) !important;
+  color: #fff !important;
+}
+.customer-workspace .btn.btn-secondary,
+.customer-workspace .btn.btn-back,
+.customer-workspace .btn.btn-info,
+.customer-workspace .btn.btn-edit,
+.customer-workspace .btn.btn-export,
+.customer-workspace .btn.btn-download,
+.customer-workspace .btn.btn-csv,
+.customer-workspace .btn.btn-pdf,
+.customer-workspace .btn.btn-print,
+.customer-workspace .btn-edit-request,
+.customer-workspace .btn-edit-shipping-request,
+.customer-workspace .btn-edit-completion-request,
+.customer-workspace .detail-action-btn.edit-request {
+  background: #fff !important;
+  border: 1px solid #a9c3bc !important;
+  color: #245c54 !important;
+}
+.customer-workspace .btn.btn-secondary:hover,
+.customer-workspace .btn.btn-back:hover,
+.customer-workspace .btn.btn-info:hover,
+.customer-workspace .btn.btn-edit:hover,
+.customer-workspace .btn.btn-export:hover,
+.customer-workspace .btn.btn-download:hover,
+.customer-workspace .btn.btn-csv:hover,
+.customer-workspace .btn.btn-pdf:hover,
+.customer-workspace .btn.btn-print:hover,
+.customer-workspace .btn-edit-request:hover,
+.customer-workspace .btn-edit-shipping-request:hover,
+.customer-workspace .btn-edit-completion-request:hover,
+.customer-workspace .detail-action-btn.edit-request:hover {
+  background: #edf5f2 !important;
+  color: #174b43 !important;
+}
+.customer-workspace .btn.btn-danger,
+.customer-workspace .btn.btn-delete {
+  background: #a33732 !important;
+  border-color: #a33732 !important;
+  color: #fff !important;
+}
+.customer-workspace .btn:disabled,
+.customer-workspace .btn[aria-disabled="true"] {
+  opacity: .65;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+.customer-workspace .btn:focus-visible,
+.customer-workspace summary:focus-visible,
+.customer-workspace input:focus-visible,
+.customer-workspace select:focus-visible,
+.customer-workspace textarea:focus-visible {
+  outline: 3px solid #6baba0;
+  outline-offset: 3px;
+}
+
+.customer-workspace .self-inventory h2 { border-bottom-color: #bfd9d1; }
+.customer-workspace .form-section h2,
+.customer-workspace .form-section h3 { color: #245c54; border-bottom-color: #bfd9d1; }
+.customer-workspace .self-inventory .notice,
+.customer-workspace .custody-note,
+.customer-workspace .fp-note {
+  background: #edf5f2;
+  color: #365d55;
+  border-color: #a5c8be;
+}
+.customer-workspace .self-inventory .notice-error {
+  background: #fff0ee;
+  color: #923b32;
+  border-color: #e5bdb6;
+}
+.customer-workspace .self-inventory input:focus,
+.customer-workspace .self-inventory textarea:focus {
+  border-color: #397d71;
+  outline-color: #b2d3c9;
+}
+.customer-workspace .custody-badge,
+.customer-workspace .fp-badge {
+  background: #e7f2ef;
+  color: #245c54;
+}
+.customer-workspace .fp-price { color: #245c54; }
+.customer-workspace .filter-btn.active,
+.customer-workspace .filter-tab-btn.active,
+.customer-workspace .stats-period-tab.active,
+.customer-workspace .search-toggle-btn.active,
+.customer-workspace .period-chip.active,
+.customer-workspace .period-preset-btn.is-active,
+.customer-workspace .plan-option-card.is-current {
+  background: #e7f2ef;
+  color: #174f46;
+  border-color: #8fb8ad;
+}
+.customer-workspace .filter-badge,
+.customer-workspace .badge-agency { background: #e7f2ef; color: #245c54; }
+.customer-workspace .badge-waiting { background: #fff2d5; color: #805b10; animation: none; }
+.customer-workspace .stats-inventory { background: #f0f6f3; border-color: #c9ddd4; }
+.customer-workspace .stats-inventory .stats-label { color: #526972; }
+.customer-workspace .stats-inventory .stats-value,
+.customer-workspace .stats-profit .stats-value { color: #21684e; }
+.customer-workspace .stats-loss .stats-value { color: #a33732; }
+.customer-workspace .plan-option-card em { color: #245c54; }
+.customer-workspace .sale-request-header { background: #edf5f2 !important; color: #223c48; border-bottom: 1px solid #c9ddd4; }
+.customer-workspace .sale-request-header h3 { color: #223c48; }
+.customer-workspace .sale-request-close { background: #fff; color: #365d55; }
+
+.registry .calculation-guide {
+  margin: 1rem 0;
+  padding: 1rem 1.1rem;
+  background: #f3f8f6;
+  border: 1px solid #d6e4de;
+  border-radius: 10px;
+}
+.registry .calculation-guide summary { color: #245c54; min-height: 28px; }
+.registry .calculation-guide p { margin-top: .7rem; }
+.registry .calculation-guide dl { display: grid; grid-template-columns: minmax(130px, .8fr) 2fr; gap: .6rem 1rem; margin-top: 1rem; }
+.registry .calculation-guide dt { font-weight: 600; }
+.registry .calculation-guide dd { margin: 0; overflow-wrap: anywhere; }
+@media (max-width: 540px) {
+  .registry .calculation-guide dl { grid-template-columns: 1fr; gap: .2rem; }
+  .registry .calculation-guide dd { margin-bottom: .7rem; }
+  .customer-workspace .form-actions,
+  .customer-workspace .header-actions { gap: .65rem; }
+}
+
+/* The calculator is shared with staff. Its conditional fields and results
+   must remain hidden even where old page styles set display:grid or flex. */
+#profitCalcModal [hidden] { display: none !important; }
+#profitCalcModal .profit-calc-content { width: min(620px, calc(100% - 24px)); max-height: calc(100dvh - 32px); }
+#profitCalcModal .profit-calc-header { background: #edf5f2; color: #223c48; border-color: #d6e4de; gap: .8rem; }
+#profitCalcModal .profit-calc-header h2 { color: #223c48; line-height: 1.5; }
+#profitCalcModal .profit-calc-close { width: 44px; height: 44px; flex: 0 0 44px; background: #fff; color: #245c54; }
+#profitCalcModal .profit-calc-close:hover { background: #dcece6; }
+#profitCalcModal .profit-calc-body { color: #223c48; line-height: 1.75; }
+#profitCalcModal .formula-box { margin-bottom: 1rem; padding: .85rem 1rem; border-color: #d6e4de; background: #f6f9f8; font-size: .88rem; }
+#profitCalcModal .calc-input-grid { gap: .85rem; margin-bottom: 1rem; }
+#profitCalcModal .calc-input-row { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(0, 1.25fr); gap: .65rem; }
+#profitCalcModal .calc-input-row label { color: #36535c; font-size: .9rem; font-weight: 600; }
+#profitCalcModal .calc-input-row input,
+#profitCalcModal .calc-input-row select { width: 100%; min-width: 0; min-height: 44px; font: inherit; font-size: 16px; color: #223c48; border-color: #a9c3bc; padding: .6rem .7rem; background: #fff; }
+#profitCalcModal .calc-input-row input:focus,
+#profitCalcModal .calc-input-row select:focus { outline: 3px solid #b2d3c9; border-color: #397d71; box-shadow: none; }
+#profitCalcModal .form-actions { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: .65rem; padding: .5rem 0 1rem; }
+#profitCalcModal .btn-primary { background: #186b66; color: #fff; min-height: 44px; border-radius: 8px; }
+#profitCalcModal .btn-secondary { background: #fff; color: #245c54; border: 1px solid #a9c3bc; min-height: 44px; border-radius: 8px; }
+#profitCalcModal #pe-message { margin: .5rem 0 1rem; padding: .75rem; background: #f2f6f4; border-radius: 8px; font-size: .9rem; }
+#profitCalcModal .calc-result-row { gap: .75rem; background: #f6f9f8; border: 1px solid #e0e8e4; padding: .85rem 1rem; }
+#profitCalcModal .calc-result-row.highlight { background: #edf5f2; border-color: #bfd9cf; }
+#profitCalcModal .result-label { font-size: .9rem; color: #36535c; }
+#profitCalcModal .result-value { color: #245c54; overflow-wrap: anywhere; text-align: right; }
+#profitCalcModal .result-value.negative { color: #a33732 !important; }
+#profitCalcModal .calc-formula-section { margin: 1.2rem 0 0; padding-top: .8rem; border-top: 1px solid #d6e4de; font-size: .9rem; }
+#profitCalcModal .calc-formula-section summary { color: #245c54; cursor: pointer; font-weight: 600; min-height: 44px; }
+#profitCalcModal .calc-formula-section p { margin-top: .6rem; }
+#profitCalcModal button:focus-visible,
+#profitCalcModal summary:focus-visible { outline: 3px solid #6baba0; outline-offset: 3px; }
+@media (max-width: 540px) {
+  #profitCalcModal .calc-input-row { grid-template-columns: 1fr; gap: .3rem; }
+  #profitCalcModal .profit-calc-body { padding: 1rem; }
+  #profitCalcModal .calc-result-grid { padding: 0; }
+  #profitCalcModal .calc-result-row { display: grid; gap: .25rem; }
+  #profitCalcModal .form-actions .btn { flex: 1 1 100%; }
+}

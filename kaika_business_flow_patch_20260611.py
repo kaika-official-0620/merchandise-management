@@ -25,7 +25,7 @@ ADMIN_HISTORY_CATEGORIES = [
     ("kaika_mitsumori", "開花用見積依頼書", "開花商品・個人顧客向けに作成した見積依頼書"),
 ]
 USER_HISTORY_CATEGORIES = [
-    ("client_incoming", "見積依頼書", "開花へ送付した見積依頼書"),
+    ("client_incoming", "見積依頼書", "作成済み・送信済みの見積依頼書"),
     ("kaitori", "買取明細書", "開花から送付された買取明細書"),
     ("shikiriosho", "精算書", "月額利用料や代行費用の精算書"),
     ("keisan", "計算書", "代行仕入れサービスなどの計算書"),
@@ -38,8 +38,9 @@ STATUS_LABELS = {
     "pending": "確認待ち",
     "received": "受領済み",
     "registered": "登録済み",
-    "completed": "送付待機",
+    "completed": "作成済み・未送信",
     "sent": "送付済み",
+    "submitted": "送信済み",
     "approved": "承認済み",
     "shared": "共有済み",
     "rejected": "却下",

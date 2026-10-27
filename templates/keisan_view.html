@@ -3,6 +3,7 @@
 {% block title %}計算書詳細 - 株式会社 開花{% endblock %}
 
 {% block content %}
+{% include 'customer_documents/delivery.html' %}
 <div class="page-actions">
     <a href="{{ url_for('documents') }}" class="btn btn-secondary context-back-inline">← 書類履歴へ戻る</a>
     <a href="{{ url_for('user_keisan_download', id=keisan.id) }}" class="btn btn-download js-csv-download" download>CSV</a>
@@ -28,11 +29,11 @@
         </div>
         <div class="meta-item">
             <span class="meta-label">宛先</span>
-            <span class="meta-value">{{ keisan.recipient_name or current_user.display_name or current_user.username or '宛先未設定' }} 様</span>
+            <span class="meta-value">{{ keisan.recipient_name or '宛先未設定' }}</span>
         </div>
         <div class="meta-item">
             <span class="meta-label">発行者</span>
-            <span class="meta-value">株式会社開花</span>
+            <span class="meta-value">{% if keisan.is_admin_created %}株式会社開花{% else %}{{ current_user.display_name or current_user.username }}{% endif %}</span>
         </div>
         <div class="meta-item">
             <span class="meta-label">クライアント番号</span>
@@ -44,7 +45,7 @@
         </div>
         <div class="meta-item">
             <span class="meta-label">支払方法</span>
-            <span class="meta-value">指定口座振込</span>
+            <span class="meta-value">{% if keisan.is_admin_created %}指定口座振込{% else %}この書類だけでは支払条件は確定しません{% endif %}</span>
         </div>
     </div>
 
@@ -96,9 +97,9 @@
     <section class="keisan-notes">
         <h2>備考</h2>
         {% if keisan.notes %}
-        <p>{{ keisan.notes|replace('\n', '<br>')|safe }}</p>
+        <p style="white-space: pre-wrap">{{ keisan.notes }}</p>
         {% else %}
-        <p>代行仕入れサービスの終了結果に基づき作成しています。</p>
+        <p>{% if keisan.is_admin_created %}代行仕入れサービスの終了結果に基づき作成しています。{% else %}備考はありません。{% endif %}</p>
         {% endif %}
     </section>
 

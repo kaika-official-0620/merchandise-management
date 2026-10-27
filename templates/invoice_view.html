@@ -3,7 +3,9 @@
 {% block title %}買取明細書 - {{ invoice.invoice_no }} - 株式会社 開花{% endblock %}
 
 {% block content %}
+{% include 'customer_documents/delivery.html' %}
 {% set step4_tax = invoice_tax_context(invoice, items) %}
+{% set pending_review = invoice.service_type == 'pending_review' %}
 <div class="page-actions">
     <a href="{{ url_for('documents') }}" class="btn btn-back context-back-inline">← 一覧に戻る</a>
     <div class="header-actions">
@@ -53,7 +55,8 @@
                         <span class="status-badge status-{{ invoice.status }}">
                             {% if invoice.status == 'draft' %}下書き
                             {% elif invoice.status == 'in_progress' %}作成中
-                            {% elif invoice.status == 'sent' %}送信済
+                            {% elif invoice.status in ['sent','submitted'] %}送信済
+                            {% elif invoice.status == 'completed' %}作成済み・未送信
                             {% elif invoice.status == 'approved' %}✔ 承認済
                             {% elif invoice.status == 'rejected' %}✖ 却下
                             {% elif invoice.status == 'replaced' %}差替え済み
@@ -90,19 +93,20 @@
     {% endif %}
 
     <div class="document-total-box">
-        <span class="total-label">請求金額 (税込)</span>
+        <span class="total-label">{{ '参考合計・請求未確定' if pending_review else '請求金額 (税込)' }}</span>
         <span class="total-value">¥{{ "{:,}".format(invoice.total_amount) }}</span>
     </div>
+    {% if pending_review %}<p class="source-action-box">単価が税込か税抜かは未確認です。表示合計は入力単価を税抜と仮定した保存済みの参考計算で、請求額ではありません。開花料金は未確認です。</p>{% endif %}
 
     <div class="document-table-scroll">
     <table class="document-items">
         <thead>
             <tr>
-                <th width="8%">税区分</th>
+                <th width="8%">{{ '入力税率（参考）' if pending_review else '税区分' }}</th>
                 <th width="12%">日付</th>
                 <th width="40%">品名・品番</th>
                 <th width="10%">数量</th>
-                <th width="15%">単価</th>
+                <th width="15%">{{ '単価（入力値）' if pending_review else '単価' }}</th>
                 <th width="15%">合計</th>
             </tr>
         </thead>
@@ -129,7 +133,14 @@
             {% endfor %}
         </tbody>
         <tfoot>
-            {% if step4_tax %}
+            {% if pending_review %}
+            <tr><td colspan="5" class="text-right">明細小計（入力値）</td><td class="text-right">¥{{ "{:,}".format(invoice.subtotal) }}</td></tr>
+            <tr><td colspan="5" class="text-right">税計算の参考値（8%）</td><td class="text-right">¥{{ "{:,}".format(invoice.tax_amount_8) }}</td></tr>
+            <tr><td colspan="5" class="text-right">税計算の参考値（10%）</td><td class="text-right">¥{{ "{:,}".format(invoice.tax_amount_10) }}</td></tr>
+            <tr><td colspan="5" class="text-right">開花料金</td><td class="text-right">未確認</td></tr>
+            <tr class="total-row"><td colspan="5" class="text-right">参考合計・請求未確定</td><td class="text-right">¥{{ "{:,}".format(invoice.total_amount) }}</td></tr>
+            {% if invoice.notes %}<tr><td colspan="6" style="white-space:pre-wrap">備考：{{ invoice.notes }}</td></tr>{% endif %}
+            {% elif step4_tax %}
             <tr><td colspan="6">{{ step4_tax.message }}</td></tr>
             {% for tax_row in step4_tax.rows %}
             <tr>
@@ -169,8 +180,8 @@
 
     {% if invoice.bank_info %}
     <div class="bank-info">
-        <h4>🏦 振込先</h4>
-        <p>{{ invoice.bank_info|replace('\n', '<br>')|safe }}</p>
+        <h4>🏦 {{ '参考入力の口座情報（支払い依頼ではありません）' if pending_review else '振込先' }}</h4>
+        {% if pending_review %}<p style="white-space:pre-wrap">{{ invoice.bank_info }}</p>{% else %}<p>{{ invoice.bank_info|replace('\n', '<br>')|safe }}</p>{% endif %}
     </div>
     {% endif %}
 

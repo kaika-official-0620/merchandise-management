@@ -11,14 +11,14 @@
     <div class="page-header">
         <div>
             <h1>{% if is_edit %}見積り依頼書編集{% else %}見積り依頼書作成{% endif %}</h1>
-            <p class="page-subtitle">管理画面の書類作成と同じ明細形式で、開花へ送る見積り依頼書を作成します。</p>
+            <p class="page-subtitle">商品を選んで書類を作成し、作成後の画面から開花へ送信します。</p>
         </div>
         <a href="{{ url_for('user_document_list') }}" class="btn btn-secondary">書類一覧へ戻る</a>
     </div>
 
     <div class="form-info-box">
         <strong>見積り依頼書について</strong>
-        <span>商品一覧から選択すると、数量・単価・合計金額が自動で計算されます。下書き保存後は、作成完了にする前であれば編集できます。</span>
+        <span>商品名・ブランド・管理番号で検索して明細に追加できます。作成完了だけでは開花へ送信されません。プレビューは任意で確認できます。</span>
     </div>
 
     <form method="POST" class="mitsumori-form" id="mitsumori-form">
@@ -90,6 +90,17 @@
                 {% endfor %}
             </div>
             {% else %}
+            <div class="document-product-picker">
+                <div class="form-group">
+                    <label for="product-search">商品を検索</label>
+                    <input type="search" id="product-search" class="form-control" placeholder="商品名・ブランド・管理番号" autocomplete="off" aria-describedby="product-search-help">
+                    <p id="product-search-help" class="product-select-meta">開花へ申請済みの商品は「申請済み」に分けています。明細に追加した商品も、追加候補から外れます。</p>
+                </div>
+                <div class="document-product-tabs" role="tablist" aria-label="商品の申請状況">
+                    <button type="button" id="product-available-tab" class="document-product-tab" role="tab" aria-selected="true" aria-controls="product-available-panel">追加できる商品 <span id="product-available-count"></span></button>
+                    <button type="button" id="product-submitted-tab" class="document-product-tab" role="tab" aria-selected="false" aria-controls="product-submitted-panel" tabindex="-1">申請済み <span>{{ document_product_history|default([], true)|length }}点</span></button>
+                </div>
+            <div id="product-available-panel" role="tabpanel" aria-labelledby="product-available-tab">
             <div class="product-selector">
                 <label for="product-select">商品を追加</label>
                 <select id="product-select" class="form-control product-select-box">
@@ -100,17 +111,32 @@
                         data-product-name="{{ product.product_name or '' }}"
                         data-brand-name="{{ product.brand_name or '' }}"
                         data-price="{{ product.listing_price or 0 }}"
+                        data-management-number="{{ product.management_number or product.product_code or '' }}"
                     >
-                        {{ product.product_name or '商品' }}{% if product.brand_name %} / {{ product.brand_name }}{% endif %}{% if product.listing_price %}（¥{{ "{:,}".format(product.listing_price|int) }}）{% endif %}
+                        {{ product.product_name or '商品' }}{% if product.brand_name %} / {{ product.brand_name }}{% endif %}［{{ product.management_number or product.product_code or product.id }}］{% if product.listing_price %}（¥{{ "{:,}".format(product.listing_price|int) }}）{% endif %}
                     </option>
                     {% endfor %}
                 </select>
-                <button type="button" class="btn btn-info" id="add-product-btn">追加</button>
+                <button type="button" class="btn btn-secondary" id="add-product-btn" disabled>明細に追加</button>
             </div>
-            <div id="product-select-meta" class="product-select-meta">
+            <div id="product-select-meta" class="product-select-meta" role="status" aria-live="polite">
                 {% if not my_merchandise %}追加できる商品がありません。手入力で明細を作成できます。{% endif %}
             </div>
-
+            </div>
+            <div id="product-submitted-panel" role="tabpanel" aria-labelledby="product-submitted-tab" hidden>
+                <p class="product-select-meta">この一覧は確認専用です。すでに申請した商品は、新しい書類へ追加できません。</p>
+                <ul class="document-submitted-products">
+                {% for product in document_product_history|default([], true) %}
+                    <li data-submitted-product data-search-text="{{ product.id }} {{ product.product_name or '' }} {{ product.brand_name or '' }} {{ product.management_number or product.product_code or '' }}">
+                        <strong>{{ product.product_name or '商品' }}</strong>
+                        <span>{% if product.brand_name %}{{ product.brand_name }} · {% endif %}管理番号 {{ product.management_number or product.product_code or product.id }}</span>
+                        <span class="document-product-status">{{ product.submission_status_label or '申請済み' }}</span>
+                    </li>
+                {% endfor %}
+                </ul>
+                <p id="product-submitted-empty" class="product-select-meta" role="status" {% if document_product_history|default([], true) %}hidden{% endif %}>申請済みの商品はありません。</p>
+            </div>
+            </div>
             {% endif %}
 
             <div class="table-responsive">
@@ -142,7 +168,7 @@
                             </tr>
                             {% endfor %}
                         {% elif not source_mode %}
-                            {% for i in range(3) %}
+                            {% for i in range(1) %}
                             <tr class="item-row">
                                 <td class="item-no">{{ i + 1 }}</td>
                                 <td>
@@ -184,14 +210,16 @@
 
         <section class="form-section preview-check-section">
             <div>
-                <h2>書類プレビュー確認</h2>
-                <p>作成完了の前に、実際の書類としてどのように表示されるか確認できます。内容を確認して問題なければ、プレビュー画面から作成完了してください。</p>
+                <h2>仕上がりを確認する（任意）</h2>
+                <p>入力内容をデモ表示します。プレビューを開かずに、下の「作成完了」を押すこともできます。</p>
             </div>
-            <button type="button" class="btn btn-primary" id="open-preview-btn">書類を確認する</button>
+            <button type="button" class="btn btn-secondary" id="open-preview-btn">プレビューで確認</button>
         </section>
 
+        <p class="document-submit-note">作成後に送付先を確認し、別の「開花へ送信」ボタンから申請できます。</p>
         <div class="form-actions">
             <button type="submit" name="status" value="draft" class="btn btn-secondary">下書き保存</button>
+            <button type="submit" name="status" value="completed" id="complete-document-btn" class="btn btn-primary">{% if is_edit %}更新完了{% else %}作成完了{% endif %}</button>
         </div>
     </form>
 
@@ -200,7 +228,7 @@
         <div class="document-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="preview-title">
             <div class="document-preview-toolbar">
                 <div>
-                    <span class="preview-kicker">送信前プレビュー</span>
+                    <span class="preview-kicker">書類のデモ表示・未送信</span>
                     <h2 id="preview-title">見積り依頼書の確認</h2>
                 </div>
                 <button type="button" class="preview-close-btn" data-close-preview>閉じる</button>
@@ -320,10 +348,10 @@
     display: grid;
     gap: 0.25rem;
     padding: 1rem 1.15rem;
-    border: 1px solid #bfdbfe;
+    border: 1px solid #c6dfd9;
     border-radius: 14px;
-    background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%);
-    color: #1d4ed8;
+    background: #eef6f3;
+    color: #28534d;
     line-height: 1.7;
 }
 
@@ -408,6 +436,21 @@
     font-size: 0.9rem;
 }
 
+.document-product-picker { margin: 1rem 0; padding: 1rem; border: 1px solid #dbe6e2; border-radius: 12px; background: #f7faf9; }
+.document-product-picker [hidden] { display: none !important; }
+.document-product-tabs { display: flex; gap: .5rem; margin: .75rem 0; border-bottom: 1px solid #d5e2de; }
+.document-product-tab { min-height: 44px; padding: .65rem .85rem; border: 0; border-bottom: 3px solid transparent; border-radius: 8px 8px 0 0; background: transparent; color: #536c67; font: inherit; font-weight: 600; cursor: pointer; }
+.document-product-tab[aria-selected="true"] { border-bottom-color: #186b66; color: #185f57; background: #e7f2ef; }
+.document-product-tab span { margin-left: .35rem; font-size: .8rem; font-weight: 400; }
+.document-product-tab:focus-visible { outline: 3px solid #75a79c; outline-offset: 2px; }
+.document-submitted-products { list-style: none; padding: 0; margin: .5rem 0; }
+.document-submitted-products li { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem .8rem; padding: .85rem 0; border-bottom: 1px solid #e1e9e5; overflow-wrap: anywhere; }
+.document-submitted-products li > span { color: #5f727a; font-size: .85rem; }
+.document-submitted-products li .document-product-status { padding: .25rem .5rem; border-radius: 5px; background: #eaf0ed; color: #425e56; }
+.document-submit-note { margin: 0; color: #536c67; font-size: .9rem; line-height: 1.7; }
+.mitsumori-form-page .btn:disabled { cursor: not-allowed; opacity: .55; }
+@media(max-width: 680px) { .document-product-picker { padding: .8rem; } .document-product-tabs { gap: .2rem; } .document-product-tab { flex: 1; padding: .65rem .4rem; font-size: .86rem; } }
+
 .source-invoice-panel {
     display: flex;
     align-items: center;
@@ -416,10 +459,10 @@
     flex-wrap: wrap;
     margin: 0.85rem 0;
     padding: 0.9rem 1rem;
-    border: 1px solid #bfdbfe;
+    border: 1px solid #c6dfd9;
     border-radius: 12px;
-    background: #eff6ff;
-    color: #1e3a8a;
+    background: #eef6f3;
+    color: #28534d;
 }
 
 .source-invoice-panel div {
@@ -528,7 +571,7 @@
 }
 
 .totals-row td {
-    background: #eff6ff;
+    background: #eef6f3;
     font-weight: 800;
 }
 
@@ -558,7 +601,7 @@
 }
 
 .btn-info {
-    background: #2563eb;
+    background: #186b66;
 }
 
 .btn-danger {
@@ -650,7 +693,7 @@
 }
 
 .preview-kicker {
-    color: #2563eb;
+    color: #186b66;
     font-size: 0.78rem;
     font-weight: 900;
     letter-spacing: 0.08em;
@@ -756,7 +799,7 @@
 }
 
 .preview-amount-box strong {
-    color: #1d4ed8;
+    color: #185f57;
     font-size: 1.45rem;
 }
 
@@ -966,7 +1009,7 @@
         gap: 0.45rem;
         padding: 0.85rem;
         border-radius: 14px;
-        background: #eff6ff;
+        background: #eef6f3;
     }
 
     .items-table tfoot td {
@@ -1101,10 +1144,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const addProductButton = document.getElementById('add-product-btn');
     const productSelect = document.getElementById('product-select');
     const productSelectMeta = document.getElementById('product-select-meta');
+    const productSearch = document.getElementById('product-search');
+    const productChoices = productSelect ? Array.from(productSelect.options).slice(1).map(option => option.cloneNode(true)) : [];
+    const productTabs = Array.from(document.querySelectorAll('.document-product-tab'));
+    const submittedProducts = Array.from(document.querySelectorAll('[data-submitted-product]'));
     const form = document.getElementById('mitsumori-form');
     const previewModal = document.getElementById('document-preview-modal');
     const openPreviewButton = document.getElementById('open-preview-btn');
     const completeFromPreviewButton = document.getElementById('complete-from-preview-btn');
+    const completeButton = document.getElementById('complete-document-btn');
     const sourceInvoiceId = document.getElementById('source-invoice-id');
     const sourceItems = {{ source_items|default([])|tojson }};
     const reflectAllSourceItemsButton = document.getElementById('reflect-all-source-items');
@@ -1154,6 +1202,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const removeButton = row.querySelector('.remove-row');
         if (removeButton) {
             removeButton.addEventListener('click', () => {
+                if (isSourceMode) {
+                    const sourceId = row.querySelector('input[name="source_invoice_item_id[]"]')?.value;
+                    document.querySelectorAll('input[name="source_invoice_item_choice[]"]').forEach(input => {
+                        if (String(input.value) === String(sourceId)) input.checked = false;
+                    });
+                    reflectSelectedSourceItems();
+                    return;
+                }
                 const rowCount = itemsBody.querySelectorAll('.item-row').length;
                 if (rowCount <= 1) {
                     row.querySelector('input[name="item_name[]"]').value = '';
@@ -1163,11 +1219,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     row.querySelector('input[name="unit_price[]"]').value = '0';
                     updateRowAmount(row);
                     updateTotalAmount();
+                    refreshProductChoices();
                     return;
                 }
                 row.remove();
                 updateRowNumbers();
                 updateTotalAmount();
+                refreshProductChoices();
             });
         }
 
@@ -1281,11 +1339,61 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
+    function normalizeSearch(value) {
+        return String(value || '').normalize('NFKC').toLocaleLowerCase('ja-JP').trim();
+    }
+
+    function addedProductIds() {
+        return new Set(Array.from(itemsBody.querySelectorAll('input[name="merchandise_id[]"]'))
+            .map(input => String(input.value)).filter(Boolean));
+    }
+
+    function refreshProductChoices() {
+        if (!productSelect) return;
+        const selectedValue = productSelect.value;
+        const terms = normalizeSearch(productSearch?.value).split(/\s+/).filter(Boolean);
+        const matches = value => terms.every(term => normalizeSearch(value).includes(term));
+        const added = addedProductIds();
+        const available = productChoices.filter(option => !added.has(String(option.value)));
+        const visible = available.filter(option => matches([option.value, option.textContent,
+            option.dataset.productName, option.dataset.brandName, option.dataset.managementNumber].join(' ')));
+        productSelect.replaceChildren(new Option(visible.length ? '-- 商品一覧から選択 --' : '該当する商品はありません', ''));
+        visible.forEach(option => productSelect.appendChild(option.cloneNode(true)));
+        if (visible.some(option => option.value === selectedValue)) productSelect.value = selectedValue;
+        productSelect.disabled = visible.length === 0;
+        document.getElementById('product-available-count').textContent = `${visible.length}点`;
+        let submittedVisible = 0;
+        submittedProducts.forEach(row => {
+            row.hidden = !matches(row.dataset.searchText);
+            if (!row.hidden) submittedVisible += 1;
+        });
+        const submittedEmpty = document.getElementById('product-submitted-empty');
+        submittedEmpty.hidden = submittedVisible > 0;
+        submittedEmpty.textContent = terms.length ? '検索条件に合う申請済み商品はありません。' : '申請済みの商品はありません。';
+        updateProductMeta();
+        if (!visible.length) {
+            productSelectMeta.textContent = terms.length
+                ? '検索条件に合う追加候補がありません。商品名・ブランド・管理番号を変えて検索してください。'
+                : added.size ? '追加できる商品はすべて明細に入っています。削除すると再び選べます。'
+                    : '追加できる商品がありません。申請済みの商品は別のタブから確認できます。';
+        }
+    }
+
+    function selectProductTab(tab) {
+        productTabs.forEach(button => {
+            const active = button === tab;
+            button.setAttribute('aria-selected', String(active));
+            button.tabIndex = active ? 0 : -1;
+            document.getElementById(button.getAttribute('aria-controls')).hidden = !active;
+        });
+    }
+
     function updateProductMeta() {
         if (!productSelectMeta || !productSelect) {
             return;
         }
         const data = selectedProductData();
+        if (addProductButton) addProductButton.disabled = !data;
         if (!data) {
             productSelectMeta.textContent = productSelect.options.length > 1
                 ? '商品を選択すると、明細へ追加できます。'
@@ -1377,9 +1485,29 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!form.reportValidity()) {
             return false;
         }
+        const incomplete = Array.from(itemsBody.querySelectorAll('.item-row')).some(row => {
+            const name = row.querySelector('input[name="item_name[]"]')?.value.trim();
+            const quantity = Number(row.querySelector('input[name="quantity[]"]')?.value);
+            const price = Number(row.querySelector('input[name="unit_price[]"]')?.value || 0);
+            return (!name && price > 0) || (name && (!Number.isSafeInteger(quantity) || quantity < 1
+                || !Number.isSafeInteger(price) || price < 0 || !Number.isSafeInteger(quantity * price)));
+        });
+        if (incomplete) {
+            alert('商品名・数量（1以上の整数）・単価（0以上の整数）を確認してください。金額だけの行は作成できません。');
+            return false;
+        }
         const data = collectPreviewData();
+        if (!Number.isSafeInteger(data.total)) {
+            alert('合計金額が扱える範囲を超えています。入力した数量・単価を確認してください。');
+            return false;
+        }
         if (data.rows.length === 0) {
             alert('商品名・内容を1件以上入力してください。');
+            return false;
+        }
+        const selectedIds = Array.from(itemsBody.querySelectorAll('input[name="merchandise_id[]"]')).map(input => input.value).filter(Boolean);
+        if (new Set(selectedIds).size !== selectedIds.length) {
+            alert('同じ商品が複数の明細に入っています。重複した行を削除してください。');
             return false;
         }
         return data;
@@ -1406,14 +1534,7 @@ document.addEventListener('DOMContentLoaded', () => {
             closePreview();
             return;
         }
-        form.querySelectorAll('input[data-preview-status]').forEach((input) => input.remove());
-        const statusInput = document.createElement('input');
-        statusInput.type = 'hidden';
-        statusInput.name = 'status';
-        statusInput.value = 'completed';
-        statusInput.dataset.previewStatus = 'true';
-        form.appendChild(statusInput);
-        form.submit();
+        form.requestSubmit(completeButton);
     }
 
     if (reflectAllSourceItemsButton) {
@@ -1439,7 +1560,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (productSelect) {
         productSelect.addEventListener('change', updateProductMeta);
-        updateProductMeta();
+        productSearch.addEventListener('input', refreshProductChoices);
+        productSearch.addEventListener('keydown', event => { if (event.key === 'Enter') event.preventDefault(); });
+        productTabs.forEach((tab, index) => {
+            tab.addEventListener('click', () => selectProductTab(tab));
+            tab.addEventListener('keydown', event => {
+                if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+                event.preventDefault();
+                const nextIndex = event.key === 'Home' ? 0 : event.key === 'End' ? productTabs.length - 1
+                    : (index + (event.key === 'ArrowRight' ? 1 : -1) + productTabs.length) % productTabs.length;
+                selectProductTab(productTabs[nextIndex]);
+                productTabs[nextIndex].focus();
+            });
+        });
     }
 
     if (addProductButton) {
@@ -1449,6 +1582,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert('追加する商品を選択してください。');
                 return;
             }
+            if (addedProductIds().has(String(data.merchandiseId))) {
+                refreshProductChoices();
+                productSelectMeta.textContent = 'この商品はすでに明細へ追加されています。';
+                return;
+            }
             const blankRow = findBlankRow();
             if (blankRow) {
                 fillRow(blankRow, data);
@@ -1456,7 +1594,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 createRow(data);
             }
             productSelect.value = '';
-            updateProductMeta();
+            refreshProductChoices();
         });
     }
 
@@ -1467,6 +1605,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (completeFromPreviewButton) {
         completeFromPreviewButton.addEventListener('click', submitCompletedFromPreview);
     }
+
+    form.addEventListener('submit', event => {
+        if (event.submitter?.value === 'completed' && !validateBeforePreview()) event.preventDefault();
+    });
 
     document.querySelectorAll('[data-close-preview]').forEach((button) => {
         button.addEventListener('click', closePreview);
@@ -1481,6 +1623,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('#items-body .item-row').forEach(bindRowEvents);
     updateRowNumbers();
     updateTotalAmount();
+    refreshProductChoices();
 });
 </script>
 {% endblock %}

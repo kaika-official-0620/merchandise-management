@@ -10,7 +10,7 @@
     <div class="page-header">
         <div>
             <h1>{% if is_edit %}計算書編集{% else %}計算書作成{% endif %}</h1>
-            <p class="page-subtitle">基本情報、送付先、明細を入力し、書類プレビューを確認してから作成完了できます。</p>
+            <p class="page-subtitle">基本情報・送付先・明細を入力して作成します。開花への送信は、作成後に別の操作で行います。</p>
         </div>
         <a href="{{ url_for('documents') }}" class="btn btn-secondary">書類履歴へ戻る</a>
     </div>
@@ -80,7 +80,7 @@
                             </tr>
                             {% endfor %}
                         {% else %}
-                            {% for i in range(3) %}
+                            {% for i in range(1) %}
                             <tr class="item-row">
                                 <td class="item-no">{{ i + 1 }}</td>
                                 <td>
@@ -121,15 +121,17 @@
 
         <section class="form-section preview-check-section">
             <div>
-                <h2>書類プレビュー確認</h2>
-                <p>作成完了の前に、実際の計算書としてどのように表示されるか確認できます。</p>
+                <h2>仕上がりを確認する（任意）</h2>
+                <p>入力内容をデモ表示します。プレビューを開かずに「作成完了」を押すこともできます。</p>
             </div>
-            <button type="button" class="btn btn-primary" id="open-preview-btn">書類を確認する</button>
+            <button type="button" class="btn btn-secondary" id="open-preview-btn">プレビューで確認</button>
         </section>
 
         <div class="form-actions">
             <button type="submit" name="status" value="draft" class="btn btn-secondary">下書き保存</button>
+            <button type="submit" name="status" value="completed" id="complete-document-btn" class="btn btn-primary">{% if is_edit %}更新完了{% else %}作成完了{% endif %}</button>
         </div>
+        <p class="page-subtitle">作成完了だけでは送信されません。作成後の画面で送付先を確認して申請してください。</p>
     </form>
 
     <div class="document-preview-modal" id="document-preview-modal" aria-hidden="true">
@@ -137,7 +139,7 @@
         <div class="document-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="preview-title">
             <div class="document-preview-toolbar">
                 <div>
-                    <span class="preview-kicker">送信前プレビュー</span>
+                    <span class="preview-kicker">書類のデモ表示・未送信</span>
                     <h2 id="preview-title">計算書の確認</h2>
                 </div>
                 <button type="button" class="preview-close-btn" data-close-preview>閉じる</button>
@@ -149,9 +151,9 @@
                 <div class="preview-meta-grid">
                     <div><span>対象月</span><strong id="preview-month">-</strong></div>
                     <div><span>宛先</span><strong id="preview-recipient">宛先未設定 様</strong></div>
-                    <div><span>発行者</span><strong>株式会社開花</strong></div>
+                    <div><span>発行者</span><strong>{{ current_user.display_name or current_user.username or '作成者' }}</strong></div>
                     <div><span>書類区分</span><strong id="preview-subject">計算書</strong></div>
-                    <div><span>支払方法</span><strong>指定口座振込</strong></div>
+                    <div><span>支払方法</span><strong>この書類だけでは支払条件は確定しません</strong></div>
                     <div><span>書類番号</span><strong>{{ keisan.document_no if is_edit else document_no }}</strong></div>
                 </div>
 
@@ -746,7 +748,22 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!form.reportValidity()) {
             return false;
         }
+        const incomplete = Array.from(itemsBody.querySelectorAll('.item-row')).some(row => {
+            const name = row.querySelector('input[name="item_name[]"]')?.value.trim();
+            const quantity = Number(row.querySelector('input[name="quantity[]"]')?.value);
+            const price = Number(row.querySelector('input[name="unit_price[]"]')?.value || 0);
+            return (!name && price > 0) || (name && (!Number.isSafeInteger(quantity) || quantity < 1
+                || !Number.isSafeInteger(price) || price < 0 || !Number.isSafeInteger(quantity * price)));
+        });
+        if (incomplete) {
+            alert('項目名・数量（1以上の整数）・単価（0以上の整数）を確認してください。金額だけの行は作成できません。');
+            return false;
+        }
         const data = collectPreviewData();
+        if (!Number.isSafeInteger(data.total)) {
+            alert('合計金額が扱える範囲を超えています。入力した数量・単価を確認してください。');
+            return false;
+        }
         if (data.rows.length === 0) {
             alert('項目名を1件以上入力してください。');
             return false;
@@ -775,19 +792,15 @@ document.addEventListener('DOMContentLoaded', () => {
             closePreview();
             return;
         }
-        form.querySelectorAll('input[data-preview-status]').forEach((input) => input.remove());
-        const statusInput = document.createElement('input');
-        statusInput.type = 'hidden';
-        statusInput.name = 'status';
-        statusInput.value = 'completed';
-        statusInput.dataset.previewStatus = 'true';
-        form.appendChild(statusInput);
-        form.submit();
+        form.requestSubmit(document.getElementById('complete-document-btn'));
     }
 
     addRowButton.addEventListener('click', () => createRow());
     openPreviewButton.addEventListener('click', openPreview);
     completeFromPreviewButton.addEventListener('click', submitCompletedFromPreview);
+    form.addEventListener('submit', event => {
+        if (event.submitter?.value === 'completed' && !validateBeforePreview()) event.preventDefault();
+    });
     document.querySelectorAll('[data-close-preview]').forEach((button) => button.addEventListener('click', closePreview));
     document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape' && previewModal.classList.contains('open')) {

@@ -664,7 +664,7 @@ def apply(module):
                 SELECT *
                 FROM invoices
                 WHERE sender_id = {mark()}
-                  AND COALESCE(document_scope, 'client_outgoing') = 'client_outgoing'
+                  AND COALESCE(document_scope, 'client_outgoing') IN ('client_outgoing', 'user_created')
                   AND COALESCE(status, 'draft') NOT IN ('draft', 'in_progress')
                 ORDER BY created_at DESC
                 """,

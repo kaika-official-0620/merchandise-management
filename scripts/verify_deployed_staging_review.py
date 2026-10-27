@@ -32,7 +32,7 @@ HUBS = (
     ('support', 'お知らせ・サポート'),
 )
 COMMON_PAGES = (
-    ('stage2_inventory', '/inventory/items', '個品一覧'),
+    ('stage2_inventory', '/inventory/items', '保管場所・作業履歴'),
     ('stage3_finance', '/finance', '利益・請求下書き'),
     ('stage4_catalog', '/commerce', '開花の商品'),
     ('stage4_orders', '/commerce/orders', '購入・予約の記録'),
@@ -136,6 +136,17 @@ def verify_review(environ=None, *, session_factory=None):
                     require(stage, 'customer-hub' in parsed.classes and
                             all('/my/' + value in parsed.links for value, _ in HUBS) and
                             '/workspace-home' in parsed.links)
+                for key, path, heading in (
+                    ('document_list', '/documents/list', '書類一覧'),
+                    ('estimate_form', '/mitsumori/add', '見積り依頼書作成'),
+                    ('consent_form', '/kaitori-shoudaku/add', '買取承諾書作成'),
+                ):
+                    stage = role + '_' + key
+                    page(client, path, heading)
+                    require(stage, True)
+                stage = role + '_document_candidates'
+                response = client.request('GET', '/api/document-products', expected={200})
+                require(stage, isinstance(response.json(), list))
             for key, path, heading in COMMON_PAGES:
                 stage = role + '_' + key
                 page(client, path, heading)
@@ -157,6 +168,9 @@ def verify_review(environ=None, *, session_factory=None):
                     stage = 'admin_' + key
                     page(client, path, heading)
                     require(stage, True)
+                stage = 'admin_customer_document_inbox'
+                page(client, '/admin/customer-submissions', 'お客様から届いた書類')
+                require(stage, True)
                 for key, path in BLOCKED_PAGES:
                     stage = 'admin_' + key + '_disabled'
                     response = client.request('GET', path, expected={403})
