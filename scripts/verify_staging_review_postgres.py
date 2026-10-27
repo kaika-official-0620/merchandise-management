@@ -10,9 +10,11 @@ from __future__ import annotations
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
+from datetime import datetime, timedelta, timezone
 import hashlib
 from html.parser import HTMLParser
 import importlib
+import io
 import json
 import os
 from pathlib import Path
@@ -182,6 +184,237 @@ def verify_access(runtime, config, access, state, state_path, users, phase_name,
         state['pending_access_token'] = mint()
         write_report(state_path, state)
         check('access_pending_token_prepared_for_restart', row(state['pending_access_token'])[5] is None)
+
+
+def verify_home_preferences(runtime, state, state_path, users, clients, phase_name, check):
+    """Display choices use the real app, customer sessions and owned PG fixture.
+
+    No business rows or external notifications are created by this check. The
+    first process leaves a deliberately empty selection for reboot verification.
+    """
+    from stage6_home_preferences import DEFAULT_SECTIONS
+    app, base = runtime.app, 'https://' + HTTP_HOST
+    normal, other, admin = clients['normal'], clients['business'], clients['admin']
+    path = '/workspace-home/display'
+
+    class Form(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.active, self.hidden = False, {}
+
+        def handle_starttag(self, tag, attrs):
+            attrs = dict(attrs)
+            if tag == 'form':
+                self.active = attrs.get('action') == path
+            elif self.active and tag == 'input' and attrs.get('type') == 'hidden':
+                self.hidden[attrs.get('name')] = attrs.get('value', '')
+
+        def handle_endtag(self, tag):
+            if tag == 'form':
+                self.active = False
+
+    def rows(sql, params=(), write=False):
+        with closing(runtime.get_db()) as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(sql, params)
+                result = cursor.fetchall() if cursor.description else []
+            if write:
+                conn.commit()
+            return result
+
+    def selection(customer_id):
+        data = rows('SELECT sections_json FROM stage6_home_preferences WHERE customer_id=%s', (customer_id,))
+        return json.loads(data[0][0]) if data else None
+
+    def page(client):
+        response = client.get('/workspace-home', base_url=base)
+        if response.status_code != 200:
+            raise AssertionError('Fictional customer home is unavailable')
+        return response.get_data(as_text=True)
+
+    def form(client):
+        parsed = Form()
+        parsed.feed(page(client))
+        if not parsed.hidden.get('registry_csrf') or not parsed.hidden.get('operation_token'):
+            raise AssertionError('Fictional home display form lacks its security fields')
+        return parsed.hidden
+
+    def post(client, fields, sections=None, **extra):
+        payload = dict(fields, **extra)
+        if sections is not None:
+            payload['sections'] = sections
+        return client.post(path, base_url=base, data=payload)
+
+    normal_id, other_id = users['normal']['id'], users['business']['id']
+    check('home_preferences_table_present', bool(rows("SELECT to_regclass('stage6_home_preferences')" )[0][0]))
+    original_other = selection(other_id)
+    html = page(normal)
+    check('home_display_controls_present', 'id="home-display-settings"' in html)
+    check('home_required_actions_present', 'data-home-required="true"' in html)
+    if phase_name == 'initialize':
+        check('home_first_visit_has_no_saved_row', selection(normal_id) is None)
+        check('home_defaults_show_money_inventory_not_test', 'data-home-section="money"' in html
+              and 'data-home-section="inventory"' in html and 'data-home-section="test_records"' not in html)
+    else:
+        check('home_empty_selection_survives_server_restart', selection(normal_id) == []
+              and 'data-home-section=' not in html)
+
+    token = form(normal)
+    check('home_display_anonymous_rejected', post(app.test_client(), token, []).status_code in (302, 401))
+    check('home_display_invalid_csrf_rejected', post(normal, dict(token, registry_csrf='fixture-wrong-csrf'), []).status_code == 400)
+    other_form = form(other)
+    check('home_display_other_customer_token_rejected', post(other, dict(other_form, operation_token=token['operation_token']), []).status_code == 403)
+    check('home_display_staff_write_rejected', post(admin, token, []).status_code == 403)
+    before_invalid = selection(normal_id)
+    check('home_display_unknown_key_rejected', post(normal, token, ['admin']).status_code == 400)
+    check('home_display_required_action_cannot_be_configured', post(normal, token, ['next_actions']).status_code == 400)
+    check('home_display_duplicate_key_rejected', post(normal, token, ['inventory', 'inventory']).status_code == 400)
+    check('home_invalid_choices_preserve_previous_selection', selection(normal_id) == before_invalid)
+
+    saved = post(normal, token, [], customer_id=str(other_id))
+    check('home_all_optional_sections_can_be_hidden', saved.status_code == 302 and selection(normal_id) == [])
+    check('home_customer_id_form_cannot_select_another_user', selection(other_id) == original_other)
+    html = page(normal)
+    check('home_all_hidden_keeps_required_actions_settings_and_recovery',
+          'data-home-required="true"' in html and 'id="home-display-settings"' in html
+          and 'data-home-section=' not in html and 'おすすめの表示に戻す' in html)
+    check('home_display_replay_is_safe', post(normal, token, []).status_code == 302
+          and selection(normal_id) == [] and len(rows('SELECT customer_id FROM stage6_home_preferences WHERE customer_id=%s', (normal_id,))) == 1)
+
+    fresh = app.test_client()
+    response = fresh.post('/login', base_url=base, data={'username': 'staging_normal', 'password': state['passwords']['normal']})
+    check('home_new_client_login_succeeds', response.status_code == 302)
+    html = page(fresh)
+    check('home_choices_persist_across_client_and_login', 'data-home-section=' not in html
+          and 'data-home-required="true"' in html)
+    check('home_other_customer_retains_independent_defaults', 'data-home-section="money"' in page(other)
+          and selection(other_id) == original_other)
+    check('home_staff_dashboard_unchanged', '作業一覧' in page(admin) and 'id="home-display-settings"' not in page(admin))
+
+    # Validate unapplied additive migration on PostgreSQL itself. Renaming only
+    # this new fixture-owned table is reversible; no source or money is touched.
+    rows('ALTER TABLE stage6_home_preferences RENAME TO stage6_home_preferences_fixture_hold', write=True)
+    try:
+        html = page(fresh)
+        check('home_unapplied_schema_remains_readable', 'data-home-required="true"' in html
+              and 'data-home-section="money"' in html)
+        check('home_unapplied_schema_disables_save', '表示を保存</button>' not in html
+              and '表示設定の保存は準備中' in html)
+        check('home_unapplied_schema_write_is_held', post(fresh, form(fresh), []).status_code == 409)
+    finally:
+        rows('ALTER TABLE stage6_home_preferences_fixture_hold RENAME TO stage6_home_preferences', write=True)
+    check('home_schema_restoration_preserves_customer_selection', selection(normal_id) == [])
+
+    if phase_name == 'restart':
+        restored = post(fresh, form(fresh), reset='default')
+        check('home_recommended_choices_restore_explicitly', restored.status_code == 302
+              and selection(normal_id) == list(DEFAULT_SECTIONS))
+        html = page(fresh)
+        check('home_recommended_restore_renders_saved_sections', 'data-home-section="money"' in html
+              and 'data-home-section="inventory"' in html and 'data-home-section="test_records"' not in html)
+    else:
+        state['home_display_review'] = {'customer_id': normal_id, 'selected': []}
+        write_report(state_path, state)
+
+
+def verify_support_inquiry(runtime, state, state_path, users, clients, phase_name, check):
+    """Fixture-only support thread/image handling; never sends outside this app."""
+    from PIL import Image
+    app, base = runtime.app, 'https://' + HTTP_HOST
+    customer, other, admin = clients['normal'], clients['business'], clients['admin']
+
+    class Token(HTMLParser):
+        value = ''
+
+        def handle_starttag(self, tag, attrs):
+            attrs = dict(attrs)
+            if tag == 'meta' and attrs.get('name') == 'kaika-security-csrf':
+                self.value = attrs.get('content', '')
+
+    def token(client, path='/inquiry/new'):
+        response = client.get(path, base_url=base)
+        parser = Token()
+        parser.feed(response.get_data(as_text=True))
+        if response.status_code != 200 or not parser.value:
+            raise AssertionError('Fixture inquiry page/security token unavailable')
+        return parser.value
+
+    def rows(sql, params=()):
+        with closing(runtime.get_db()) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(sql, params)
+                return cursor.fetchall()
+
+    check('support_registration_active', app.extensions.get('kaika_inquiry_support') is True)
+    if phase_name == 'initialize':
+        begin = datetime.now(timezone(timedelta(hours=9))).replace(tzinfo=None, microsecond=0)
+        title = '<script>fictional-support-only</script>'
+        csrf = token(customer)
+        check('support_csrf_rejected_without_record', customer.post('/inquiry/new', base_url=base,
+            data={'title': title, 'content': 'fixture-only'}).status_code == 400
+            and not rows('SELECT id FROM inquiries WHERE title=%s', (title,)))
+        picture = io.BytesIO()
+        Image.new('RGB', (12, 12), '#186b66').save(picture, format='PNG')
+        picture.seek(0)
+        response = customer.post('/inquiry/new', base_url=base, data={
+            'security_csrf_token': csrf, 'category': 'technical', 'title': title,
+            'content': '<b>fictional-inquiry-body</b>', 'device': 'iphone',
+            'reference': 'FICTIONAL-ITEM-ONLY', 'page_name': 'ホーム',
+            'steps': 'fixture-tap', 'expected': 'fixture-expected', 'actual': 'fixture-actual',
+            'images': (picture, 'fictional-support.png')}, content_type='multipart/form-data')
+        created = rows('SELECT id,user_id,content,image_path,created_at FROM inquiries WHERE title=%s', (title,))
+        check('support_real_pg_create_and_redirect', response.status_code == 302 and len(created) == 1
+              and created[0][1] == users['normal']['id'] and response.headers.get('Location', '').endswith('/inquiry/' + str(created[0][0])))
+        if len(created) != 1:
+            raise AssertionError('Fixture support inquiry was not saved exactly once')
+        inquiry_id, _, body, stored_paths, created_at = created[0]
+        photo_paths = json.loads(stored_paths)
+        check('support_context_and_reencoded_image_saved', '【利用環境】\niPhoneアプリ' in body
+              and 'FICTIONAL-ITEM-ONLY' in body and len(photo_paths) == 1
+              and photo_paths[0].startswith('uploads/inquiries/') and photo_paths[0].endswith('.jpg'))
+        customer_reply = customer.post('/inquiry/' + str(inquiry_id) + '/reply', base_url=base,
+            data={'security_csrf_token': csrf, 'content': '<b>fictional-customer-reply</b>'})
+        admin_csrf = token(admin, '/admin/inquiry/' + str(inquiry_id))
+        admin_reply = admin.post('/admin/inquiry/' + str(inquiry_id) + '/reply', base_url=base,
+            data={'security_csrf_token': admin_csrf, 'content': '<b>fictional-staff-reply</b>', 'status': 'in_progress'})
+        replies = rows('SELECT user_id,content,is_admin_reply,created_at FROM inquiry_replies WHERE inquiry_id=%s ORDER BY id', (inquiry_id,))
+        check('support_customer_and_staff_replies_real_pg', customer_reply.status_code == 302
+              and admin_reply.status_code == 302 and len(replies) == 2
+              and replies[0][0] == users['normal']['id'] and replies[0][2] is False
+              and replies[1][0] == users['admin']['id'] and replies[1][2] is True)
+        end = datetime.now(timezone(timedelta(hours=9))).replace(tzinfo=None) + timedelta(seconds=1)
+        check('support_new_inquiry_and_replies_use_jst_wall_time', begin <= created_at <= end
+              and all(begin <= row[3] <= end for row in replies))
+        state['support_inquiry_review'] = {'id': inquiry_id, 'title': title,
+            'photo_path': photo_paths[0], 'created_at': created_at.isoformat()}
+        write_report(state_path, state)
+
+    saved = state['support_inquiry_review']
+    inquiry_id = saved['id']
+    detail = customer.get('/inquiry/' + str(inquiry_id), base_url=base)
+    html = detail.get_data(as_text=True)
+    check('support_thread_detail_private_and_html_escaped', detail.status_code == 200
+          and '&lt;script&gt;fictional-support-only&lt;/script&gt;' in html
+          and '&lt;b&gt;fictional-customer-reply&lt;/b&gt;' in html
+          and '&lt;b&gt;fictional-staff-reply&lt;/b&gt;' in html
+          and '<script>fictional-support-only</script>' not in html
+          and 'no-store' in detail.headers.get('Cache-Control', ''))
+    other_detail = other.get('/inquiry/' + str(inquiry_id), base_url=base)
+    check('support_other_customer_thread_and_reply_denied', other_detail.status_code in (302, 403, 404)
+          and saved['title'] not in other_detail.get_data(as_text=True)
+          and other.post('/inquiry/' + str(inquiry_id) + '/reply', base_url=base,
+              data={'security_csrf_token': token(other), 'content': 'fixture-cross-customer-denied'}).status_code == 404)
+    photo_path = '/static/' + saved['photo_path']
+    own_photo = customer.get(photo_path, base_url=base)
+    check('support_attachment_owner_staff_access_and_customer_isolation', own_photo.status_code == 200
+          and own_photo.mimetype == 'image/jpeg'
+          and 'no-store' in own_photo.headers.get('Cache-Control', '')
+          and other.get(photo_path, base_url=base).status_code == 404
+          and admin.get(photo_path, base_url=base).status_code == 200)
+    current = rows('SELECT created_at,status FROM inquiries WHERE id=%s', (inquiry_id,))
+    check('support_thread_and_timestamp_preserved_' + phase_name, len(current) == 1
+          and current[0][0].isoformat() == saved['created_at'] and current[0][1] == 'in_progress'
+          and rows('SELECT COUNT(*) FROM inquiry_replies WHERE inquiry_id=%s', (inquiry_id,))[0][0] == 2)
 
 
 def verify_documents(runtime, state, state_path, users, clients, phase_name, check):
@@ -601,6 +834,8 @@ def phase(args):
         token = (token_response.get_json() or {}).get('token', '')
         mobile = anon.get('/api/mobile/v1/items', headers={'Authorization': 'Bearer ' + token}, base_url=base)
         check('native_api_same_legacy_inventory', token_response.status_code == 200 and mobile.status_code == 200 and (mobile.get_json() or {}).get('total') == 2)
+        verify_home_preferences(runtime, state, state_path, users, clients, args.phase, check)
+        verify_support_inquiry(runtime, state, state_path, users, clients, args.phase, check)
         verify_access(runtime, config, access, state, state_path, users, args.phase, check)
         verify_documents(runtime, state, state_path, users, clients, args.phase, check)
         verify_source_documents(runtime, state, state_path, users, clients, args.phase, check)

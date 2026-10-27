@@ -123,6 +123,17 @@ class BackupRestoreGuardTest(unittest.TestCase):
             conn.execute('INSERT INTO inventory_intakes VALUES (2,2)')
         incoming = FileStorage(stream=io.BytesIO(b'{"merchandise": []}'), filename='legacy.json')
         self.assertIsNone(legacy_restore_block_reason(self.db, False, incoming, 1))
+
+    def test_display_choices_are_preserved_and_scoped_during_old_restore(self):
+        with self.db() as conn:
+            conn.execute('CREATE TABLE stage6_home_preferences(customer_id INTEGER PRIMARY KEY,sections_json TEXT,updated_at TEXT)')
+            conn.execute("INSERT INTO stage6_home_preferences VALUES(2,'[\"inventory\"]','fixture-time')")
+        incoming = FileStorage(stream=io.BytesIO(b'{"merchandise": []}'), filename='legacy.json')
+        self.assertIsNone(legacy_restore_block_reason(self.db, False, incoming, 1))
+        self.assertIsNotNone(legacy_restore_block_reason(self.db, False, incoming, 2))
+        self.assertTrue(unsupported_payload({'merchandise': [], 'stage6_home_preferences': [{'customer_id': 2}]}))
+        with self.db() as conn:
+            self.assertEqual(conn.execute('SELECT sections_json FROM stage6_home_preferences').fetchone()[0], '["inventory"]')
         self.assertIsNotNone(legacy_restore_block_reason(self.db, False, incoming, None))
 
     def test_received_dates_or_related_payloads_are_rejected_and_stream_position_is_restored(self):

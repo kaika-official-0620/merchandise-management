@@ -7,7 +7,7 @@ import json
 import zipfile
 
 UNSUPPORTED = ('旧形式の復元は、自己保管・配送中の商品、開花の受付・受領履歴、'
-               'アプリの契約・通知情報の完全復元に対応していません。'
+               'アプリの契約・通知・表示設定の完全復元に対応していません。'
                '現在のデータを守るため、このインポートは実行していません。'
                '保存したファイルは保管し、復元方法を管理者へご相談ください。')
 UNREADABLE = 'バックアップまたは現在のデータを安全に確認できないため、復元を実行していません。ファイルと復元方法を管理者へご確認ください。'
@@ -17,6 +17,7 @@ PROTECTED_TABLES = (
     'feature_billing_accounts', 'feature_subscriptions', 'feature_manual_grants',
     'feature_store_accounts', 'feature_store_receipts', 'feature_store_replacements',
     'feature_store_refunds', 'feature_plan_changes', 'push_devices', 'push_outbox',
+    'stage6_home_preferences',
 )
 
 
@@ -71,6 +72,8 @@ def current_data_requires_new_restore(get_db, postgres=False, user_id=None):
                 fields = columns(table)
                 if 'user_id' in fields:
                     scope, args = ' WHERE user_id=' + mark, (int(user_id),)
+                elif table == 'stage6_home_preferences' and 'customer_id' in fields:
+                    scope, args = ' WHERE customer_id=' + mark, (int(user_id),)
                 elif table == 'inventory_intake_items' and 'inventory_intakes' in names:
                     scope, args = ' WHERE intake_id IN (SELECT id FROM inventory_intakes WHERE user_id=' + mark + ')', (int(user_id),)
                 elif 'subscription_id' in fields and 'feature_subscriptions' in names:

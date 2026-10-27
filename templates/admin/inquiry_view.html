@@ -10,6 +10,7 @@
 </div>
 
 <div class="inquiry-detail-container">
+    {% include 'inquiry/_time_note.html' %}
     <div class="detail-grid">
         <!-- 左カラム：問い合わせ詳細 -->
         <div class="main-column">
@@ -26,8 +27,8 @@
                     </div>
                 </div>
                 <h2 class="inquiry-title">{{ inquiry.title }}</h2>
-                <div class="inquiry-content">
-                    {{ inquiry.content | replace('\n', '<br>') | safe }}
+                <div class="inquiry-content" style="white-space:pre-wrap;overflow-wrap:anywhere">
+                    {{ inquiry.content }}
                 </div>
                 
 {% if image_paths %}
@@ -69,8 +70,8 @@
                             </span>
                             <span class="thread-date">{{ reply.created_at[:16].replace('-', '/').replace('T', ' ') if reply.created_at else '-' }}</span>
                         </div>
-                        <div class="thread-content">
-                            {{ reply.content | replace('\n', '<br>') | safe }}
+                        <div class="thread-content" style="white-space:pre-wrap;overflow-wrap:anywhere">
+                            {{ reply.content }}
                         </div>
                     </div>
                     {% endfor %}
@@ -84,6 +85,7 @@
             <div class="reply-form-section">
                 <h3>返信を送信</h3>
                 <form method="POST" action="{{ url_for('admin_inquiry_reply', id=inquiry.id) }}">
+                    <input type="hidden" name="security_csrf_token" value="{{ security_form_token|default('') }}">
                     <div class="form-group">
                         <textarea name="content" class="form-control" rows="4" required
                                   placeholder="返信内容を入力してください"></textarea>
@@ -444,7 +446,8 @@ function changeStatus(status) {
     fetch('{{ url_for("admin_inquiry_status", id=inquiry.id) }}', {
         method: 'POST',
         headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'X-Security-CSRF-Token': {{ security_form_token|default('')|tojson }}
         },
         body: JSON.stringify({ status: status })
     })

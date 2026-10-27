@@ -189,7 +189,12 @@ class ErasureService:
         from account_erasure_notice import protected_destination
         protected=protected_destination(self.store,customer_id)
         names, counts = tables(self.store), {}
-        for table, key in (('mobile_sessions','user_id'), ('push_devices','user_id'), ('stage6_notification_preferences','customer_id')):
+        # Display choices are personal settings too. This helper is reached
+        # only by the existing guarded fixture rehearsal after both profile and
+        # notification erasure decisions; it does not enable live deletion.
+        for table, key in (('mobile_sessions','user_id'), ('push_devices','user_id'),
+                           ('stage6_notification_preferences','customer_id'),
+                           ('stage6_home_preferences','customer_id')):
             if table in names:
                 counts[table] = self.store.execute(f'DELETE FROM {table} WHERE {key}=?', (customer_id,)).rowcount
         fields_by_table = {

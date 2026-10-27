@@ -31,6 +31,17 @@ class InventoryTests(unittest.TestCase):
     def records(self, report):
         return {row['table']: row for row in report['tables']}
 
+    def test_home_display_settings_are_profile_records_for_only_the_customer(self):
+        self.table('stage6_home_preferences(customer_id INTEGER PRIMARY KEY,sections_json TEXT,updated_at TEXT)',
+            [(1, '["private-choice-one"]', 'fixture-one'), (2, '["private-choice-two"]', 'fixture-two')])
+        report = self.report(1)
+        row = self.records(report)['stage6_home_preferences']
+        self.assertEqual(row['classification'], 'profile')
+        self.assertEqual(row['direct_records'], 1)
+        self.assertEqual(row['related_records'], 1)
+        self.assertNotIn('private-choice-one', json.dumps(report))
+        self.assertNotIn('private-choice-two', json.dumps(report))
+
     def test_legacy_document_subject_and_child_items_are_counted(self):
         self.table('invoices(id INTEGER,sender_id INTEGER,bank_info TEXT)', [(10,1,'SECRET_BANK'),(20,2,'OTHER_BANK')])
         self.table('invoice_items(id INTEGER,invoice_id INTEGER,amount INTEGER)', [(1,10,1155),(2,10,500),(3,20,999)])

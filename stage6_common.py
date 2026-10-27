@@ -21,6 +21,9 @@ def migration_statements(dialect='sqlite'):
     if dialect not in ('sqlite', 'postgres'):
         raise ValueError('Unsupported dialect')
     return ['CREATE TABLE IF NOT EXISTS stage6_schema(version TEXT PRIMARY KEY NOT NULL)',
+            '''CREATE TABLE IF NOT EXISTS stage6_home_preferences(
+                customer_id INTEGER PRIMARY KEY REFERENCES users(id),
+                sections_json TEXT NOT NULL, updated_at TEXT NOT NULL)''',
             "INSERT INTO stage6_schema(version) VALUES ('" + SCHEMA_VERSION + "') ON CONFLICT(version) DO NOTHING"]
 
 

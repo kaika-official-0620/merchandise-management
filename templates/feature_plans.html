@@ -47,7 +47,7 @@
       <li>出力：閲覧権限のある既存の帳票・写真の保存機能は、プラン終了だけを理由に停止しません。</li>
       <li>販売代行：新規申請には対応プランが必要です。進行中の案件が自動で取り消されることはありません。</li>
     </ul>
-    <p class="fp-muted">月額契約の解約と、退会・アカウント情報の削除は別の手続きです。退会や保存データについてはメニューの「お問い合わせ」からご相談ください。取引中の案件や保管中の商品がある場合も、先にご相談ください。</p>
+    <p class="fp-muted">月額契約の解約と、退会・アカウント情報の削除は別の手続きです。{% if config.get('ACCOUNT_LIFECYCLE_ENABLED') %}<a href="{{ url_for('account_lifecycle.page') }}">退会・アカウント削除の案内を確認</a>できます。商品や精算が残っていても、削除申請は受け付けます。{% else %}退会や保存データについては、お問い合わせからご相談ください。{% endif %}</p>
   </section>
   {% if feature_native_app %}
   <section class="fp-panel"><h2>利用できる機能</h2><ul class="fp-features">{% if feature_basic_self_management %}<li>基本の自己在庫管理（無料枠内）</li>{% endif %}{% for feature in state.features %}<li>{{ feature_labels[feature] }}</li>{% else %}<li>現在、利用可能な有料追加機能はありません。</li>{% endfor %}</ul></section>

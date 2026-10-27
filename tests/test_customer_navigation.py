@@ -52,7 +52,9 @@ class CustomerNavigationTests(unittest.TestCase):
         self.app.config.update({flag: True for flag in STAGE_FLAGS})
         self.app.jinja_loader = DictLoader({
             'customer_navigation/hub.html':
-                '{{ {"section":section,"navigation":navigation,"available":customer_navigation_available,"current":customer_nav_current}|tojson }}'
+                '{{ {"section":section,"navigation":navigation,"available":customer_navigation_available,"current":customer_nav_current}|tojson }}',
+            'customer_navigation/guide.html':
+                '{{ {"sections":guide_sections,"inquiry":inquiry_url,"history":history_url,"preview":private_preview,"current":customer_nav_current}|tojson }}'
         })
         self.users = {str(user.id): user for user in (
             Customer(11), Customer(22), Customer(90, 'admin'), Customer(91, 'supplier'))}
@@ -232,10 +234,38 @@ class CustomerNavigationTests(unittest.TestCase):
             'user_document_list': 'documents', 'service_document_view': 'documents',
             'workspace_home.inbox': 'support', 'inquiry_new': 'support',
             'account_lifecycle.page': 'support', 'profile': 'support',
+            'customer_navigation.guide': 'support',
         }
         for endpoint, key in cases.items():
             self.assertEqual(current_section(endpoint), key, endpoint)
         self.assertIsNone(current_section('admin_dashboard'))
+
+    def test_guide_is_customer_only_and_reuses_available_destinations(self):
+        self.assertEqual(self.client.get('/my/support/guide').status_code, 302)
+        self.login(90)
+        self.assertEqual(self.client.get('/my/support/guide').status_code, 403)
+        self.login()
+        self.app.extensions['kaika_staging_review'] = {'schema_only': True}
+        response = self.client.get('/my/support/guide')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('no-store', response.headers['Cache-Control'])
+        guide = response.get_json(force=True)
+        self.assertEqual(guide['current']['key'], 'support')
+        self.assertTrue(guide['preview'])
+        self.assertEqual(guide['inquiry'], '/dest/inquiry_new')
+        self.app.config['STAGE2_INVENTORY_ENABLED'] = False
+        guide = self.client.get('/my/support/guide').get_json(force=True)
+        links = {card['url'] for section in guide['sections'] for card in section['cards']}
+        self.assertNotIn('/dest/inventory_registry.index', links)
+
+    def test_legacy_custody_is_history_and_not_advertised_as_contract_deadline(self):
+        self.login()
+        cards = self.hub('products')['section']['cards']
+        legacy = next(card for card in cards if card['url'] == '/dest/long_term_items')
+        self.assertTrue(legacy['secondary'])
+        self.assertEqual(legacy['title'], '以前の預かり記録')
+        current = next(card for card in cards if card['url'] == '/dest/inventory_registry.index')
+        self.assertIn('契約ごとの', current['description'])
 
     def test_registration_is_idempotent_and_does_not_access_business_data(self):
         bp = register_customer_navigation(self.runtime)

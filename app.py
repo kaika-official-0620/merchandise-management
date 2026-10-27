@@ -36103,10 +36103,9 @@ def inquiry_view(id):
                              replies=replies,
                              categories=INQUIRY_CATEGORIES,
                              statuses=INQUIRY_STATUS)
-    except Exception as e:
-        print(f"[ERROR] inquiry_view: {e}", flush=True)
-        flash('問い合わせの読み込みでエラーが発生しました', 'error')
-        return redirect(url_for('inquiry_list'))
+    except Exception:
+        from inquiry_support import unavailable_response
+        return unavailable_response()
 
 @app.route('/inquiry/<int:id>/delete', methods=['POST'])
 @login_required
@@ -36145,8 +36144,9 @@ def inquiry_delete(id):
         cur.close()
         conn.close()
         flash('お問い合わせを削除しました', 'success')
-    except Exception as e:
-        flash(f'削除エラー: {str(e)}', 'error')
+    except Exception:
+        from inquiry_support import unavailable_response
+        return unavailable_response()
     
     return redirect(url_for('inquiry_list'))
 
@@ -36159,6 +36159,9 @@ def inquiry_reply(id):
     if not content:
         flash('返信内容を入力してください', 'error')
         return redirect(url_for('inquiry_view', id=id))
+
+    from inquiry_support import inquiry_jst_timestamp
+    recorded_at = inquiry_jst_timestamp()
     
     conn = get_db()
     if DATABASE_URL:
@@ -36175,12 +36178,12 @@ def inquiry_reply(id):
         
         # 返信を追加
         cur.execute('''
-            INSERT INTO inquiry_replies (inquiry_id, user_id, content, is_admin_reply)
-            VALUES (%s, %s, %s, FALSE)
-        ''', (id, current_user.id, content))
+            INSERT INTO inquiry_replies (inquiry_id, user_id, content, is_admin_reply, created_at)
+            VALUES (%s, %s, %s, FALSE, %s)
+        ''', (id, current_user.id, content, recorded_at))
         
         # クライアントから再返信が入ったら、管理者側で新着として扱う
-        cur.execute("UPDATE inquiries SET status = 'new', updated_at = CURRENT_TIMESTAMP WHERE id = %s AND status != 'closed'", (id,))
+        cur.execute("UPDATE inquiries SET status = 'new', updated_at = %s WHERE id = %s AND status != 'closed'", (recorded_at, id))
     else:
         cur = conn.cursor()
         cur.execute('SELECT * FROM inquiries WHERE id = ? AND user_id = ?', (id, current_user.id))
@@ -36193,11 +36196,11 @@ def inquiry_reply(id):
             return redirect(url_for('inquiry_list'))
         
         cur.execute('''
-            INSERT INTO inquiry_replies (inquiry_id, user_id, content, is_admin_reply)
-            VALUES (?, ?, ?, 0)
-        ''', (id, current_user.id, content))
+            INSERT INTO inquiry_replies (inquiry_id, user_id, content, is_admin_reply, created_at)
+            VALUES (?, ?, ?, 0, ?)
+        ''', (id, current_user.id, content, recorded_at))
         
-        cur.execute("UPDATE inquiries SET status = 'new', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status != 'closed'", (id,))
+        cur.execute("UPDATE inquiries SET status = 'new', updated_at = ? WHERE id = ? AND status != 'closed'", (recorded_at, id))
     
     conn.commit()
     cur.close()
@@ -36421,10 +36424,9 @@ def admin_inquiry_view(id):
                              replies=replies,
                              categories=INQUIRY_CATEGORIES,
                              statuses=INQUIRY_STATUS)
-    except Exception as e:
-        print(f"[ERROR] admin_inquiry_view: {e}", flush=True)
-        flash('問い合わせの読み込みでエラーが発生しました', 'error')
-        return redirect(url_for('admin_inquiries'))
+    except Exception:
+        from inquiry_support import unavailable_response
+        return unavailable_response()
 
 @app.route('/admin/inquiry/<int:id>/reply', methods=['POST'])
 @login_required
@@ -36440,32 +36442,35 @@ def admin_inquiry_reply(id):
     if not content:
         flash('返信内容を入力してください', 'error')
         return redirect(url_for('admin_inquiry_view', id=id))
+
+    from inquiry_support import inquiry_jst_timestamp
+    recorded_at = inquiry_jst_timestamp()
     
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor()
         # 返信を追加
         cur.execute('''
-            INSERT INTO inquiry_replies (inquiry_id, user_id, content, is_admin_reply)
-            VALUES (%s, %s, %s, TRUE)
-        ''', (id, current_user.id, content))
+            INSERT INTO inquiry_replies (inquiry_id, user_id, content, is_admin_reply, created_at)
+            VALUES (%s, %s, %s, TRUE, %s)
+        ''', (id, current_user.id, content, recorded_at))
         
         # ステータス更新
         if new_status:
-            cur.execute('UPDATE inquiries SET status = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s', (new_status, id))
+            cur.execute('UPDATE inquiries SET status = %s, updated_at = %s WHERE id = %s', (new_status, recorded_at, id))
         else:
-            cur.execute('UPDATE inquiries SET updated_at = CURRENT_TIMESTAMP WHERE id = %s', (id,))
+            cur.execute('UPDATE inquiries SET updated_at = %s WHERE id = %s', (recorded_at, id))
     else:
         cur = conn.cursor()
         cur.execute('''
-            INSERT INTO inquiry_replies (inquiry_id, user_id, content, is_admin_reply)
-            VALUES (?, ?, ?, 1)
-        ''', (id, current_user.id, content))
+            INSERT INTO inquiry_replies (inquiry_id, user_id, content, is_admin_reply, created_at)
+            VALUES (?, ?, ?, 1, ?)
+        ''', (id, current_user.id, content, recorded_at))
         
         if new_status:
-            cur.execute('UPDATE inquiries SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', (new_status, id))
+            cur.execute('UPDATE inquiries SET status = ?, updated_at = ? WHERE id = ?', (new_status, recorded_at, id))
         else:
-            cur.execute('UPDATE inquiries SET updated_at = CURRENT_TIMESTAMP WHERE id = ?', (id,))
+            cur.execute('UPDATE inquiries SET updated_at = ? WHERE id = ?', (recorded_at, id))
     
     conn.commit()
     cur.close()

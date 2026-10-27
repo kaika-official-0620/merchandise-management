@@ -18,6 +18,7 @@ from inventory_registry_web import RegistryWeb, _text
 from item_registry import Actor, RegistryError, _now
 from stage6_common import Stage6Store
 from stage6_home import HomeService
+from stage6_home_preferences import HomePreferences, DEFAULT_SECTIONS
 from stage6_presentation import home_view, local_time
 from stage6_events import EventScanner
 from stage6_notifications import NotificationService
@@ -131,6 +132,8 @@ def register_stage6_web(runtime):
                         'verification_rate_limit': '確認の依頼回数が上限に達しました。時間をおいてお試しください。',
                         'verification_invalid_or_expired': '確認情報が失効したか、このアカウントの確認情報ではありません。',
                         'notification_destination_in_use': 'この通知先は別のアカウントに連携済みです。',
+                        'home_preferences_invalid': '表示する項目を選び直してください。',
+                        'home_preferences_not_ready': '表示設定の保存を準備しています。ホームは引き続き確認できます。',
                     }.get(error.code, '現在の状態では操作できません。画面を開き直して内容をご確認ください。')), error.status
             return inner
         return decorate
@@ -143,8 +146,20 @@ def register_stage6_web(runtime):
                 sandbox_payments_enabled=service.sandbox_payments_enabled())
             dashboard = api.staff(service.actor()) if staff() else api.customer(service.actor())
             inbox = [] if staff() else service.notifications(store).inbox(service.actor())
+            preferences = None if staff() else HomePreferences(store).get(service.actor())
         return render_template('workspace_home/home.html', dashboard=dashboard, inbox=inbox, staff=staff(),
-            home_view=home_view(dashboard, request.args, staff()), local_time=local_time)
+            home_view=home_view(dashboard, request.args, staff()), local_time=local_time,
+            home_preferences=preferences)
+
+    @bp.post('/workspace-home/display')
+    @allowed(customer_only=True)
+    def display_preferences():
+        key = service.verify('stage6_home_display')
+        selected = list(DEFAULT_SECTIONS) if request.form.get('reset') == 'default' else request.form.getlist('sections')
+        with service.db(True) as store:
+            HomePreferences(store, clock=service.clock).save(service.actor(), selected, source_key=key)
+        flash('ホームの表示を保存しました。他の端末でも同じ表示になります。', 'success')
+        return redirect(url_for('workspace_home.home'))
 
     @bp.get('/notifications')
     @allowed()

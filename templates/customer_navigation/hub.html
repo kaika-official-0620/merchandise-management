@@ -7,6 +7,13 @@
 <header class="customer-hub-heading"><span class="customer-hub-icon">{{ icon(section.key) }}</span><div><p class="customer-hub-eyebrow">KAIKA / MY PAGE</p><h1>{{ section.title }}</h1><p>{{ section.description }}</p></div></header>
 {% if section.key == 'products' %}<p class="customer-hub-guide">自分で保管する商品も、開花に預けた商品もここから確認できます。</p>{% elif section.key == 'requests' %}<p class="customer-hub-guide">開花に預ける商品の手続きと、販売を依頼した後の確認をまとめています。</p>{% elif section.key == 'money' %}<p class="customer-hub-guide">売上・利益と、お支払いの記録を分けて確認できます。下書きや検証中の金額は、確定した請求とは異なります。</p>{% elif section.key == 'support' %}<p class="customer-hub-guide">お客様ごとの連絡と、開花全体のお知らせを分けて確認できます。</p>{% endif %}
 <div class="customer-action-grid">{% for entry in section.cards if not entry.secondary %}{{ card(entry) }}{% else %}<p class="customer-hub-empty">現在利用できる操作はありません。お知らせ・サポートからお問い合わせください。</p>{% endfor %}</div>
-{% set history_cards = section.cards|selectattr('secondary')|list %}{% if history_cards %}<details class="customer-history"><summary>{% if section.key == 'support' %}通知・アカウントの設定{% elif section.key == 'money' %}集計・データの書き出し{% elif section.key == 'products' %}購入・予約の記録{% else %}以前の依頼・取引の履歴{% endif %} <span>{{ history_cards|length }}項目</span></summary><div class="customer-action-grid">{% for entry in history_cards %}{{ card(entry) }}{% endfor %}</div></details>{% endif %}
+{% set history_cards = section.cards|selectattr('secondary')|list %}{% if history_cards %}<details class="customer-history"><summary>{% if section.key == 'support' %}通知・アカウントの設定{% elif section.key == 'money' %}集計・データの書き出し{% elif section.key == 'products' %}購入・以前の記録{% else %}以前の依頼・取引の履歴{% endif %} <span>{{ history_cards|length }}項目</span></summary><div class="customer-action-grid">{% for entry in history_cards %}{{ card(entry) }}{% endfor %}</div></details>{% endif %}
+<details class="customer-hub-section-help"><summary>このメニューの使い方</summary>
+{% if section.key == 'products' %}<p>まず保管方法を選んで登録します。商品一覧で基本情報を、保管場所・作業履歴で現物の動きを確認できます。以前の台帳とまだ照合されていない商品は、どちらか一方にだけ表示される場合があります。</p>
+{% elif section.key == 'requests' %}<p>預け入れの申請 → 発送の報告 → 開花で受領 → 撮影・登録 → 出品内容の確認、の順に進みます。申請しただけでは受領・出品は完了しません。以前の依頼は履歴から確認できます。</p>
+{% elif section.key == 'money' %}<p>商品ごとの手残りは「料金・利益」、月ごとの内訳は「請求・資金記録」で確認します。売上や見込利益は、仕入れに使える残高とは分けて表示します。利用プランと現物の作業料も別の確認項目です。</p>
+{% elif section.key == 'documents' %}<p>書類を作成し、内容を確定して保存した後、送信先を確認して別の操作で開花へ送信します。プレビューは任意です。申請済みの商品は、追加する候補とは分けて確認できます。</p>
+{% elif section.key == 'support' %}<p>商品の承認や期限の連絡は「自分宛てのお知らせ」、全体の案内は「開花からのお知らせ」に届きます。問い合わせの返答は「問い合わせ・返信」で確認できます。ホームの表示項目はホーム上部から変更できます。</p>{% endif %}
+<p><a href="{{ url_for('customer_navigation.guide') }}">使い方・よくある質問を見る →</a></p></details>
 </section>
 {% endblock %}

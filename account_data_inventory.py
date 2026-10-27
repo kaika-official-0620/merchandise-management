@@ -39,6 +39,7 @@ def _register(category, names, keys=('customer_id',)):
 
 _register('profile', 'users', ('id',))
 _register('profile', 'customers', ('user_id',))
+_register('profile', 'stage6_home_preferences', ('customer_id',))
 _register('authentication', 'mobile_sessions push_devices', ('user_id',))
 _register('notifications', 'push_outbox line_message_logs', ('user_id',))
 _register('notifications', '''stage6_notifications stage6_notification_preferences

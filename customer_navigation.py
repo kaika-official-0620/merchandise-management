@@ -41,6 +41,8 @@ def current_section(endpoint, args=None):
     if endpoint == 'customer_navigation.hub':
         value = (args or {}).get('section_key')
         return value if value in SECTION_KEYS else None
+    if endpoint == 'customer_navigation.guide':
+        return 'support'
     if endpoint in ('user_home', 'workspace_home.home'):
         return 'home'
     if endpoint.startswith(('workspace_home.', 'account_lifecycle.', 'inquiry_')) or endpoint in (
@@ -111,10 +113,10 @@ def section_cards(key):
     if key == 'products':
         add('index', '商品一覧', '自分で保管する商品と、開花へ預けた商品を一覧で確認します。')
         add('self_inventory_new', '自分の商品を登録', '自分で保管・販売する商品の写真と情報を登録します。', enabled=can_register)
-        add('inventory_registry.index', '保管場所・作業履歴', '商品の保管先と、受領・撮影・発送などの記録を確認します。', enabled=stage_available(2))
-        add('long_term_items', '預かり期限を確認', 'これまでの在庫記録にある、長期預かりの商品を確認します。適用期限は個別に確認が必要です。')
+        add('inventory_registry.index', '保管場所・作業履歴', '商品の保管先、契約ごとの預かり期限、受領・撮影・発送の記録を確認します。', enabled=stage_available(2))
         add('commerce.index', '開花の商品を買う', '開花の商品選びから購入までの確認画面です。現在はテスト資金を使い、実購入は発生しません。', enabled=stage_available(4), badge='検証中')
         add('commerce.orders', '購入・予約の履歴', '選んだ商品の予約と購入の検証記録を確認します。', enabled=stage_available(4), secondary=True, badge='検証中')
+        add('long_term_items', '以前の預かり記録', '以前の在庫記録を参照します。経過日数だけで預かり期限や処分は決まりません。', secondary=True)
     elif key == 'requests':
         add('inventory_intake_new', '開花へ預ける', '商品を開花へ送り、撮影・登録などを依頼します。', enabled=can_request_intake)
         add('inventory_intakes', '依頼・受付状況', '依頼した商品の受付、受領と登録の進み具合を確認します。', enabled=intake_available)
@@ -132,6 +134,7 @@ def section_cards(key):
         add('user_document_list', '書類を作る', '見積依頼書や買取承諾書など、必要な書類を作成します。')
         add('documents', '届いた書類・履歴', '請求書や精算書、これまでに作成・受領した書類を確認します。')
     elif key == 'support':
+        add('customer_navigation.guide', '使い方・よくある質問', '商品の登録、書類の送信、アプリの確認方法を目的別に確認できます。')
         add('workspace_home.inbox', '自分宛てのお知らせ', '商品の確認依頼など、あなた宛てのお知らせを確認します。', enabled=stage_available(6))
         add('user_announcements_page', '開花からのお知らせ', 'サービスの案内や、開花からのお知らせを確認します。')
         add('inquiry_list', '問い合わせ・返信', '送った問い合わせと、開花からの返信を確認します。')
@@ -147,6 +150,19 @@ def register_customer_navigation(runtime):
     if 'customer_navigation' in app.blueprints:
         return app.extensions['customer_navigation']
     bp = Blueprint('customer_navigation', __name__)
+
+    @bp.get('/my/support/guide')
+    @login_required
+    def guide():
+        if not is_customer():
+            abort(403)
+        sections = [dict(key=key, title=title, cards=section_cards(key))
+                    for key, title, _ in SECTIONS if key not in ('home', 'support')]
+        return render_template('customer_navigation/guide.html', guide_sections=sections,
+                               inquiry_url=destination('inquiry_new'),
+                               history_url=destination('inquiry_list'),
+                               private_preview=bool(current_app.extensions.get('kaika_staging_review')),
+                               home_url=destination('workspace_home.home') if stage_available(6) else destination('user_home'))
 
     @bp.get('/my/<section_key>')
     @login_required

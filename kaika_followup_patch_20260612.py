@@ -187,9 +187,9 @@ def apply(module: Any) -> None:
                 inquiries.append(inquiry)
             cur.close()
             conn.close()
-        except Exception as exc:
-            print(f"[ERROR] inquiry_list_followup: {exc}", flush=True)
-            flash("お問い合わせの検索中にエラーが発生しました。", "error")
+        except Exception:
+            from inquiry_support import unavailable_response
+            return unavailable_response()
 
         return render_template(
             "inquiry/list.html",
@@ -246,9 +246,9 @@ def apply(module: Any) -> None:
             new_count = int((count_row[0] if count_row and not isinstance(count_row, dict) else (count_row or {}).get("count", 0)) or 0)
             cur.close()
             conn.close()
-        except Exception as exc:
-            print(f"[ERROR] admin_inquiries_followup: {exc}", flush=True)
-            flash("お問い合わせ管理の検索中にエラーが発生しました。", "error")
+        except Exception:
+            from inquiry_support import unavailable_response
+            return unavailable_response()
 
         return render_template(
             "admin/inquiries.html",

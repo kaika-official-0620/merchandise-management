@@ -87,6 +87,47 @@ class ErasureTests(LifecycleFixture):
                 VALUES (?,?,?,?,'email',?,'queued',1,1,1)''',('delivery'+str(customer),customer,'dest'+str(customer),'proof'+str(customer),'containing fictional private proof'))
         self.db.commit()
 
+    def seed_home_preferences(self):
+        from stage6_common import migration_statements as home_schema
+        for sql in home_schema():
+            self.db.execute(sql)
+        self.db.executemany('INSERT INTO stage6_home_preferences VALUES(?,?,?)',
+            [(1, '["inventory"]', 'fixture-one'), (2, '["sales"]', 'fixture-two')])
+        self.db.commit()
+
+    def test_home_preferences_erasure_requires_review_and_preserves_other_customer(self):
+        self.seed_home_preferences()
+        before_other = self.store.query('SELECT * FROM stage6_home_preferences WHERE customer_id=2')
+        plan = self.prepare()
+        self.error('erasure_evidence_required', lambda: self.execute(plan))
+        self.assertEqual(2, len(self.store.query('SELECT * FROM stage6_home_preferences')))
+        plan = self.decide(plan, 'profile')
+        self.error('erasure_evidence_required', lambda: self.execute(plan))
+        self.assertEqual(2, len(self.store.query('SELECT * FROM stage6_home_preferences')))
+        result = self.execute(self.decide(plan, 'notifications'))
+        self.assertEqual(1, result['counts']['stage6_home_preferences'])
+        self.assertFalse(self.store.query('SELECT * FROM stage6_home_preferences WHERE customer_id=1'))
+        self.assertEqual(before_other, self.store.query('SELECT * FROM stage6_home_preferences WHERE customer_id=2'))
+        self.assertEqual(1155, self.store.query('SELECT amount FROM invoices')[0]['amount'])
+        self.assertFalse(result['complete'])
+
+    def test_home_preferences_rollback_with_fixture_erasure_failure(self):
+        self.seed_home_preferences()
+        before = self.store.query('SELECT * FROM stage6_home_preferences ORDER BY customer_id')
+        plan = self.decide(self.decide(self.prepare(), 'profile'), 'notifications')
+        original = self.erasure._scrub_notification_fields
+
+        def fail_after_settings_scrub(customer_id):
+            original(customer_id)
+            raise RuntimeError('fictional-post-scrub-failure')
+
+        with patch.object(self.erasure, '_scrub_notification_fields', side_effect=fail_after_settings_scrub):
+            with self.assertRaises(RuntimeError):
+                self.execute(plan)
+        self.assertEqual(before, self.store.query('SELECT * FROM stage6_home_preferences ORDER BY customer_id'))
+        self.assertTrue(access_allowed_in_store(self.store, 1))
+        self.assertFalse(self.erasure.get(self.staff, 1, self.request['request_id'])['fixture_result'])
+
     def test_fixture_scrubs_local_secrets_preserves_money_other_customer_and_audit(self):
         self.seed_notifications()
         plan=self.decide(self.decide(self.prepare(),'profile'),'notifications')

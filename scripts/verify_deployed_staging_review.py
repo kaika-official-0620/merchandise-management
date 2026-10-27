@@ -127,9 +127,11 @@ def verify_review(environ=None, *, session_factory=None):
                 'username': 'staging_' + role,
                 'password': environ['STAGING_' + role.upper() + '_PASSWORD'],
             })
-            page(client, '/workspace-home', '今日の業務' if role == 'admin' else '商品とお金の状況')
+            home_page = page(client, '/workspace-home', '今日の業務' if role == 'admin' else '商品とお金の状況')
             require(stage, True)
             if role != 'admin':
+                require(role + '_home_customization_present', 'home-display-settings' in home_page.classes
+                        and 'home-required-actions' in home_page.classes)
                 for key, title in HUBS:
                     stage = role + '_hub_' + key
                     parsed = page(client, '/my/' + key, title)
@@ -140,6 +142,11 @@ def verify_review(environ=None, *, session_factory=None):
                     ('document_list', '/documents/list', '書類一覧'),
                     ('estimate_form', '/mitsumori/add', '見積り依頼書作成'),
                     ('consent_form', '/kaitori-shoudaku/add', '買取承諾書作成'),
+                    ('support_guide', '/my/support/guide', '使い方・よくある質問'),
+                    ('inquiry_form', '/inquiry/new', '開花に問い合わせる'),
+                    ('inquiry_history', '/inquiry', '問い合わせ・返信の履歴'),
+                    ('legacy_custody_reference', '/long-term-items', '以前の預かり記録'),
+                    ('sales_analysis', '/my-analytics', '売上の分析'),
                 ):
                     stage = role + '_' + key
                     page(client, path, heading)

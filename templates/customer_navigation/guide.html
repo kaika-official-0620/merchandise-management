@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% block title %}使い方・よくある質問 - 開花{% endblock %}
+{% block content %}
+<section class="customer-hub customer-help">
+  <header class="customer-hub-heading"><div><p class="customer-hub-eyebrow">KAIKA / SUPPORT</p><h1>使い方・よくある質問</h1><p>やりたいことから、操作する場所を探せます。</p></div></header>
+  <nav class="customer-help-topics" aria-label="使い方の項目"><a href="#first-steps">商品の登録・依頼</a><a href="#documents-help">書類</a><a href="#money-help">売上・支払い</a><a href="#app-review-help">アプリの確認・改善</a></nav>
+  <section class="customer-help-section" id="first-steps"><h2>商品の登録と、開花への依頼</h2>
+    <details><summary>自分で保管する商品と、開花に預ける商品はどこから登録しますか？</summary><p>ご自身で保管・販売する商品は「商品・在庫 → 自分の商品を登録」から、写真と情報を登録します。開花に預けて作業を依頼する商品は「開花への依頼 → 開花へ預ける」へ進みます。預け入れの申請と、開花での受領・登録完了は別の段階です。</p></details>
+    <details><summary>保管場所・作業の進み具合・預かり期限を見たい</summary><p>「商品・在庫 → 保管場所・作業履歴」で商品を開きます。期限はお客様に適用される契約と登録された日付に従います。「未確認」は期限がないという意味ではありません。自分で保管する商品は開花の預かり期限の対象外です。</p></details>
+    <details><summary>出品内容を承認すると、すぐに外部へ出品されますか？</summary><p>「開花への依頼 → 出品内容を確認」で提案された内容を確認します。検証中の画面での承認だけでは、外部の販売先への出品は行いません。変更内容や販売条件が分からない場合は、承認前にお問い合わせください。</p></details>
+  </section>
+  <section class="customer-help-section" id="documents-help"><h2>書類の作成と送信</h2>
+    <details><summary>書類を作ったのに、開花へ届いていません</summary><p>書類の「作成完了」は保存です。完成した書類を開き、送信先と内容を確認してから、別の送信ボタンで開花へ送ります。プレビューは任意です。送信を保留する案内が出た場合は、その理由を確認してください。</p></details>
+    <details><summary>商品を検索しても、追加候補に出てきません</summary><p>商品名・ブランド・管理番号で検索できます。すでに申請済みの商品は追加候補から分けて表示します。「申請済み」側と、商品の登録情報を確認してください。同じ商品を重ねて申請しないようにしています。</p></details>
+  </section>
+  <section class="customer-help-section" id="money-help"><h2>売上・利益とお支払い</h2>
+    <details><summary>売上・利益・残高は同じものですか？</summary><p>売上は販売額、商品利益は売上から確認できた費用を差し引いた額です。入金や精算が完了したお金とは分けて表示します。費用に未入力がある場合、利益は未確認になります。計算方法の説明と試算は「売上・支払い」の各画面から確認できます。</p></details>
+    <details><summary>請求下書きや、検証用の資金は実際のお金ですか？</summary><p>請求下書きは確認中の明細です。「検証中」「テスト」と表示された資金や決済記録は、実際の入出金とは異なります。料金の問い合わせには、分かる範囲で対象の月・商品・明細番号を添えてください。</p></details>
+    <details><summary>プランの解約とアカウント削除は同じですか？</summary><p>別の手続きです。アプリを端末から削除しても月額契約は解約されません。利用プランで購入元の契約管理方法を確認してください。アカウント削除は「お知らせ・サポート → 通知・アカウントの設定」から確認できます。</p></details>
+  </section>
+  <section class="customer-help-section" id="app-review-help"><h2>アプリの中身を確認・改善する</h2>
+    {% if private_preview %}<details><summary>一般公開せず、TestFlightで修正を確認できますか？</summary><p>はい。現在のiPhone検証版は、招待されたテスターだけが使う確認用です。一般のApp Store公開とは別です。画面の変更は確認用サーバーに反映後、アプリでページを開き直して確認できます。カメラなどアプリ本体の機能を変える場合は、新しい検証ビルドへの更新が必要になることがあります。</p><p>TestFlightにはビルドの利用期限があります。更新の案内が来た場合はTestFlightから新しい検証版へ更新してください。</p></details>{% endif %}
+    <details><summary>直してほしい部分を担当者へどう伝えればよいですか？</summary><ol><li>「どのメニュー → どの画面か」を書きます。</li><li>行った操作と、実際に起きたこと・希望する動きを書きます。</li><li>iPhoneアプリ・Androidアプリ・PCブラウザなど、使った環境を添えます。</li><li>可能なら画面の画像を添付します。顧客名・住所・残高など不要な情報は隠してください。</li></ol><p>パスワードや認証コードは書かないでください。送った内容と開花からの返信は、問い合わせ履歴に残ります。</p></details>
+    <details><summary>ホームの表示を変えたい</summary><p>ホームの「表示をカスタマイズ」から、表示したい項目を選んで保存します。「次にすること」など重要な確認事項は常に表示します。表示を隠しても、元の商品や取引記録は削除されません。</p>{% if home_url %}<a href="{{ home_url }}">ホームを開く →</a>{% endif %}</details>
+  </section>
+  <section class="customer-help-section"><h2>操作する場所を探す</h2><div class="customer-help-directory">{% for section in guide_sections %}<div><h3>{{ section.title }}</h3><ul>{% for entry in section.cards %}<li><a href="{{ entry.url }}">{{ entry.title }}</a>{% if entry.badge %} <span class="customer-help-tag">{{ entry.badge }}</span>{% endif %}</li>{% endfor %}</ul></div>{% endfor %}</div></section>
+  <section class="customer-help-contact"><h2>解決しない場合</h2><p>操作の相談・不具合・改善のご希望は、お問い合わせからお送りください。返信はこのサービス内の問い合わせ履歴で確認できます。</p><div class="customer-help-actions">{% if inquiry_url %}<a class="btn btn-primary" href="{{ inquiry_url }}">問い合わせを送る</a>{% endif %}{% if history_url %}<a class="btn btn-secondary" href="{{ history_url }}">問い合わせ・返信を確認</a>{% endif %}</div></section>
+</section>
+{% endblock %}

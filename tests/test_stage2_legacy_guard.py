@@ -62,6 +62,7 @@ class LegacyGuardTests(unittest.TestCase):
             'approve_sale_request': '/approve/<int:request_id>',
             'admin_sale_request_shipment': '/shipment/<int:request_id>',
             'process_disposal_request': '/disposal/<int:request_id>',
+            'submit_long_term_disposal_request': '/long-term/request',
             'admin_sales_agency_process': '/agency/<int:id>',
             'sales_agency_apply': '/agency/apply',
             'proxy_service_purchase': '/proxy-service/purchase',
@@ -170,6 +171,19 @@ class LegacyGuardTests(unittest.TestCase):
         before = len(self.app.before_request_funcs[None])
         self.assertIs(register_stage2_legacy_guard(self.runtime), first)
         self.assertEqual(len(self.app.before_request_funcs[None]), before)
+
+    def test_old_age_based_disposal_is_held_even_for_unlinked_stock(self):
+        before = self.opened
+        for target in ('10', '11'):
+            response = self.client.post('/long-term/request', data={
+                'merchandise_ids': target, 'disposal_type': 'liquidation'})
+            self.assertEqual(response.status_code, 409)
+            self.assertEqual(response.json['error']['code'], 'legacy_custody_request_pending')
+        self.assertEqual(self.opened, before)
+        self.assertEqual(self.calls, [])
+        self.assertEqual(self.client.get('/long-term/request').status_code, 200)
+        self.app.config['STAGE2_INVENTORY_ENABLED'] = False
+        self.assertEqual(self.client.post('/long-term/request').status_code, 200)
 
 
 if __name__ == '__main__':

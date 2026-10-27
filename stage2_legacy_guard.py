@@ -152,6 +152,13 @@ class LegacyGuard:
             return None
         if not current_user.is_authenticated:
             return None  # Preserve the original login response.
+        if request.endpoint == 'submit_long_term_disposal_request':
+            # The former age-based disposal form does not carry the customer's
+            # contract, individual deadline or current custody consent. Hold
+            # even unlinked legacy stock before any request/notification write.
+            return self.hold('legacy_custody_request_pending',
+                '以前の保管日数だけで返送・販売・処分を申請する操作は停止しています。'
+                '「保管場所・作業履歴」で現在の契約と商品を確認し、開花へご相談ください。')
         staff_only = request.endpoint.startswith('admin_') or request.endpoint in (
             'edit_item', 'approve_sale_request', 'process_disposal_request')
         if staff_only and not current_user.is_admin():

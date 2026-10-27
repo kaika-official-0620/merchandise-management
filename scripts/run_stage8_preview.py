@@ -8,6 +8,7 @@ import argparse
 from contextlib import redirect_stdout, redirect_stderr
 import importlib
 import io
+from html.parser import HTMLParser
 import json
 import logging
 import os
@@ -71,6 +72,17 @@ def prepare(module, preview, users):
 def check_routes(module, users, port):
     base = 'http://127.0.0.1:' + str(port)
     checks = []
+    class MenuCards(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.paths = []
+        def handle_starttag(self, tag, attributes):
+            attributes = dict(attributes)
+            if tag == 'a' and 'customer-action-card' in attributes.get('class', '').split():
+                path = attributes.get('href', '')
+                if not path.startswith('/') or path.startswith('//'):
+                    raise RuntimeError('Review menus may only target same-app routes.')
+                self.paths.append(path)
     for persona in users:
         client = module.app.test_client()
         response = client.get('/__preview/start/' + persona, base_url=base, follow_redirects=True)
@@ -86,6 +98,24 @@ def check_routes(module, users, port):
                     expected=403  # Deletion requests also stop new destination verification.
             checks.append(dict(persona=persona, path=path, status=response.status_code, expected=expected,
                                passed=response.status_code == expected))
+        if persona != 'admin':
+            menu_paths = set()
+            for key in ('products', 'requests', 'money', 'documents', 'support'):
+                path = '/my/' + key
+                response = client.get(path, base_url=base)
+                checks.append(dict(persona=persona, path=path, status=response.status_code,
+                                   passed=response.status_code == 200))
+                cards = MenuCards()
+                cards.feed(response.get_data(as_text=True))
+                menu_paths.update(cards.paths)
+            for path in sorted(menu_paths):
+                response = client.get(path, base_url=base, follow_redirects=True)
+                # A plan/role gate may intentionally refuse a destination. It is
+                # recorded separately and is not a completed business workflow.
+                allowed_statuses = (200, 403)
+                checks.append(dict(persona=persona, path=path, status=response.status_code,
+                    scope='customer_menu_destination_get', restricted=response.status_code == 403,
+                    passed=response.status_code in allowed_statuses))
         for path in ['/billing/checkout', '/stripe/webhook']:
             response = client.post(path, base_url=base)
             checks.append(dict(persona=persona, path=path, status=response.status_code, passed=response.status_code == 403))

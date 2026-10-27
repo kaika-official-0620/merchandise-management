@@ -406,6 +406,7 @@
 </div>
 {% else %}
 
+{% if not analytics.use_admin_links %}<header class="page-header"><div><h1>売上の分析</h1><p class="page-description">入力済みの販売・在庫の記録を、期間別に確認できます。実際の入金や確定請求とは分けてご覧ください。</p></div></header>{% endif %}
 {% if analytics.use_admin_links %}
 <div class="page-header">
     <div>
@@ -778,47 +779,12 @@
 </style>
 
 {% if analytics.billing_metrics %}
-<div class="analytics-billing-panel">
-    <div class="analytics-billing-card">
-        <div class="analytics-billing-label">開花の在庫料金の目安</div>
-        <div class="analytics-billing-value">{{ analytics.billing_metrics.current_plan_label }}</div>
-        <div class="analytics-billing-note">開花で受領済み {{ analytics.billing_metrics.item_count }}件 / 月額目安 ¥{{ "{:,}".format(analytics.billing_metrics.monthly_fee or 0) }}。自己保管・開花へ移動中の商品は含みません。実際の請求は契約・精算書をご確認ください。</div>
-        <details class="analytics-billing-detail">
-            <summary>内訳を見る</summary>
-            <ul>
-                <li>現在プラン: {{ analytics.billing_metrics.current_plan_label }}</li>
-                <li>月額利用料: ¥{{ "{:,}".format(analytics.billing_metrics.monthly_fee or 0) }}</li>
-                <li>開花で受領済みの商品数: {{ analytics.billing_metrics.item_count }}件</li>
-            </ul>
-        </details>
-    </div>
-    <div class="analytics-billing-card">
-        <div class="analytics-billing-label">開花へ支払う手数料</div>
-        <div class="analytics-billing-value">¥{{ "{:,}".format(analytics.billing_metrics.kaika_fee_total or 0) }}</div>
-        <div class="analytics-billing-note">{{ analytics.billing_metrics.period_label }} の送料・販売手数料合計</div>
-        <details class="analytics-billing-detail">
-            <summary>内訳を見る</summary>
-            <ul>
-                <li>対象期間: {{ analytics.billing_metrics.period_label }}</li>
-                <li>送料・販売代行・各種手数料の合計: ¥{{ "{:,}".format(analytics.billing_metrics.kaika_fee_total or 0) }}</li>
-                <li>下の月別売上集計表で月ごとの詳細を確認できます。</li>
-            </ul>
-        </details>
-    </div>
-    <div class="analytics-billing-card">
-        <div class="analytics-billing-label">月額＋期間内手数料</div>
-        <div class="analytics-billing-value">¥{{ "{:,}".format(analytics.billing_metrics.client_payment_total or 0) }}</div>
-        <div class="analytics-billing-note">精算書・計算書で確認する支払い目安です。</div>
-        <details class="analytics-billing-detail">
-            <summary>内訳を見る</summary>
-            <ul>
-                <li>月額利用料: ¥{{ "{:,}".format(analytics.billing_metrics.monthly_fee or 0) }}</li>
-                <li>期間内手数料: ¥{{ "{:,}".format(analytics.billing_metrics.kaika_fee_total or 0) }}</li>
-                <li>合計: ¥{{ "{:,}".format(analytics.billing_metrics.client_payment_total or 0) }}</li>
-            </ul>
-        </details>
-    </div>
-</div>
+<details class="analytics-billing-detail customer-reference-fees">
+    <summary>旧在庫記録の参考集計（実請求ではありません）</summary>
+    <p>以前の台帳に入力された送料・販売手数料などの集計です。現在の契約に基づく作業料・販売料や月額の請求とは一致しない場合があります。在庫数から月額やお支払い合計を決める表示は行いません。</p>
+    <ul><li>対象期間：{{ analytics.billing_metrics.period_label }}</li><li>旧記録の送料・手数料欄の合計：{% if analytics.billing_metrics.kaika_fee_total is not none %}¥{{ "{:,}".format(analytics.billing_metrics.kaika_fee_total) }}{% else %}未確認{% endif %}</li><li>旧台帳上の開花受領済み商品：{{ analytics.billing_metrics.item_count }}件（当月の新規登録数ではありません）</li></ul>
+    {% if config.get('STAGE3_FINANCE_ENABLED') %}<p><a href="{{ url_for('finance_review.index') }}">商品ごとの料金・利益の明細を確認 →</a></p>{% endif %}
+</details>
 {% endif %}
 
 {% if analytics.show_admin_overview %}

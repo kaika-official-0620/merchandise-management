@@ -13,6 +13,14 @@
 .registry .inventory-item-id { margin-top: .45rem; font-size: .78rem; color: #526972; }
 .registry .inventory-item-id summary { font-weight: 400; cursor: pointer; }
 .registry .inventory-item-id code { overflow-wrap: anywhere; }
+.registry .home-display-settings summary { min-height:44px; display:flex; align-items:center; }
+.registry .home-display-choices { border:0; padding:0; margin:.8rem 0; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.65rem; }
+.registry .home-display-choices legend { font-weight:600; margin-bottom:.5rem; }
+.registry .home-display-choice { display:flex; align-items:flex-start; gap:.65rem; margin:0; padding:.85rem; border:1px solid var(--line); border-radius:9px; background:#f7faf9; cursor:pointer; }
+.registry .home-display-choice input { flex:none; width:20px; height:20px; margin:.15rem 0 0; }
+.registry .home-display-choice small { display:block; color:#526972; line-height:1.6; margin-top:.2rem; }
+.registry .home-display-buttons { display:flex; flex-wrap:wrap; gap:.65rem; }
+@media(max-width:600px){.registry .home-display-choices{grid-template-columns:1fr}.registry .home-display-buttons{flex-direction:column}.registry .home-display-buttons button{width:100%;margin-top:.2rem}}
 @media (max-width: 768px) {
   .registry .inventory-card-table { display: block; min-width: 0; }
   .registry .inventory-card-table thead { display: none; }

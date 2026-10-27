@@ -584,3 +584,7 @@ register_customer_navigation(module)
 # Keep customer document completion separate from private delivery to Kaika.
 from document_workflow import register_document_workflow
 register_document_workflow(module)
+
+# Private support intake; preserve existing records and protected attachment URLs.
+from inquiry_support import register_inquiry_support
+register_inquiry_support(module)
