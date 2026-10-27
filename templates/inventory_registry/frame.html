@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}個品・作業の記録 - 株式会社開花{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/workspace.css') }}">
+<main class="registry">
+{% if not customer_navigation_available|default(false) %}<nav class="workspace-nav" aria-label="業務の移動">{% if config.get('STAGE6_ENABLED') %}<a href="{{ url_for('workspace_home.home') }}" {% if request.endpoint == 'workspace_home.home' %}aria-current="page"{% endif %}>ホーム</a>{% endif %}<a href="{{ url_for('inventory_registry.index') }}" {% if request.endpoint == 'inventory_registry.index' %}aria-current="page"{% endif %}>個品一覧</a><a href="{{ url_for('inventory_intakes') }}">預け入れ・受領</a>{% if config.get('STAGE4_COMMERCE_ENABLED') %}<a href="/commerce">商品販売・承認</a>{% endif %}{% if config.get('STAGE3_FINANCE_ENABLED') and (not staff|default(false) or current_user.has_permission('invoices')) %}<a href="/finance">料金・利益の明細</a>{% endif %}{% if staff|default(false) %}<a href="{{ url_for('inventory_registry.reconcile') }}">既存在庫の照合</a><a href="{{ url_for('inventory_registry.imports') }}">Excel・CSVの確認</a>{% endif %}</nav>{% endif %}
+{% block registry_content %}{% endblock %}
+</main>
+{% endblock %}

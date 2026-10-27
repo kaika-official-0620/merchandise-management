@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+
+{% block title %}メモ履歴 - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="memo-history-page">
+    <div class="memo-history-header">
+        <div>
+            <h1>メモ履歴</h1>
+            <p>売上分析で保存したメモを月別に確認できます。</p>
+        </div>
+        <a href="{{ url_for('user_analytics') }}" class="btn btn-secondary">売上分析へ戻る</a>
+    </div>
+
+    {% if memos %}
+    <div class="memo-history-list">
+        {% for memo in memos %}
+        <article class="memo-history-card">
+            <div class="memo-history-meta">
+                <span class="memo-history-month">{{ memo.target_month or '対象月未設定' }}</span>
+                <span class="memo-history-updated">{{ memo.updated_at or '-' }}</span>
+            </div>
+            <div class="memo-history-text">{{ memo.memo_text }}</div>
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="memo-history-empty">
+        保存済みのメモはまだありません。
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.memo-history-page {
+    display: grid;
+    gap: 1rem;
+    max-width: 960px;
+    margin: 0 auto;
+}
+
+.memo-history-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1.1rem 1.25rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #fff;
+}
+
+.memo-history-header h1 {
+    margin: 0 0 0.35rem;
+    font-size: 1.45rem;
+}
+
+.memo-history-header p {
+    margin: 0;
+    color: #64748b;
+    line-height: 1.7;
+}
+
+.memo-history-list {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.memo-history-card {
+    padding: 1rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #fff;
+}
+
+.memo-history-meta {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.5rem 1rem;
+    margin-bottom: 0.65rem;
+}
+
+.memo-history-month {
+    color: #0f172a;
+    font-weight: 700;
+}
+
+.memo-history-updated {
+    color: #64748b;
+    font-size: 0.86rem;
+}
+
+.memo-history-text {
+    color: #1f2937;
+    line-height: 1.75;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.memo-history-empty {
+    padding: 2.5rem 1rem;
+    border: 1px dashed #cbd5e1;
+    border-radius: 10px;
+    color: #64748b;
+    text-align: center;
+    background: #f8fafc;
+}
+
+@media (max-width: 640px) {
+    .memo-history-header {
+        flex-direction: column;
+        align-items: stretch;
+        padding: 1rem;
+    }
+
+    .memo-history-header .btn {
+        width: 100%;
+        text-align: center;
+    }
+}
+</style>
+{% endblock %}

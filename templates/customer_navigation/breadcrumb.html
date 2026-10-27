@@ -1,0 +1,3 @@
+{% if customer_nav_current and customer_nav_current.key != 'home' %}
+<nav class="customer-breadcrumb" aria-label="現在の場所"><a href="{{ customer_nav_sections[0].url }}">ホーム</a><span aria-hidden="true">/</span>{% if request.endpoint == 'customer_navigation.hub' %}<span aria-current="page">{{ customer_nav_current.title }}</span>{% else %}<a href="{{ customer_nav_current.url }}">{{ customer_nav_current.title }}</a>{% endif %}</nav>
+{% endif %}

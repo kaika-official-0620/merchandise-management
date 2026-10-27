@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}{{ announcement.title }} - お知らせ{% endblock %}
+
+{% block content %}
+<style>
+.announcement-detail-page {
+    max-width: 1040px;
+    margin: 0 auto;
+    display: grid;
+    gap: 1rem;
+}
+
+.announcement-detail-nav {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+}
+
+.announcement-detail-nav a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 36px;
+    padding: 0.42rem 0.78rem;
+    border: 1px solid #d1d5db;
+    border-radius: 999px;
+    background: #fff;
+    color: #2563eb;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.announcement-detail {
+    display: grid;
+    gap: 1.2rem;
+    padding: 1.35rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #ffffff;
+}
+
+.announcement-detail__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    align-items: center;
+}
+
+.announcement-detail__badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 30px;
+    padding: 0.3rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    line-height: 1.4;
+}
+
+.announcement-detail__badge {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.announcement-detail__badge:empty {
+    display: none;
+}
+
+.announcement-detail__title {
+    margin: 0;
+    color: #0f172a;
+    font-size: 1.55rem;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.announcement-detail__date {
+    color: #64748b;
+    font-size: 0.88rem;
+}
+
+.announcement-detail__content {
+    min-height: 220px;
+    padding: 1rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #f8fafc;
+    color: #334155;
+    font-size: 1rem;
+    line-height: 1.9;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+    .announcement-detail-nav {
+        align-items: center;
+        flex-direction: row;
+        gap: 0.45rem;
+    }
+
+    .announcement-detail {
+        padding: 1rem;
+    }
+
+    .announcement-detail__title {
+        font-size: 1.25rem;
+    }
+
+    .announcement-detail__content {
+        min-height: 260px;
+        font-size: 0.95rem;
+    }
+
+}
+</style>
+
+<div class="announcement-detail-page">
+    <div class="announcement-detail-nav context-back-inline-source">
+        <a href="{{ url_for('user_announcements_page') }}" class="context-back-inline">お知らせ一覧へ戻る</a>
+        <a href="{{ url_for('user_home') }}" class="context-back-inline">ホームへ戻る</a>
+    </div>
+
+    <article class="announcement-detail {{ announcement.announcement_type }}">
+        <div class="announcement-detail__meta">
+            <span class="announcement-detail__badge">
+                {% if announcement.announcement_type == 'important' %}重要{% endif %}
+            </span>
+        </div>
+
+        <header>
+            <h1 class="announcement-detail__title">{{ announcement.title }}</h1>
+            <div class="announcement-detail__date">{{ ((announcement.publish_at or announcement.created_at)|string)[:16] }}</div>
+        </header>
+
+        <div class="announcement-detail__content">{{ announcement.content }}</div>
+
+    </article>
+</div>
+{% endblock %}

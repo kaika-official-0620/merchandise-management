@@ -1,0 +1,58 @@
+<div id="{{ kaika_picker_id }}"
+     class="kaika-document-picker"
+     data-input-id="{{ kaika_picker_input_id }}">
+    <input type="hidden"
+           id="{{ kaika_picker_input_id }}"
+           {% if kaika_picker_input_name %}name="{{ kaika_picker_input_name }}"{% endif %}
+           value="{{ kaika_picker_selected_id|default('', true) }}">
+    <div class="kaika-document-picker__toolbar">
+        <div class="kaika-document-picker__field">
+            <label for="{{ kaika_picker_id }}-search">開花商品を検索</label>
+            <input type="search"
+                   id="{{ kaika_picker_id }}-search"
+                   class="kaika-document-picker__search"
+                   data-kaika-picker-search
+                   autocomplete="off"
+                   placeholder="商品名・ブランド・開花管理番号・商品ID・型番">
+        </div>
+        <div class="kaika-document-picker__field">
+            <label for="{{ kaika_picker_id }}-sort">並び替え</label>
+            <select id="{{ kaika_picker_id }}-sort"
+                    class="kaika-document-picker__sort"
+                    data-kaika-picker-sort>
+                <option value="newest">登録が新しい順</option>
+                <option value="oldest">登録が古い順</option>
+                <option value="name_asc">商品名 A→Z</option>
+                <option value="name_desc">商品名 Z→A</option>
+                <option value="brand_asc">ブランド名 A→Z</option>
+                <option value="code_asc">開花管理番号 昇順</option>
+                <option value="code_desc">開花管理番号 降順</option>
+            </select>
+        </div>
+        <button type="button"
+                class="kaika-document-picker__clear-search"
+                data-kaika-picker-clear-search>検索を解除</button>
+    </div>
+    <div class="kaika-document-picker__summary">
+        <span data-kaika-picker-count aria-live="polite">表示 0件 / 全0件</span>
+        <span>選択する商品カードを押してください</span>
+    </div>
+    <div class="kaika-document-picker__results"
+         data-kaika-picker-results
+         role="list"
+         aria-label="開花商品の検索結果"></div>
+    <div class="kaika-document-picker__empty" data-kaika-picker-empty hidden>
+        該当する開花商品はありません
+    </div>
+    <div class="kaika-document-picker__selected" data-kaika-picker-selected hidden>
+        <span data-kaika-picker-selected-media></span>
+        <span class="kaika-document-picker__selected-copy">
+            <span class="kaika-document-picker__selected-label">選択中の開花商品</span>
+            <strong class="kaika-document-picker__name" data-kaika-picker-selected-name></strong>
+            <span class="kaika-document-picker__code" data-kaika-picker-selected-code></span>
+        </span>
+        <button type="button"
+                class="kaika-document-picker__clear-selection"
+                data-kaika-picker-clear-selection>選択を解除</button>
+    </div>
+</div>

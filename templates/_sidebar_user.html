@@ -1,0 +1,14 @@
+{% if customer_navigation_available|default(false) %}
+{% from 'customer_navigation/icons.html' import icon %}
+<nav class="customer-menu" aria-label="お客様メニュー">
+<p class="customer-menu-intro">やりたいことから選ぶ</p>
+{% for entry in customer_nav_sections %}
+<a class="customer-menu-link{% if entry.active %} active{% endif %}" href="{{ entry.url }}" {% if entry.active %}aria-current="page"{% endif %}>
+<span class="customer-menu-icon">{{ icon(entry.key) }}</span><span class="customer-menu-copy"><strong>{{ entry.title }}</strong><small>{{ entry.description }}</small></span>
+{% if entry.key == 'documents' and unread_document_history_count|default(0) > 0 %}<span class="customer-unread" aria-label="未読の書類 {{ unread_document_history_count }}件">{{ unread_document_history_count }}</span>{% else %}<span class="customer-menu-chevron" aria-hidden="true">›</span>{% endif %}
+</a>
+{% endfor %}
+</nav>
+{% else %}
+{% include '_sidebar_user_legacy.html' %}
+{% endif %}

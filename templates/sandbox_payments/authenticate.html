@@ -1,0 +1,6 @@
+{% extends 'sandbox_payments/base.html' %}{% block content %}<h1>テスト用カードの本人認証</h1><p>Stripeの認証画面で操作してください。認証後に結果をサーバーで確認します。</p><button id="authenticate">本人認証を開始</button><p id="result" role="status"></p>
+<form method="post" action="{{ url_for('sandbox_payments.action',job_id=job_id,action='reconcile') }}">{{ tokens('stage9_reconcile',job_id) }}<button>認証後の支払い結果を確認</button></form>
+<script src="https://js.stripe.com/v3/"></script><script>
+const button=document.getElementById('authenticate'), result=document.getElementById('result');
+button.addEventListener('click',async()=>{button.disabled=true;try{const stripe=Stripe({{ authentication.publishable_key|tojson }});const response=await stripe.confirmCardPayment({{ authentication.client_secret|tojson }});result.textContent=response.error?'認証を完了できませんでした。カード情報をここへ送らず、結果確認へ進んでください。':'認証の操作が終わりました。下のボタンで結果を確認してください。';}catch(e){result.textContent='通信結果を確認できません。支払い結果を確認してください。';}finally{button.disabled=false;}});
+</script>{% endblock %}

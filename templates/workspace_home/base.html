@@ -1,0 +1,9 @@
+{% extends 'inventory_registry/frame.html' %}
+{% block title %}開花ホーム・お知らせ{% endblock %}
+{% macro money(value) %}{% if value is none %}未確認{% else %}{{ '{:,}'.format(value) }}円{% endif %}{% endmacro %}
+{% macro tokens(purpose,target='') %}<input type="hidden" name="registry_csrf" value="{{ stage6_csrf() }}"><input type="hidden" name="operation_token" value="{{ stage6_operation(purpose,target) }}">{% endmacro %}
+{% block registry_content %}
+{% if not customer_navigation_available|default(false) %}<nav aria-label="ホームと通知"><a href="{{ url_for('workspace_home.home') }}">ホーム</a><a href="{{ url_for('workspace_home.inbox') }}">{{ '通知の配信状況' if staff else 'お知らせ' }}</a>{% if not staff %}<a href="{{ url_for('workspace_home.settings') }}">通知設定</a>{% endif %}</nav>{% endif %}
+<p class="notice">検証用の画面です。実際の請求・入出金は行いません。通知は、配信設定と確認が揃った検証先にだけ送信できます。</p>
+{% block home_content %}{% endblock %}
+{% endblock %}

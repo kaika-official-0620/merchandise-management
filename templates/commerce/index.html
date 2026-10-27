@@ -1,0 +1,9 @@
+{% extends "commerce/base.html" %}
+{% block commerce_content %}
+<h1>開花の商品</h1><p>商品を1点ずつ確認し、購入後の保管先を選びます。</p>
+<div class="grid3">{% for item in products %}<section class="card">{% if item.photo_refs %}<img class="product-image" src="{{ url_for('commerce.media',media_id=item.photo_refs[0]) }}" alt="{{ item.title }}の商品写真" loading="lazy">{% endif %}<h2>{{ item.title }}</h2><p>{{ money(item.price_yen) }}（税込） <span class="badge">{{ '選択できます' if item.available_count else '予約中' }}</span></p><p>{{ item.item_condition }}</p><a href="{{ url_for('commerce.product',item_id=item.physical_item_id) }}">商品と購入条件を確認</a></section>{% else %}<p>選択できる商品はまだありません。</p>{% endfor %}</div>
+{% if staff %}
+<details class="card"><summary>開花の自社商品を登録</summary><p>自社在庫として記録します。お客様の個品・既存在庫を重複登録しないでください。</p><form method="post" action="{{ url_for('commerce.create_company') }}">{{ tokens('commerce_create') }}<label>商品名<input name="title" maxlength="300" required></label><label>開花の仕入原価（円・不明なら空欄）<input type="number" name="purchase_cost_yen" min="0" step="1"></label><p class="muted">仕入原価はお客様の商品一覧には表示しません。</p>{{ evidence() }}<button type="submit">自社商品を登録</button></form></details>
+<section class="card"><h2>スタッフの商品準備</h2><div class="scroll"><table><thead><tr><th>商品</th><th>所有状況</th><th>準備した版</th><th>操作</th></tr></thead><tbody>{% for item in companies %}<tr><td>{{ item.initial_title }}</td><td>{{ '開花所有' if item.company_owned else '所有移転済み' }}</td><td>{{ item.revisions|length }}版</td><td><a href="{{ url_for('commerce.company',item_id=item.physical_item_id) }}">写真・価格・説明を確認</a></td></tr>{% else %}<tr><td colspan="4">登録はまだありません。</td></tr>{% endfor %}</tbody></table></div></section>
+{% endif %}
+{% endblock %}

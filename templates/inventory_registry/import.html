@@ -1,0 +1,6 @@
+{% extends "inventory_registry/frame.html" %}
+{% set staff = true %}
+{% block registry_content %}
+<h1>Excel・CSVの確認</h1><p>まず列と照合結果を確認し、その後に取り込みます。顧客名・商品名・行番号だけで同一商品とは判断しません。</p>
+<form class="card" method="post" enctype="multipart/form-data"><input type="hidden" name="registry_csrf" value="{{ registry_csrf }}"><input type="hidden" name="operation_token" value="{{ registry_operation('import') }}"><label>対象のお客様<select name="customer_id" required><option value="">選択してください</option>{% for customer in customers %}<option value="{{ customer.id }}">{{ customer.display_name or customer.username }}（ID {{ customer.id }}）</option>{% endfor %}</select></label><label>元の台帳の識別名<input name="source_namespace" pattern="[A-Za-z0-9_.:-]{1,80}" maxlength="80" placeholder="existing-stock-2026" required></label><p class="muted">半角英数字など。同じ台帳の再取込では同じ名前を使います。名前を変えると別の台帳として扱われます。</p><label>CSVまたはExcel（.xlsx、最大5MB）<input type="file" name="file" accept=".csv,.xlsx" required></label><p>既存サイトのCSVは「ID」で照合します。外部台帳には重複しない「外部キー」等が必要です。数式・マクロ入りのファイルは受け付けません。</p><details><summary>独自の列名を対応付ける場合</summary><label>項目名とファイル列名の対応（JSON）<textarea name="mapping" maxlength="4000" placeholder='{"title":"品名","external_key":"台帳番号"}'></textarea></label></details><button class="btn btn-primary">取込前の内容を確認</button></form>
+{% endblock %}

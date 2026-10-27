@@ -1,0 +1,514 @@
+{% extends "base.html" %}
+
+{% block title %}買取明細書 - {{ invoice.invoice_no }} - 株式会社 開花{% endblock %}
+
+{% block content %}
+{% set step4_tax = invoice_tax_context(invoice, items) %}
+<div class="page-actions">
+    <a href="{{ url_for('documents') }}" class="btn btn-back context-back-inline">← 一覧に戻る</a>
+    <div class="header-actions">
+        {% if invoice.can_user_edit %}
+        <a href="{{ url_for('user_invoice_edit', id=invoice.id) }}" class="btn btn-edit">編集</a>
+        {% endif %}
+        <a href="{{ url_for('invoice_download', id=invoice.id) }}" class="btn btn-download js-csv-download" download>CSV</a>
+        <a href="{{ url_for('invoice_pdf', id=invoice.id) }}" class="btn btn-pdf" target="_blank">PDF</a>
+        {% if invoice.linked_mitsumori_id %}
+        <a href="{{ url_for('user_mitsumori_view', id=invoice.linked_mitsumori_id) }}" class="btn btn-create-mitsumori">&#35211;&#31309;&#20381;&#38972;&#26360;&#12434;&#30906;&#35469;</a>
+        {% elif invoice.can_create_mitsumori_from_invoice %}
+        <a href="{{ url_for('user_mitsumori_add', source_invoice_id=invoice.id) }}" class="btn btn-create-mitsumori">&#12371;&#12398;&#20869;&#23481;&#12391;&#35211;&#31309;&#20381;&#38972;&#26360;&#12434;&#20316;&#25104;</a>
+        {% endif %}
+        {% if invoice.can_user_delete %}
+        <form method="POST" action="{{ url_for('user_invoice_delete', id=invoice.id) }}" class="inline-delete-form" onsubmit="return confirm('この買取明細書を削除しますか？')">
+            <input type="hidden" name="next" value="{{ url_for('documents') }}">
+            <button type="submit" class="btn btn-delete">削除</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="document-container">
+    <div class="document-header">
+        <div class="document-title">
+            <h2>買取明細書</h2>
+        </div>
+        <div class="document-info">
+            <table>
+                <tr>
+                    <th>発行日</th>
+                    <td>{{ invoice.issue_date }}</td>
+                </tr>
+                <tr>
+                    <th>買取明細書番号</th>
+                    <td>{{ invoice.invoice_no }}</td>
+                </tr>
+                {% if invoice.payment_due_date %}
+                <tr>
+                    <th>支払期限</th>
+                    <td>{{ invoice.payment_due_date }}</td>
+                </tr>
+                {% endif %}
+                <tr>
+                    <th>ステータス</th>
+                    <td>
+                        <span class="status-badge status-{{ invoice.status }}">
+                            {% if invoice.status == 'draft' %}下書き
+                            {% elif invoice.status == 'in_progress' %}作成中
+                            {% elif invoice.status == 'sent' %}送信済
+                            {% elif invoice.status == 'approved' %}✔ 承認済
+                            {% elif invoice.status == 'rejected' %}✖ 却下
+                            {% elif invoice.status == 'replaced' %}差替え済み
+                            {% elif invoice.status == 'cancelled' %}取消済み
+                            {% endif %}
+                        </span>
+                    </td>
+                </tr>
+            </table>
+        </div>
+    </div>
+
+    {% if invoice.status == 'replaced' %}
+    <div class="source-action-box is-replaced">
+        <strong>差替え済み</strong>
+        <span>この買取明細書は作り直されています。</span>
+        {% if invoice.replacement_document_id %}
+        <a href="{{ url_for('user_invoice_view', id=invoice.replacement_document_id) }}" class="btn btn-create-mitsumori">最新版を確認</a>
+        {% endif %}
+        {% if invoice.rebuild_reason %}
+        <span>理由: {{ invoice.rebuild_reason }}</span>
+        {% endif %}
+    </div>
+    {% elif invoice.status == 'cancelled' %}
+    <div class="source-action-box is-cancelled">
+        <strong>&#21462;&#28040;&#28168;&#12415;</strong>
+        {% if invoice.cancel_reason %}<span>{{ invoice.cancel_reason }}</span>{% endif %}
+    </div>
+    {% elif invoice.can_create_mitsumori_from_invoice %}
+    <div class="source-action-box">
+        <strong>&#36023;&#21462;&#26126;&#32048;&#26360;&#12434;&#30906;&#35469;&#12375;&#12289;&#35211;&#31309;&#20381;&#38972;&#26360;&#12434;&#20316;&#25104;&#12375;&#12390;&#12367;&#12384;&#12373;&#12356;&#12290;</strong>
+        <a href="{{ url_for('user_mitsumori_add', source_invoice_id=invoice.id) }}" class="btn btn-create-mitsumori">&#35211;&#31309;&#20381;&#38972;&#26360;&#12434;&#20316;&#25104;</a>
+    </div>
+    {% endif %}
+
+    <div class="document-total-box">
+        <span class="total-label">請求金額 (税込)</span>
+        <span class="total-value">¥{{ "{:,}".format(invoice.total_amount) }}</span>
+    </div>
+
+    <div class="document-table-scroll">
+    <table class="document-items">
+        <thead>
+            <tr>
+                <th width="8%">税区分</th>
+                <th width="12%">日付</th>
+                <th width="40%">品名・品番</th>
+                <th width="10%">数量</th>
+                <th width="15%">単価</th>
+                <th width="15%">合計</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <td class="text-center">{{ invoice_tax_category_label(invoice, item) if step4_tax else item.tax_category ~ '%' }}</td>
+                <td>{{ item.product_date or '-' }}</td>
+                <td>{{ item.product_name }}</td>
+                <td class="text-right">{{ item.quantity }}</td>
+                <td class="text-right">¥{{ "{:,}".format(item.unit_price) }}</td>
+                <td class="text-right">¥{{ "{:,}".format(item.amount) }}</td>
+            </tr>
+            {% endfor %}
+            {% for i in range(items|length, 10) %}
+            <tr class="empty-row">
+                <td>&nbsp;</td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            {% if step4_tax %}
+            <tr><td colspan="6">{{ step4_tax.message }}</td></tr>
+            {% for tax_row in step4_tax.rows %}
+            <tr>
+                <td colspan="5" class="text-right">{{ tax_row.label }}</td>
+                <td class="text-right">{% if tax_row.amount is not none %}¥{{ "{:,}".format(tax_row.amount) }}{% else %}未確認{% endif %}</td>
+            </tr>
+            {% endfor %}
+            <tr class="total-row"><td colspan="5" class="text-right">支払合計</td><td class="text-right">¥{{ "{:,}".format(invoice.total_amount) }}</td></tr>
+            {% if invoice.notes %}<tr><td colspan="6">備考：{{ invoice.notes }}</td></tr>{% endif %}
+            {% else %}
+            <tr>
+                <td colspan="3" rowspan="4" class="footer-notes">
+                    {% if invoice.notes %}
+                    <strong>備考：</strong><br>
+                    {{ invoice.notes|replace('\n', '<br>')|safe }}
+                    {% endif %}
+                </td>
+                <td colspan="2" class="text-right"><strong>小計</strong></td>
+                <td class="text-right">¥{{ "{:,}".format(invoice.subtotal) }}</td>
+            </tr>
+            <tr>
+                <td colspan="2" class="text-right"><strong>消費税(8%)</strong></td>
+                <td class="text-right">¥{{ "{:,}".format(invoice.tax_amount_8) }}</td>
+            </tr>
+            <tr>
+                <td colspan="2" class="text-right"><strong>消費税(10%)</strong></td>
+                <td class="text-right">¥{{ "{:,}".format(invoice.tax_amount_10) }}</td>
+            </tr>
+            <tr class="total-row">
+                <td colspan="2" class="text-right"><strong>請求金額</strong></td>
+                <td class="text-right"><strong>¥{{ "{:,}".format(invoice.total_amount) }}</strong></td>
+            </tr>
+            {% endif %}
+        </tfoot>
+    </table>
+    </div>
+
+    {% if invoice.bank_info %}
+    <div class="bank-info">
+        <h4>🏦 振込先</h4>
+        <p>{{ invoice.bank_info|replace('\n', '<br>')|safe }}</p>
+    </div>
+    {% endif %}
+
+    <div class="document-footer">
+        <p>作成者: {{ current_user.display_name }}</p>
+    </div>
+</div>
+
+<style>
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.header-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.btn-back {
+    background: #6c757d;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 6px;
+    text-decoration: none;
+}
+
+.btn-download {
+    background: #28a745;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 6px;
+    text-decoration: none;
+}
+
+.btn-edit {
+    background: #64748b;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 6px;
+    text-decoration: none;
+}
+
+.btn-pdf {
+    background: #e74c3c;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 6px;
+    text-decoration: none;
+}
+
+.btn-create-mitsumori {
+    background: #1d4ed8;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 6px;
+    text-decoration: none;
+}
+
+.btn-print {
+    background: #17a2b8;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+}
+
+.btn-delete {
+    background: #dc3545;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+}
+
+.inline-delete-form {
+    margin: 0;
+    display: inline-flex;
+}
+
+.document-container {
+    max-width: 900px;
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0 auto;
+    background: white;
+    padding: 40px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.page-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.document-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 30px;
+}
+
+.document-title h2 {
+    font-size: 28px;
+    margin: 0;
+    padding-bottom: 10px;
+    border-bottom: 3px double #333;
+}
+
+.document-info table {
+    border-collapse: collapse;
+}
+
+.document-info th,
+.document-info td {
+    padding: 5px 10px;
+    text-align: left;
+}
+
+.document-info th {
+    background: #f8f9fa;
+    font-weight: normal;
+}
+
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.status-badge.status-draft,
+.status-badge.status-in_progress {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.status-badge.status-sent {
+    background: #d1ecf1;
+    color: #0c5460;
+}
+
+.status-badge.status-approved {
+    background: #d4edda;
+    color: #155724;
+}
+
+.status-badge.status-rejected {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.status-badge.status-cancelled {
+    background: #e5e7eb;
+    color: #374151;
+}
+
+.status-badge.status-replaced {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.source-action-box {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+    padding: 14px 16px;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    background: #eff6ff;
+    color: #1e3a8a;
+}
+
+.source-action-box.is-cancelled {
+    border-color: #d1d5db;
+    background: #f3f4f6;
+    color: #374151;
+}
+
+.source-action-box.is-replaced {
+    border-color: #f59e0b;
+    background: #fffbeb;
+    color: #92400e;
+}
+
+.document-total-box {
+    background: #f8f9fa;
+    border: 2px solid #333;
+    padding: 15px 30px;
+    display: inline-block;
+    margin-bottom: 30px;
+}
+
+.total-label {
+    font-size: 14px;
+    margin-right: 20px;
+}
+
+.total-value {
+    font-size: 24px;
+    font-weight: bold;
+}
+
+.document-items {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 30px;
+}
+
+.document-table-scroll {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.document-items th,
+.document-items td {
+    border: 1px solid #333;
+    padding: 8px 10px;
+    font-size: 13px;
+}
+
+.document-items th {
+    background: #f8f9fa;
+    font-weight: normal;
+}
+
+.document-items .text-center {
+    text-align: center;
+}
+
+.document-items .text-right {
+    text-align: right;
+}
+
+.empty-row td {
+    height: 28px;
+}
+
+.footer-notes {
+    vertical-align: top;
+    font-size: 12px;
+    border-right: none !important;
+}
+
+.total-row td {
+    background: #f8f9fa;
+    font-size: 15px;
+}
+
+.bank-info {
+    background: #f8f9fa;
+    padding: 15px 20px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+}
+
+.bank-info h4 {
+    margin: 0 0 10px 0;
+    font-size: 14px;
+}
+
+.bank-info p {
+    margin: 0;
+    font-size: 14px;
+}
+
+.document-footer {
+    text-align: right;
+    margin-top: 30px;
+    color: #666;
+    font-size: 13px;
+}
+
+@media print {
+    .page-header {
+        display: none;
+    }
+    .document-container {
+        box-shadow: none;
+        padding: 0;
+    }
+    body {
+        background: white;
+    }
+}
+
+@media (max-width: 600px) {
+    .document-container {
+        padding: 18px;
+    }
+    
+    .document-header {
+        flex-direction: column;
+    }
+    
+    .document-title h2 {
+        font-size: 20px;
+    }
+    
+    .document-info {
+        margin-top: 15px;
+    }
+    
+    .document-items th,
+    .document-items td {
+        padding: 5px;
+        font-size: 11px;
+        word-break: normal;
+        overflow-wrap: anywhere;
+    }
+
+    .document-items {
+        min-width: 680px;
+    }
+    
+    .header-actions {
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+
+    .header-actions .btn,
+    .page-actions .btn {
+        width: auto;
+    }
+}
+</style>
+{% endblock %}
+

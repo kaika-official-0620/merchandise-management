@@ -1,0 +1,629 @@
+{% extends "base.html" %}
+
+{% block title %}計算書作成 - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <a href="{{ url_for('admin_documents_dashboard', group='client_outgoing') }}" class="btn btn-secondary">← 書類管理へ戻る</a>
+    <h1>計算書作成</h1>
+</div>
+
+<div class="form-container">
+    <form method="POST" id="keisan-form">
+        {% if source_request %}
+        <input type="hidden" name="request_id" value="{{ source_request.id }}">
+        <input type="hidden" name="user_id" value="{{ user_id_default or '' }}">
+        {% endif %}
+
+        <div class="form-section">
+            <h3>基本情報</h3>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>書類No.</label>
+                    <input type="text" value="{{ document_no }}" readonly class="readonly-field">
+                </div>
+                <div class="form-group">
+                    <label for="issue_date">発行日 <span class="required">*</span></label>
+                    <input type="date" id="issue_date" name="issue_date" value="{{ today }}" required>
+                </div>
+                <div class="form-group">
+                    <label for="recipient_name">宛名</label>
+                    <input type="text" id="recipient_name" name="recipient_name" value="{{ recipient_name_default or '' }}" placeholder="例: ○○様">
+                </div>
+                <div class="form-group">
+                    <label for="subject">件名</label>
+                    <input type="text" id="subject" name="subject" value="{{ subject_default or '計算書' }}" placeholder="例: 計算書">
+                </div>
+            </div>
+        </div>
+
+        {% if source_request %}
+        <div class="form-section">
+            <h3>案件情報</h3>
+            <div class="source-box">
+                <p><strong>対象案件:</strong> {{ source_request.service_name }} / {{ source_request.client_name }} / 受付番号 {{ source_request.reception_number or source_request.id }}</p>
+                <p>この案件に紐づく既存データを引用して、クライアントへ返送する計算書を作成します。</p>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="form-section">
+            <h3>明細</h3>
+            <table class="items-table" id="items-table">
+                <thead>
+                    <tr>
+                        <th style="width: 50px;">No.</th>
+                        <th>項目名</th>
+                        <th style="width: 90px;">数量</th>
+                        <th style="width: 140px;">単価</th>
+                        <th style="width: 140px;">金額</th>
+                        <th style="width: 50px;"></th>
+                    </tr>
+                </thead>
+                <tbody id="items-tbody">
+                    {% if items %}
+                        {% for item in items %}
+                        <tr class="item-row">
+                            <td class="item-no">{{ loop.index }}</td>
+                            <td>
+                                <input type="text" name="item_name[]" value="{{ item.item_name or item.product_name or '' }}" class="item-name" required>
+                                <input type="hidden" name="merchandise_id[]" value="{{ item.merchandise_id or '' }}">
+                                <input type="hidden" name="unit[]" value="{{ item.unit or '点' }}">
+                            </td>
+                            <td><input type="number" name="quantity[]" value="{{ item.quantity or 1 }}" class="item-qty" min="1"></td>
+                            <td><input type="number" name="unit_price[]" value="{{ item.unit_price or item.amount or 0 }}" class="item-price" min="0"></td>
+                            <td class="item-amount">¥{{ "{:,}".format(item.amount or 0) }}</td>
+                            <td><button type="button" class="btn-remove" onclick="removeRow(this)">×</button></td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr class="item-row">
+                            <td class="item-no">1</td>
+                            <td>
+                                <input type="text" name="item_name[]" class="item-name" required>
+                                <input type="hidden" name="merchandise_id[]" value="">
+                                <input type="hidden" name="unit[]" value="点">
+                            </td>
+                            <td><input type="number" name="quantity[]" value="1" class="item-qty" min="1"></td>
+                            <td><input type="number" name="unit_price[]" value="0" class="item-price" min="0"></td>
+                            <td class="item-amount">¥0</td>
+                            <td><button type="button" class="btn-remove" onclick="removeRow(this)">×</button></td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="6">
+                            <button type="button" class="btn btn-add" onclick="addRow()">+ 明細を追加</button>
+                        </td>
+                    </tr>
+                    <tr class="total-row">
+                        <td colspan="4" class="text-right"><strong>合計金額</strong></td>
+                        <td id="total-amount" class="total-amount">¥0</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+
+        <div class="form-section">
+            <h3>備考</h3>
+            <div class="form-group full-width">
+                <textarea name="notes" rows="4" placeholder="備考を入力">{{ notes_default or '' }}</textarea>
+            </div>
+        </div>
+
+        <div class="form-section preview-confirm-section">
+            <div>
+                <h3>書類プレビュー確認</h3>
+                <p>宛名・件名・明細を確認してから送信待機にします。</p>
+            </div>
+            <button type="button" class="btn btn-secondary" id="open-auction-keisan-preview-btn">プレビューを確認する</button>
+        </div>
+
+        <div class="form-actions">
+            <a href="{{ url_for('admin_documents_dashboard', group='client_outgoing') }}" class="btn btn-secondary">キャンセル</a>
+            <button type="submit" name="status" value="draft" class="btn btn-secondary">下書き保存</button>
+        </div>
+    </form>
+</div>
+
+<div class="document-preview-modal" id="auction-keisan-preview-modal" aria-hidden="true">
+    <div class="document-preview-backdrop" data-close-auction-keisan-preview></div>
+    <div class="document-preview-panel" role="dialog" aria-modal="true" aria-labelledby="auction-keisan-preview-title">
+        <div class="document-preview-toolbar">
+            <div>
+                <h3 id="auction-keisan-preview-title">計算書プレビュー</h3>
+                <p>内容に問題がなければ送信待機にしてください。</p>
+            </div>
+            <button type="button" class="btn btn-secondary" data-close-auction-keisan-preview>閉じる</button>
+        </div>
+        <div class="preview-sheet">
+            <div class="preview-title">計算書</div>
+            <div class="preview-header">
+                <div>
+                    <div class="preview-recipient" id="auction-preview-recipient">-</div>
+                    <p class="preview-muted" id="auction-preview-subject">-</p>
+                </div>
+                <div class="preview-meta">
+                    <div>書類No.: <strong>{{ document_no }}</strong></div>
+                    <div>発行日: <strong id="auction-preview-issue-date">-</strong></div>
+                </div>
+            </div>
+            <div class="preview-total-box">
+                <span>合計金額</span>
+                <strong id="auction-preview-total">¥0</strong>
+            </div>
+            <table class="preview-items-table">
+                <thead>
+                    <tr>
+                        <th>No.</th>
+                        <th>項目名</th>
+                        <th>数量</th>
+                        <th>単価</th>
+                        <th>金額</th>
+                    </tr>
+                </thead>
+                <tbody id="auction-preview-items-body"></tbody>
+            </table>
+            <div class="preview-notes">
+                <strong>備考</strong>
+                <div id="auction-preview-notes">-</div>
+            </div>
+        </div>
+        <div class="document-preview-actions">
+            <button type="button" class="btn btn-secondary" data-close-auction-keisan-preview>修正する</button>
+            <button type="button" class="btn btn-primary" id="submit-auction-keisan-preview-btn">送信待機にする</button>
+        </div>
+    </div>
+</div>
+
+<style>
+.page-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.page-header h1 {
+    margin: 0;
+}
+
+.form-container {
+    max-width: 1000px;
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.form-section {
+    margin-bottom: 32px;
+}
+
+.form-section h3 {
+    margin: 0 0 16px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #f0f0f0;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.form-group.full-width {
+    width: 100%;
+}
+
+.form-group label {
+    font-weight: 600;
+}
+
+.required {
+    color: #dc2626;
+}
+
+.readonly-field,
+.form-group input,
+.form-group textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    box-sizing: border-box;
+}
+
+.readonly-field {
+    background: #f8fafc;
+}
+
+.source-box {
+    border: 1px solid #dbeafe;
+    border-radius: 12px;
+    background: #f8fbff;
+    padding: 14px 16px;
+    line-height: 1.8;
+}
+
+.items-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.items-table th,
+.items-table td {
+    border: 1px solid #e5e7eb;
+    padding: 10px;
+    vertical-align: middle;
+}
+
+.items-table th {
+    background: #f8fafc;
+}
+
+.items-table input {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.item-no,
+.item-amount,
+.total-amount {
+    text-align: center;
+}
+
+.text-right {
+    text-align: right;
+}
+
+.btn-remove {
+    border: none;
+    background: #fee2e2;
+    color: #b91c1c;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.form-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    margin-top: 24px;
+}
+
+.preview-confirm-section,
+.document-preview-toolbar,
+.document-preview-actions,
+.preview-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.preview-confirm-section {
+    align-items: center;
+}
+
+.preview-confirm-section p,
+.document-preview-toolbar p,
+.preview-muted {
+    margin: 0.35rem 0 0;
+    color: #64748b;
+    line-height: 1.7;
+}
+
+.document-preview-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    display: none;
+}
+
+.document-preview-modal.is-open {
+    display: block;
+}
+
+.document-preview-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.68);
+}
+
+.document-preview-panel {
+    position: relative;
+    z-index: 1;
+    width: min(1080px, calc(100% - 24px));
+    max-height: calc(100vh - 32px);
+    margin: 16px auto;
+    overflow: auto;
+    border-radius: 18px;
+    background: #f8fafc;
+    box-shadow: 0 24px 80px rgba(15, 23, 42, 0.28);
+}
+
+.document-preview-toolbar,
+.document-preview-actions {
+    align-items: center;
+    padding: 1rem 1.25rem;
+    background: #fff;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.document-preview-toolbar h3 {
+    margin: 0;
+}
+
+.document-preview-actions {
+    justify-content: flex-end;
+    border-top: 1px solid #e5e7eb;
+    border-bottom: 0;
+}
+
+.preview-sheet {
+    width: min(900px, calc(100% - 32px));
+    margin: 1.25rem auto;
+    padding: 2rem;
+    background: #fff;
+    border: 1px solid #d1d5db;
+}
+
+.preview-title {
+    text-align: center;
+    font-size: 1.45rem;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    margin-bottom: 1.4rem;
+}
+
+.preview-recipient {
+    display: inline-block;
+    padding-bottom: 0.25rem;
+    border-bottom: 1px solid #111827;
+    font-size: 1.1rem;
+    font-weight: 900;
+}
+
+.preview-meta {
+    min-width: 220px;
+    text-align: right;
+    line-height: 1.8;
+}
+
+.preview-total-box {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 1rem 0;
+    padding: 1rem;
+    border: 2px solid #111827;
+}
+
+.preview-total-box strong {
+    color: #1d4ed8;
+    font-size: 1.35rem;
+}
+
+.preview-items-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.86rem;
+}
+
+.preview-items-table th,
+.preview-items-table td {
+    padding: 0.5rem;
+    border: 1px solid #111827;
+}
+
+.preview-items-table th {
+    background: #f3f4f6;
+    text-align: center;
+}
+
+.preview-items-table .text-right {
+    text-align: right;
+}
+
+.preview-items-table .text-center {
+    text-align: center;
+}
+
+.preview-notes {
+    margin-top: 1rem;
+    padding: 0.75rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    background: #f9fafb;
+    white-space: pre-wrap;
+}
+
+.preview-notes strong {
+    display: block;
+    color: #111827;
+    margin-bottom: 0.35rem;
+}
+
+@media (max-width: 720px) {
+    .page-header,
+    .form-actions,
+    .preview-confirm-section,
+    .document-preview-toolbar,
+    .document-preview-actions,
+    .preview-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .preview-sheet {
+        width: calc(100% - 16px);
+        padding: 1rem;
+    }
+
+    .preview-meta {
+        min-width: 0;
+        text-align: left;
+    }
+}
+</style>
+
+<script>
+function formatCurrency(value) {
+    return '¥' + Number(value || 0).toLocaleString('ja-JP');
+}
+
+function recalculateTotals() {
+    let total = 0;
+    document.querySelectorAll('#items-tbody .item-row').forEach((row, index) => {
+        row.querySelector('.item-no').textContent = index + 1;
+        const qty = Number(row.querySelector('input[name=\"quantity[]\"]').value || 0);
+        const price = Number(row.querySelector('input[name=\"unit_price[]\"]').value || 0);
+        const amount = qty * price;
+        row.querySelector('.item-amount').textContent = formatCurrency(amount);
+        total += amount;
+    });
+    document.getElementById('total-amount').textContent = formatCurrency(total);
+    return total;
+}
+
+function escapePreviewHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, function(char) {
+        return {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#039;'
+        }[char];
+    });
+}
+
+function setPreviewText(id, value, fallback = '-') {
+    const target = document.getElementById(id);
+    if (target) {
+        target.textContent = value || fallback;
+    }
+}
+
+function collectPreviewItems() {
+    return Array.from(document.querySelectorAll('#items-tbody .item-row')).map((row, index) => {
+        const itemName = row.querySelector('input[name="item_name[]"]')?.value?.trim() || '';
+        const quantity = Number(row.querySelector('input[name="quantity[]"]')?.value || 0);
+        const unitPrice = Number(row.querySelector('input[name="unit_price[]"]')?.value || 0);
+        return { no: index + 1, itemName, quantity, unitPrice, amount: quantity * unitPrice };
+    }).filter(item => item.itemName || item.amount > 0);
+}
+
+function renderAuctionKeisanPreview() {
+    const total = recalculateTotals();
+    setPreviewText('auction-preview-recipient', document.getElementById('recipient_name')?.value?.trim(), '宛名未入力');
+    setPreviewText('auction-preview-subject', document.getElementById('subject')?.value?.trim(), '件名未入力');
+    setPreviewText('auction-preview-issue-date', document.getElementById('issue_date')?.value);
+    setPreviewText('auction-preview-total', formatCurrency(total));
+    setPreviewText('auction-preview-notes', document.querySelector('textarea[name="notes"]')?.value?.trim());
+
+    const previewBody = document.getElementById('auction-preview-items-body');
+    previewBody.innerHTML = '';
+    const items = collectPreviewItems();
+    const rows = items.length ? items : [{ no: 1, itemName: '明細未入力', quantity: '-', unitPrice: 0, amount: 0 }];
+    rows.forEach(item => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td class="text-center">${item.no}</td>
+            <td>${escapePreviewHtml(item.itemName)}</td>
+            <td class="text-right">${escapePreviewHtml(item.quantity)}</td>
+            <td class="text-right">${formatCurrency(item.unitPrice)}</td>
+            <td class="text-right">${formatCurrency(item.amount)}</td>
+        `;
+        previewBody.appendChild(tr);
+    });
+}
+
+function openAuctionKeisanPreview() {
+    const form = document.getElementById('keisan-form');
+    if (!form.reportValidity()) {
+        return;
+    }
+    renderAuctionKeisanPreview();
+    const modal = document.getElementById('auction-keisan-preview-modal');
+    modal.classList.add('is-open');
+    modal.setAttribute('aria-hidden', 'false');
+}
+
+function closeAuctionKeisanPreview() {
+    const modal = document.getElementById('auction-keisan-preview-modal');
+    modal.classList.remove('is-open');
+    modal.setAttribute('aria-hidden', 'true');
+}
+
+function submitAuctionKeisanPreview() {
+    const form = document.getElementById('keisan-form');
+    form.querySelectorAll('input[name="status"][type="hidden"]').forEach(input => input.remove());
+    const statusInput = document.createElement('input');
+    statusInput.type = 'hidden';
+    statusInput.name = 'status';
+    statusInput.value = 'completed';
+    form.appendChild(statusInput);
+    form.submit();
+}
+
+function addRow() {
+    const tbody = document.getElementById('items-tbody');
+    const row = document.createElement('tr');
+    row.className = 'item-row';
+    row.innerHTML = `
+        <td class="item-no"></td>
+        <td>
+            <input type="text" name="item_name[]" class="item-name" required>
+            <input type="hidden" name="merchandise_id[]" value="">
+            <input type="hidden" name="unit[]" value="点">
+        </td>
+        <td><input type="number" name="quantity[]" value="1" class="item-qty" min="1"></td>
+        <td><input type="number" name="unit_price[]" value="0" class="item-price" min="0"></td>
+        <td class="item-amount">¥0</td>
+        <td><button type="button" class="btn-remove" onclick="removeRow(this)">×</button></td>
+    `;
+    tbody.appendChild(row);
+    attachRowEvents(row);
+    recalculateTotals();
+}
+
+function removeRow(button) {
+    const rows = document.querySelectorAll('#items-tbody .item-row');
+    if (rows.length <= 1) {
+        return;
+    }
+    button.closest('tr').remove();
+    recalculateTotals();
+}
+
+function attachRowEvents(row) {
+    row.querySelectorAll('input[name=\"quantity[]\"], input[name=\"unit_price[]\"]').forEach((input) => {
+        input.addEventListener('input', recalculateTotals);
+    });
+}
+
+document.querySelectorAll('#items-tbody .item-row').forEach(attachRowEvents);
+document.getElementById('open-auction-keisan-preview-btn')?.addEventListener('click', openAuctionKeisanPreview);
+document.getElementById('submit-auction-keisan-preview-btn')?.addEventListener('click', submitAuctionKeisanPreview);
+document.querySelectorAll('[data-close-auction-keisan-preview]').forEach((button) => {
+    button.addEventListener('click', closeAuctionKeisanPreview);
+});
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && document.getElementById('auction-keisan-preview-modal')?.classList.contains('is-open')) {
+        closeAuctionKeisanPreview();
+    }
+});
+recalculateTotals();
+</script>
+{% endblock %}

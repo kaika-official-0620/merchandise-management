@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block title %}買取明細書管理 - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <h1>受信した買取明細書</h1>
+    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary">← ダッシュボード</a>
+</div>
+
+
+{% if invoices %}
+<div class="table-container">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>買取明細書番号</th>
+                <th>送信者</th>
+                <th>発行日</th>
+                <th>支払期限</th>
+                <th>請求金額</th>
+                <th>ステータス</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for inv in invoices %}
+            <tr class="{% if not inv.is_read %}unread-row{% endif %}">
+                <td class="invoice-no">
+                    {{ inv.invoice_no }}
+                    {% if not inv.is_read %}
+                    <span class="new-badge">NEW</span>
+                    {% endif %}
+                </td>
+                <td>{{ inv.sender_display_name or inv.sender_username or '不明' }}</td>
+                <td>{{ inv.issue_date }}</td>
+                <td>{{ inv.payment_due_date or '-' }}</td>
+                <td class="amount">¥{{ "{:,}".format(inv.total_amount) }}</td>
+                <td>
+                    <span class="status-badge status-{{ inv.status }}">
+                        {% if inv.status == 'sent' %}審査中
+                        {% elif inv.status == 'approved' %}✔ 承認済
+                        {% elif inv.status == 'rejected' %}✖ 却下
+                        {% endif %}
+                    </span>
+                </td>
+                <td class="actions">
+                    <a href="{{ url_for('admin_invoice_view', id=inv.id) }}" class="btn btn-sm btn-info">詳細</a>
+                    {% if inv.status == 'sent' %}
+                    <a href="{{ url_for('admin_invoice_approve', id=inv.id) }}" class="btn btn-sm btn-success" onclick="return confirm('この買取明細書を承認しますか？')">承認</a>
+                    <a href="{{ url_for('admin_invoice_reject', id=inv.id) }}" class="btn btn-sm btn-danger" onclick="return confirm('この買取明細書を却下しますか？')">却下</a>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="empty-state">
+    <div class="empty-icon"></div>
+    <p>受信した買取明細書はありません</p>
+</div>
+{% endif %}
+
+<style>
+.invoice-no {
+    font-family: monospace;
+    font-weight: 500;
+}
+
+.new-badge {
+    background: #dc3545;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+    margin-left: 5px;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+.unread-row {
+    background: #fff8e1;
+}
+
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.status-badge.status-sent {
+    background: #d1ecf1;
+    color: #0c5460;
+}
+
+.status-badge.status-approved {
+    background: #d4edda;
+    color: #155724;
+}
+
+.status-badge.status-rejected {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.btn-sm {
+    padding: 4px 8px;
+    font-size: 12px;
+    margin: 2px;
+}
+
+.btn-info {
+    background: #17a2b8;
+    color: white;
+}
+
+.btn-success {
+    background: #28a745;
+    color: white;
+}
+
+.btn-danger {
+    background: #dc3545;
+    color: white;
+}
+
+.actions {
+    white-space: nowrap;
+}
+
+.amount {
+    font-weight: 600;
+    color: #007bff;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    background: white;
+    border-radius: 12px;
+}
+
+.empty-icon {
+    font-size: 64px;
+    margin-bottom: 20px;
+}
+
+.empty-state p {
+    color: #666;
+    font-size: 16px;
+}
+
+/* スマホ対応 - 横スクロール */
+@media (max-width: 768px) {
+    .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .data-table {
+        min-width: 700px;
+    }
+    
+    .data-table th,
+    .data-table td {
+        white-space: nowrap;
+    }
+}
+</style>
+{% endblock %}
+
+

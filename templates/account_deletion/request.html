@@ -1,0 +1,65 @@
+{% extends 'account_deletion/info.html' %}
+{% block deletion_title %}アカウントとデータの削除申請{% endblock %}
+{% block deletion_content %}
+<h1 id="deletion-heading">アカウントとデータの削除申請</h1>
+<p><a href="{{ url_for('account_lifecycle.information') }}">削除・保存するデータについて</a></p>
+<p class="ad-notice">検証用の申請画面です。この操作で実顧客のデータを削除することはありません。受付・確認・利用停止と、関連データの削除完了は別の状態として記録します。</p>
+{% if row %}
+<section class="ad-card" aria-labelledby="request-status-heading">
+  <h2 id="request-status-heading">申請の状況</h2>
+  <dl>
+    <dt>状態</dt><dd>{{ labels.get(row.state, '状態の確認が必要です') }}</dd>
+    <dt>受付番号</dt><dd><code>{{ row.request_id }}</code></dd>
+    <dt>受付日時</dt><dd>{{ row.requested_at }}</dd>
+    <dt>最終更新日時</dt><dd>{{ row.updated_at }}</dd>
+  </dl>
+  {% if row.customer_notice %}<h3>開花からの案内</h3><p class="ad-preserve">{{ row.customer_notice }}</p>{% endif %}
+  {% if row.state in ['access_closed', 'erasure_pending'] %}<p class="ad-notice">利用停止の記録がありますが、関連データの削除は完了していません。</p>{% endif %}
+</section>
+{% endif %}
+<section class="ad-card" aria-labelledby="request-before-heading">
+  <h2 id="request-before-heading">申請前にご確認ください</h2>
+  <ul>
+    <li>預かり商品、未発送、未精算の売上、未払請求があっても申請できます。返送・精算と、保持する取引記録は個別に確認します。</li>
+    <li>申請だけで商品を処分したり、請求を取り消したり、継続課金を解約したりすることはありません。有料プランは購入元で別途解約してください。</li>
+    <li>この検証では、申請中の新しいプラン購入と、対象の自動通知・現物決済の処理を停止します。購入元が継続する月額課金の解約を代わりに行うものではありません。</li>
+    <li>不要な個人情報の削除と、商品の返送・精算・必要記録の保存は分けて確認します。保存する情報と期間、完了までの期間、問い合わせ窓口は未確定です。現在は実データ削除の完了処理を有効にしていません。</li>
+  </ul>
+</section>
+{% if row and row.state in ['requested','reviewing'] and completion_notice_ready %}
+<section class="ad-card" aria-labelledby="completion-notice-heading">
+<h2 id="completion-notice-heading">削除完了の連絡</h2>
+<p>希望する場合は、申請前に本人確認済みの通知先メールへ、完了時に1回だけ連絡します。その連絡に必要な宛先1件を一時的に保持し、通常の通知や営業連絡には使いません。現在は送信元などの準備中で、実際のメールは送りません。</p>
+<p>状態：{{ '完了時のメール連絡に同意済み' if completion_notice and completion_notice.consented else 'メール連絡への同意なし' }}。メール連絡を希望しなくても、削除申請は受け付けています。</p>
+<p class="ad-muted">本人確認済みの通知先がない場合や複数ある場合は、現在この連絡を設定できません。削除申請はそのまま保持します。利用停止後の確認方法は準備中です。</p>
+<form method="post" action="{{ url_for('account_lifecycle.completion_notice') }}">
+<input type="hidden" name="registry_csrf" value="{{ csrf }}"><input type="hidden" name="operation_token" value="{{ notice_token }}"><input type="hidden" name="request_id" value="{{ row.request_id }}">
+<label for="completion-choice">完了時のメール連絡</label><select id="completion-choice" name="completion_email" required><option value="no" {{ 'selected' if not completion_notice or not completion_notice.consented else '' }}>希望しない・同意を取り消す</option><option value="yes" {{ 'selected' if completion_notice and completion_notice.consented else '' }}>上記の一時保持と1回の連絡に同意する</option></select>
+<label for="completion-password">現在のパスワード</label><input id="completion-password" type="password" name="password" autocomplete="current-password" maxlength="1024" required>
+<button class="ad-button ad-secondary">完了連絡の希望を保存する</button>
+</form></section>
+{% endif %}
+{% if not row or row.state == 'withdrawn' %}
+<form class="ad-card" method="post" action="{{ url_for('account_lifecycle.submit') }}">
+  <h2>本人確認をして申請する</h2>
+  <input type="hidden" name="registry_csrf" value="{{ csrf }}">
+  <input type="hidden" name="operation_token" value="{{ token }}">
+  <label for="deletion-password">現在のパスワード</label>
+  <input id="deletion-password" name="password" type="password" autocomplete="current-password" maxlength="1024" required aria-describedby="deletion-password-help">
+  <p id="deletion-password-help" class="ad-muted">本人確認のため、この画面で入力してください。チャットや問い合わせ文には記載しないでください。</p>
+  <label><input type="checkbox" name="confirm" value="delete_account" required>上記を確認し、自分のアカウントと関連データの削除を申請します。</label>
+  <button class="ad-button" type="submit">削除申請を送信する（検証）</button>
+</form>
+{% elif row.state in ['requested', 'reviewing'] %}
+<form class="ad-card" method="post" action="{{ url_for('account_lifecycle.withdraw') }}">
+  <h2>申請を取り下げる</h2>
+  <p>申請・確認中は取り下げられます。停止済みの通知や決済を自動で再実行することはありません。</p>
+  <input type="hidden" name="registry_csrf" value="{{ csrf }}">
+  <input type="hidden" name="operation_token" value="{{ cancel_token }}">
+  <input type="hidden" name="request_id" value="{{ row.request_id }}">
+  <label for="withdraw-password">現在のパスワード</label>
+  <input id="withdraw-password" name="password" type="password" autocomplete="current-password" maxlength="1024" required>
+  <button class="ad-button ad-secondary" type="submit">本人確認をして申請を取り下げる</button>
+</form>
+{% endif %}
+{% endblock %}

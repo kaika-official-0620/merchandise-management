@@ -1,0 +1,15 @@
+{% extends 'sandbox_payments/base.html' %}{% block content %}
+<h1>現物サービスのテスト決済</h1>
+{% if not overview.connected %}<p class="notice">Stripeのテスト送信は未接続または停止中です。設定の準備だけでは実接続テストを完了したことにはなりません。</p>{% endif %}
+<section><h2>支払い対象の明細</h2><p>料金・契約・税の確認が完了した検証用明細だけが対象です。</p>
+{% for bill in overview.bills %}<article><h3>{{ bill.period }} ／ {{ '{:,}'.format(bill.amount_yen) }}円</h3><p><a href="/payments/bills/{{ bill.bill_id }}">元の明細を確認</a>{% if staff %} ／ 検証顧客ID {{ bill.customer_id }}{% endif %}</p>
+<form method="post" action="{{ url_for('sandbox_payments.queue_bill',bill_id=bill.bill_id) }}">{{ tokens('stage9_bill',bill.bill_id) }}
+{% if staff %}<label>確認済みカードの同意<select name="consent_id" required><option value="">選んでください</option>{% for consent in overview.consents if consent.customer_id==bill.customer_id and consent.verified and consent.revoked_at is none %}<option value="{{ consent.consent_id }}">{{ consent.consent_id }}</option>{% endfor %}</select></label>{% endif %}
+<button>{{ '同意済みカードへのテスト請求を準備' if staff else 'この明細のテスト支払いを準備' }}</button></form></article>{% else %}<p>支払い対象の検証明細はありません。</p>{% endfor %}</section>
+<section><h2>処理と結果</h2>{% for job in overview.jobs %}<p><a href="{{ url_for('sandbox_payments.job',job_id=job.job_id) }}">{{ stage9_status(job.state) }} ／ {{ '{:,}'.format(job.amount_yen) }}円 ／ {{ job.job_id }}</a></p>{% else %}<p>まだ処理はありません。</p>{% endfor %}</section>
+<section><h2>カード保存と自動請求の同意</h2>
+{% for consent in overview.consents %}<article><p>{{ '同意解除済み' if consent.revoked_at is not none else 'カード確認済み' if consent.verified else 'カードの操作・確認待ち' }}{% if staff %} ／ 検証顧客ID {{ consent.customer_id }}{% endif %}</p>{% if not staff and consent.revoked_at is none %}<form method="post" action="{{ url_for('sandbox_payments.revoke',consent_id=consent.consent_id) }}">{{ tokens('stage9_revoke',consent.consent_id) }}<button>今後の自動請求への同意を解除</button></form>{% endif %}</article>{% endfor %}
+{% if not staff %}<form method="post" action="{{ url_for('sandbox_payments.setup') }}">{{ tokens('stage9_setup') }}
+<p>この検証では、月末締めの確認済み現物作業料・販売料・実費の税込合計額を、翌月10日にカードへ請求する方式を試します。金額は対象の月次明細に表示します。実際の請求日や料金を開始する同意ではありません。</p><p>テスト用カードはStripeへ保存されます。同意はこの画面から解除できます。解除前に送信済みの処理は結果確認が必要です。</p>
+<label><input type="checkbox" name="agree" value="yes" required>上記の検証条件とカード保存・自動請求に同意する</label><button>カード保存のテストを準備</button></form>{% endif %}</section>
+{% endblock %}

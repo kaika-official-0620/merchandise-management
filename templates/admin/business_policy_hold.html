@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}請求条件の確認が必要です - 株式会社開花{% endblock %}
+{% block content %}
+<div style="max-width:760px;margin:2rem auto;padding:1.5rem">
+<h1>請求条件の確認が必要です</h1>
+<p>{{ message }}</p>
+<p>料金の承認状態を画面の入力だけで変更することはできません。今回は請求確定・顧客への送付を実行していません。</p>
+<a class="btn btn-primary" href="{{ url_for('business_review.index') }}">業務・料金の確認へ</a>
+</div>
+{% endblock %}
+

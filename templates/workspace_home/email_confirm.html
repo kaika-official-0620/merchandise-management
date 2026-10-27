@@ -1,0 +1,42 @@
+{% extends 'workspace_home/base.html' %}{% block home_content %}
+<h1>メールアドレスの確認</h1><p>ご自身が依頼した確認メールであることと、ログイン中のアカウントをご確認ください。</p>
+{% if authenticated %}<form class="card" method="post" action="{{ url_for('workspace_home.email_confirm') }}">{{ tokens('stage6_confirm_email') }}<input id="email-proof" type="hidden" name="token" value=""><button id="confirm-email" disabled>このアカウントの通知先として確認する</button></form>
+{% else %}<p><a href="{{ url_for('login',next='/notifications/email/confirm') }}">開花にログインして確認する</a></p>{% endif %}
+<p id="email-proof-status" class="muted">ご自身で受け取った確認メールのリンクから開いてください。</p>
+<script>
+(() => {
+  const key='kaika-email-proof-test';
+  const button=document.getElementById('confirm-email');
+  if(button)button.form.addEventListener('submit',()=>{try{sessionStorage.removeItem(key);}catch(_){}});
+  function refreshProof() {
+  if(button){button.disabled=true;document.getElementById('email-proof').value='';}
+  const incoming=location.hash.length>1;
+  let value={token:new URLSearchParams(location.hash.slice(1)).get('token')||'',expires:Date.now()+1800000};
+  const valid=p=>p&&Number.isFinite(p.expires)&&p.expires>Date.now()&&typeof p.token==='string'&&/^[A-Za-z0-9_-]{32,200}$/.test(p.token);
+  history.replaceState(null, '', location.pathname);
+  // A new link must never fall back to a previously opened link's proof.
+  if(incoming) {
+    if(valid(value)) { try{sessionStorage.setItem(key,JSON.stringify(value));}catch(_){} }
+  } else {
+    try{value=JSON.parse(sessionStorage.getItem(key)||'null');}catch(_){value=null;}
+  }
+  if(!valid(value)) {
+    value=null;
+    try{sessionStorage.removeItem(key);}catch(_){}
+    const status=document.getElementById('email-proof-status');
+    if(status)status.textContent='確認リンクが無効、または有効期限が切れています。通知設定から確認メールを再送して、新しいリンクを開いてください。';
+  }
+  if (valid(value)&&document.getElementById('confirm-email')) {
+    document.getElementById('email-proof').value = value.token;
+    document.getElementById('confirm-email').disabled = false;
+  }
+  if(valid(value)) {
+    const status=document.getElementById('email-proof-status');
+    if(status)status.textContent='ご自身で受け取った確認メールのリンクから開いてください。';
+  }
+  }
+  refreshProof();
+  window.addEventListener('hashchange',refreshProof);
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,3 @@
+{% extends 'workspace_home/base.html' %}{% block home_content %}
+<article class="card"><h1>{{ note.title }}</h1><p>{{ note.body }}</p>{% if note.is_current and note.path %}<a href="{{ note.path }}">対象の内容を確認する</a>{% else %}<p class="notice">対象の状態が変更されています。ホームで最新の内容をご確認ください。</p>{% endif %}{% if not staff and not note.read_at %}<form method="post" action="{{ url_for('workspace_home.read',notification_id=note.notification_id) }}">{{ tokens('stage6_read',note.notification_id) }}<button>確認済みにする</button></form>{% endif %}</article>
+{% endblock %}

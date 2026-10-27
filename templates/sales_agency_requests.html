@@ -1,0 +1,619 @@
+{% extends "base.html" %}
+{% block title %}販売代行申請履歴 - 株式会社 開花{% endblock %}
+
+{% block content %}
+<style>
+.history-container {
+    max-width: 920px;
+    margin: 0 auto;
+    display: grid;
+    gap: 1rem;
+}
+
+.guide-card,
+.filter-card,
+.request-card {
+    background: #fff;
+    border-radius: 14px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+    overflow: hidden;
+}
+
+.guide-card summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.82rem 1rem;
+    cursor: pointer;
+    list-style: none;
+    color: #0f172a;
+    font-weight: 800;
+}
+
+.guide-card summary::-webkit-details-marker {
+    display: none;
+}
+
+.guide-card summary span:last-child {
+    color: #64748b;
+    font-size: 0.78rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.guide-card[open] summary {
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.guide-body {
+    display: grid;
+    gap: 0.75rem;
+    padding: 0.9rem 1rem 1rem;
+}
+
+.guide-body p {
+    margin: 0;
+    color: #64748b;
+    line-height: 1.7;
+    font-size: 0.92rem;
+}
+
+.guide-list {
+    display: grid;
+    gap: 0.65rem;
+}
+
+.guide-item {
+    display: grid;
+    gap: 0.28rem;
+    padding: 0.7rem 0.75rem;
+    border-radius: 10px;
+    background: #f8fafc;
+}
+
+.guide-item-title {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    white-space: nowrap;
+    color: #0f172a;
+    font-weight: 800;
+}
+
+.guide-item-number {
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    background: #2563eb;
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.82rem;
+    font-weight: 800;
+    flex: 0 0 auto;
+}
+
+.guide-item p {
+    margin: 0;
+    color: #475569;
+    line-height: 1.65;
+    font-size: 0.88rem;
+}
+
+.filter-card {
+    display: grid;
+    gap: 0.7rem;
+    padding: 0.85rem;
+}
+
+.service-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.85rem;
+}
+
+.service-card-link {
+    display: grid;
+    gap: 0.55rem;
+    min-width: 0;
+    padding: 1rem;
+    border: 1px solid #dbeafe;
+    border-radius: 12px;
+    background: #fff;
+    color: inherit;
+    text-decoration: none;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+}
+
+.service-card-link:hover,
+.service-card-link:focus-visible {
+    border-color: #2563eb;
+    box-shadow: 0 12px 24px rgba(37, 99, 235, 0.12);
+    outline: none;
+}
+
+.service-card-title {
+    color: #0f172a;
+    font-size: 1rem;
+    font-weight: 900;
+}
+
+.service-card-meta {
+    display: flex;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+    color: #475569;
+    font-size: 0.82rem;
+    font-weight: 800;
+}
+
+.service-page-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.service-page-head strong {
+    color: #0f172a;
+    font-size: 1rem;
+}
+
+.filter-row {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+}
+
+.filter-label {
+    min-width: 4.5rem;
+    color: #475569;
+    font-size: 0.82rem;
+    font-weight: 800;
+}
+
+.filter-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    padding: 0.28rem 0.72rem;
+    border-radius: 999px;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    color: #334155;
+    text-decoration: none;
+    font-size: 0.82rem;
+    font-weight: 800;
+}
+
+.filter-chip.active {
+    border-color: #2563eb;
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+
+.request-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    flex-wrap: wrap;
+    padding: 1rem 1.1rem;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.request-info {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem 0.75rem;
+    align-items: center;
+}
+
+.service-badge,
+.period-badge,
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 0.28rem 0.72rem;
+    font-size: 0.78rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.service-badge {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.period-badge.current {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.period-badge.past {
+    background: #f1f5f9;
+    color: #475569;
+}
+
+.status-badge.pending {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.status-badge.approved {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.status-badge.appraising {
+    background: #ede9fe;
+    color: #6d28d9;
+}
+
+.status-badge.inspecting {
+    background: #fce7f3;
+    color: #be185d;
+}
+
+.status-badge.completed {
+    background: #d1fae5;
+    color: #047857;
+}
+
+.status-badge.cancel_requested {
+    background: #fff7ed;
+    color: #c2410c;
+}
+
+.status-badge.cancelled {
+    background: #f1f5f9;
+    color: #475569;
+}
+
+.status-badge.deal_failed {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.status-badge.rejected {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.request-date,
+.processed-info {
+    color: #64748b;
+    font-size: 0.84rem;
+}
+
+.request-body {
+    padding: 1.1rem;
+    display: grid;
+    gap: 0.95rem;
+}
+
+.cancel-request-box {
+    display: grid;
+    gap: 0.6rem;
+    padding: 0.85rem;
+    border: 1px solid #fed7aa;
+    border-radius: 8px;
+    background: #fff7ed;
+    color: #9a3412;
+}
+
+.cancel-request-box form {
+    display: flex;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+}
+
+.cancel-request-box textarea {
+    width: 100%;
+    min-width: 0;
+    flex: 1 1 260px;
+    min-height: 72px;
+    box-sizing: border-box;
+    border: 1px solid #fdba74;
+    border-radius: 6px;
+    padding: 0.58rem 0.7rem;
+    font: inherit;
+    resize: vertical;
+}
+
+.request-items {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.75rem;
+}
+
+.request-item {
+    display: flex;
+    gap: 0.7rem;
+    align-items: center;
+    padding: 0.75rem;
+    border-radius: 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    color: inherit;
+    text-decoration: none;
+}
+
+.request-item-link:hover,
+.request-item-link:focus-visible {
+    border-color: #2563eb;
+    box-shadow: 0 8px 18px rgba(37, 99, 235, 0.12);
+    outline: none;
+}
+
+.request-item img,
+.request-item .placeholder {
+    width: 42px;
+    height: 42px;
+    border-radius: 8px;
+    object-fit: cover;
+    background: #e2e8f0;
+    flex-shrink: 0;
+}
+
+.request-item-meta {
+    min-width: 0;
+    display: grid;
+    gap: 0.18rem;
+}
+
+.request-item-name {
+    font-weight: 800;
+    color: #0f172a;
+    overflow-wrap: anywhere;
+}
+
+.request-item-brand {
+    color: #64748b;
+    font-size: 0.8rem;
+}
+
+.request-item-status {
+    width: fit-content;
+    border-radius: 999px;
+    background: #e0f2fe;
+    color: #0369a1;
+    padding: 0.18rem 0.48rem;
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+
+.request-item-warning {
+    margin-top: 0.25rem;
+    color: #b45309;
+    font-size: 0.76rem;
+    font-weight: 700;
+    line-height: 1.5;
+}
+
+.admin-note {
+    border-radius: 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    padding: 0.85rem 0.95rem;
+}
+
+.admin-note label {
+    display: block;
+    margin-bottom: 0.25rem;
+    color: #64748b;
+    font-size: 0.8rem;
+}
+
+.admin-note p {
+    margin: 0;
+    color: #0f172a;
+    line-height: 1.7;
+}
+
+.empty-state {
+    border: 1px dashed #cbd5e1;
+    border-radius: 14px;
+    padding: 2.4rem 1rem;
+    text-align: center;
+    color: #64748b;
+    background: #fff;
+}
+
+.back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: #64748b;
+    text-decoration: none;
+    font-size: 0.92rem;
+}
+
+.back-link:hover {
+    color: #0f172a;
+}
+
+@media (max-width: 768px) {
+    .request-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .filter-label {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .guide-item-title {
+        font-size: 0.92rem;
+    }
+
+    .service-card-grid {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+
+<div class="page-header">
+    <h1>販売代行申請履歴</h1>
+</div>
+
+<div class="history-container">
+    <a href="{{ url_for('index') }}" class="back-link context-back-inline">← 商品一覧に戻る</a>
+
+    {% if not show_service_top %}
+    <details class="guide-card">
+        <summary>
+            <span>進行状況の見方</span>
+            <span>タップして確認</span>
+        </summary>
+        <div class="guide-body">
+            <p>管理画面で更新された状態は、この申請履歴にも自動で反映されます。</p>
+            <div class="guide-list">
+                <div class="guide-item">
+                    <div class="guide-item-title">
+                        <span class="guide-item-number">1</span>
+                        <span>承認待ち</span>
+                    </div>
+                    <p>申請受付直後の状態です。管理側で確認後に次の工程へ進みます。</p>
+                </div>
+                <div class="guide-item">
+                    <div class="guide-item-title">
+                        <span class="guide-item-number">2</span>
+                        <span>開花側で業者確認中</span>
+                    </div>
+                    <p>認証済み・出品準備中・査定中・検品中へ進むたびに、この画面にも反映されます。</p>
+                </div>
+                <div class="guide-item">
+                    <div class="guide-item-title">
+                        <span class="guide-item-number">3</span>
+                        <span>業者回答後に最終書類を作成</span>
+                    </div>
+                    <p>業者からの回答確認後、最終的な買取明細書が書類履歴へ反映されます。</p>
+                </div>
+            </div>
+        </div>
+    </details>
+    {% endif %}
+
+    {% if show_service_top %}
+    <section class="service-card-grid" aria-label="サービス別履歴">
+        {% for card in service_cards %}
+        <a class="service-card-link" href="{{ card.url }}">
+            <span class="service-card-title">{{ card.title }}</span>
+            <span class="service-card-meta">
+                <span>現行 {{ card.current_count }}</span>
+                <span>過去 {{ card.past_count }}</span>
+                <span>合計 {{ card.count }}</span>
+            </span>
+        </a>
+        {% endfor %}
+    </section>
+    {% else %}
+    {% set service_page_base = url_for('sales_agency_my_requests') ~ '/' ~ selected_service_slug %}
+    <section class="filter-card" aria-label="申請履歴の絞り込み">
+        <div class="service-page-head">
+            <strong>{{ selected_service_name }}</strong>
+            <a class="filter-chip" href="{{ url_for('sales_agency_my_requests') }}">サービス一覧へ</a>
+        </div>
+        <div class="filter-row">
+            <span class="filter-label">表示</span>
+            <a class="filter-chip {% if period_filter == 'current' %}active{% endif %}" href="{{ service_page_base }}?period=current">現行 {{ period_counts.get('current', 0) }}</a>
+            <a class="filter-chip {% if period_filter == 'past' %}active{% endif %}" href="{{ service_page_base }}?period=past">過去 {{ period_counts.get('past', 0) }}</a>
+            <a class="filter-chip {% if period_filter == 'all' %}active{% endif %}" href="{{ service_page_base }}?period=all">すべて {{ period_counts.get('all', 0) }}</a>
+        </div>
+    </section>
+
+    {% if requests %}
+    {% for req in requests %}
+    <div class="request-card">
+        <div class="request-header">
+            <div class="request-info">
+                <span class="service-badge">{{ service_types.get(req.service_type, req.service_type) }}</span>
+                <span class="period-badge {{ 'past' if req.is_past else 'current' }}">{{ req.period_label }}</span>
+                <span class="request-date">申請日 {{ req.created_at[:16].replace('-', '/').replace('T', ' ') if req.created_at else '-' }}</span>
+                <span class="request-date">対象 {{ req.request_items|length }} 点</span>
+            </div>
+            <span class="status-badge {{ req.status }}">{{ req.client_status_label or statuses.get(req.status, req.status) }}</span>
+        </div>
+        <div class="request-body">
+            <div class="request-items">
+                {% for item in req.request_items %}
+                {% if item.detail_url %}
+                <a href="{{ item.detail_url }}" class="request-item request-item-link">
+                {% else %}
+                <div class="request-item">
+                {% endif %}
+                    {% if item.photo_path %}
+                    <img src="/static/{{ item.photo_path }}" alt="{{ item.product_name|clean_display('商品名未登録') }}" loading="lazy" decoding="async" onerror="this.style.display='none'">
+                    {% else %}
+                    <div class="placeholder"></div>
+                    {% endif %}
+                    <div class="request-item-meta">
+                        <div class="request-item-name">{{ item.product_name|clean_display('商品名未登録') }}</div>
+                        {% if item.brand_name %}
+                        <div class="request-item-brand">{{ item.brand_name|clean_display('ブランド未登録') }}</div>
+                        {% endif %}
+                        {% if item.item_status_label or item.appraisal_status_label %}
+                        <div class="request-item-status">{{ item.item_status_label or item.appraisal_status_label }}</div>
+                        {% endif %}
+                        {% if item.source_item_warning %}
+                        <div class="request-item-warning">{{ item.source_item_warning }}</div>
+                        {% endif %}
+                    </div>
+                {% if item.detail_url %}
+                </a>
+                {% else %}
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+
+            {% if req.status != 'pending' %}
+            <div class="processed-info">
+                更新日 {{ req.processed_at[:16].replace('-', '/').replace('T', ' ') if req.processed_at else '-' }}
+            </div>
+            {% endif %}
+
+            {% if req.can_request_cancel %}
+            <div class="cancel-request-box">
+                <div>対応状況によってはキャンセルできない場合があります。</div>
+                <form method="POST" action="{{ url_for('sales_agency_cancel_request', request_id=req.id) }}">
+                    <input type="hidden" name="next" value="{{ request.full_path[:-1] if request.full_path.endswith('?') else request.full_path }}">
+                    <textarea name="cancel_note" rows="3" placeholder="キャンセル理由（任意）"></textarea>
+                    <button type="submit" class="btn btn-secondary">キャンセル申請</button>
+                </form>
+            </div>
+            {% elif req.status in ['approved', 'appraising', 'inspecting', 'completed'] %}
+            <div class="cancel-request-box">
+                <div>現在の状態ではキャンセル申請できません。</div>
+            </div>
+            {% endif %}
+
+            {% set clean_admin_note = req.admin_note|clean_display('') %}
+            {% if clean_admin_note %}
+            <div class="admin-note">
+                <label>管理者からの連絡</label>
+                <p>{{ clean_admin_note }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="empty-state">
+        <p>条件に一致する申請履歴はありません。</p>
+        <p style="margin-top: 0.5rem; font-size: 0.9rem;">サービスや表示条件を切り替えて確認してください。</p>
+    </div>
+    {% endif %}
+    {% endif %}
+</div>
+{% endblock %}

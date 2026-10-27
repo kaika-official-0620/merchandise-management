@@ -1,0 +1,1341 @@
+{% extends "base.html" %}
+
+{% set has_source_request = source_request is defined and source_request %}
+{% set form_items = items if items else [] %}
+{% set is_kaika_scope = is_kaika_scope|default(false) %}
+{% set is_kaika_vendor_scope = is_kaika_vendor_scope|default(false) %}
+{% set is_kaika_estimate_scope = is_kaika_estimate_scope|default(false) %}
+{% set back_url = back_url|default(url_for('admin_documents_dashboard', group='vendor_outgoing'), true) %}
+
+{% block title %}{% if mitsumori %}見積依頼書編集{% else %}見積依頼書作成{% endif %} - 管理画面{% endblock %}
+
+{% block content %}
+{% if is_kaika_scope %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/kaika_document_product_picker.css') }}">
+{% endif %}
+<div class="admin-header">
+    <h1>{% if is_kaika_vendor_scope %}開花商品用 業者向け見積依頼書作成{% elif is_kaika_estimate_scope %}開花用 見積依頼書作成{% elif mitsumori %}見積依頼書編集{% else %}業者向け見積依頼書作成{% endif %}</h1>
+    <a href="{{ back_url }}" class="btn btn-secondary">書類管理へ戻る</a>
+</div>
+
+<div class="form-info-box">
+    <p><strong>見積依頼書について:</strong> {% if is_kaika_scope %}開花商品だけを対象に作成します。ユーザー商品は混ぜません。{% else %}開花から業者へ送る見積依頼書を作成します。{% endif %}</p>
+</div>
+
+<form method="POST" class="mitsumori-form" id="admin-mitsumori-form">
+    {% if has_source_request %}
+    <input type="hidden" name="request_id" value="{{ source_request.id }}">
+    <input type="hidden" name="source_service_type" value="{{ source_request.service_type }}">
+    {% else %}
+    <input type="hidden" name="source_service_type" value="normal">
+    {% endif %}
+    <input type="hidden" id="target_user_id" name="target_user_id" value="{{ target_user_id or '' }}">
+    <input type="hidden" name="scope" value="{{ scope|default('', true) }}">
+
+    {% if has_source_request %}
+    <div class="form-info-box source-info-box">
+        <p><strong>申請情報:</strong> {{ source_request.service_name }} / {{ source_request.client_name }} / 受付番号 {{ source_request.reception_number or source_request.id }}</p>
+        <p><strong>対象商品:</strong> {{ source_request.pending_appraisal_count }}件の「査定待ち」商品から、業者向け依頼書を作成できます。</p>
+        <p><strong>次の流れ:</strong> この見積依頼書を作成したあと、業者から届く買取明細書を登録し、その後にユーザー向け買取明細書を発行します。</p>
+    </div>
+    {% endif %}
+
+    <div class="form-section">
+        <h3>基本情報</h3>
+        <div class="form-grid">
+            <div class="form-group">
+                <label>No.</label>
+                <input type="text" value="{{ mitsumori.document_no if mitsumori else document_no }}" readonly class="form-control readonly">
+            </div>
+            <div class="form-group">
+                <label for="issue_date">発行日 *</label>
+                <input type="date" id="issue_date" name="issue_date" value="{{ mitsumori.issue_date if mitsumori else today }}" required class="form-control">
+            </div>
+            <div class="form-group">
+                <label for="valid_until">有効期限</label>
+                <input type="date" id="valid_until" name="valid_until" value="{{ mitsumori.valid_until if mitsumori else default_valid_until|default('', true) }}" class="form-control">
+            </div>
+            {% if not has_source_request and not is_kaika_scope %}
+            <div class="form-group">
+                <label for="client-select">クライアント名</label>
+                <select id="client-select" class="form-control">
+                    <option value="">選択してください</option>
+                    {% for client in clients|default([]) %}
+                    <option value="{{ client.id }}" data-user-id="{{ client.id }}" {% if target_user_id == client.id %}selected{% endif %}>{{ client.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="target-user-display">ユーザーID</label>
+                <input id="target-user-display" type="text" value="{{ target_user_id or '' }}" readonly class="form-control readonly">
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="form-section">
+        <h3>宛先情報</h3>
+        <div class="form-grid">
+            {% if vendors is defined and not is_kaika_estimate_scope %}
+            <div class="form-group full-width">
+                <label for="vendor_id">登録済み業者 *</label>
+                <select id="vendor_id" name="vendor_id" class="form-control" required>
+                    <option value="">{% if vendors %}選択してください{% else %}先に業者マスターへ登録してください{% endif %}</option>
+                    {% for vendor in vendors %}
+                    <option value="{{ vendor.id }}"
+                            data-name="{{ vendor.name or '' }}"
+                            data-contact="{{ vendor.contact_name or '' }}"
+                            data-address="{{ vendor.address or '' }}">
+                        {{ vendor.display_name or vendor.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+            <div class="form-group full-width">
+                <label for="company_name">会社名 *</label>
+                <input type="text" id="company_name" name="company_name" value="{{ mitsumori.company_name if mitsumori else company_name_default|default('', true) }}" required placeholder="株式会社○○" class="form-control">
+            </div>
+            <div class="form-group">
+                <label for="department">部署名</label>
+                <input type="text" id="department" name="department" value="{{ mitsumori.department if mitsumori else department_default|default('', true) }}" placeholder="営業部" class="form-control">
+            </div>
+            <div class="form-group">
+                <label for="contact_person">担当者名</label>
+                <input type="text" id="contact_person" name="contact_person" value="{{ mitsumori.contact_person if mitsumori else contact_person_default|default('', true) }}" placeholder="山田 太郎" class="form-control">
+            </div>
+            <div class="form-group full-width">
+                <label for="address">住所</label>
+                <input type="text" id="address" name="address" value="{{ mitsumori.address if mitsumori else address_default|default('', true) }}" placeholder="東京都○○区..." class="form-control">
+            </div>
+        </div>
+    </div>
+
+    <div class="form-section">
+        <h3>見積内容</h3>
+        <div class="form-group">
+            <label for="subject">件名 *</label>
+            <input type="text" id="subject" name="subject" value="{{ mitsumori.subject if mitsumori else subject_default|default('見積依頼書', true) }}" required placeholder="卸販売サービス 見積依頼書" class="form-control">
+        </div>
+
+        <div class="product-selector">
+            <label>商品を追加</label>
+            {% if not has_source_request %}
+            {% if is_kaika_scope %}
+            <span class="source-filter-note">開花商品一覧の商品だけ選択できます。</span>
+            {% set kaika_picker_id = 'mitsumori-kaika-product-picker' %}
+            {% set kaika_picker_input_id = 'mitsumori-kaika-product-id' %}
+            {% set kaika_picker_input_name = '' %}
+            {% set kaika_picker_selected_id = '' %}
+            {% include 'admin/_kaika_product_picker.html' %}
+            <button type="button" class="btn btn-info" id="add-product-btn">選択した商品を追加</button>
+            {% else %}
+            <input type="search" id="product-search-client" class="form-control product-filter-select" placeholder="クライアント名">
+            <input type="search" id="product-search-user-id" class="form-control product-filter-select" placeholder="ユーザーID">
+            <input type="search" id="product-search-name" class="form-control product-filter-select" placeholder="商品名">
+            <select id="product-select" class="form-control product-select-box">
+                <option value="">-- 商品を選択 --</option>
+            </select>
+            <button type="button" class="btn btn-info" id="add-product-btn">追加</button>
+            {% endif %}
+            {% else %}
+            <span class="source-filter-note">この申請の査定待ち商品のみ選択できます。</span>
+            <select id="product-select" class="form-control product-select-box">
+                <option value="">-- 商品を選択 --</option>
+            </select>
+            <button type="button" class="btn btn-info" id="add-product-btn">追加</button>
+            {% endif %}
+        </div>
+        {% if not is_kaika_scope %}
+        <div id="product-select-meta" class="product-select-meta"></div>
+        {% endif %}
+
+        <div class="table-responsive">
+            <table class="items-table" id="items-table">
+                <thead>
+                    <tr>
+                        <th width="6%">No.</th>
+                        <th width="42%">商品名・内容 *</th>
+                        <th width="10%">数量</th>
+                        <th width="15%">単価</th>
+                        <th width="15%">金額</th>
+                        <th width="10%"></th>
+                    </tr>
+                </thead>
+                <tbody id="items-body">
+                    {% if form_items %}
+                        {% for item in form_items %}
+                        <tr class="item-row">
+                            <td class="item-no">{{ item.item_no or loop.index }}</td>
+                            <td>
+                                <input type="text" name="item_name[]" value="{{ item.item_name }}" class="form-control" required>
+                                <input type="hidden" name="merchandise_id[]" value="{{ item.merchandise_id or '' }}">
+                                <input type="hidden" name="unit[]" value="{{ item.unit or '点' }}">
+                            </td>
+                            <td><input type="number" name="quantity[]" value="{{ item.quantity or 1 }}" class="form-control calc-input" min="1"></td>
+                            <td><input type="number" name="unit_price[]" value="{{ item.unit_price or 0 }}" class="form-control calc-input" min="0" step="1"></td>
+                            <td class="row-amount">¥0</td>
+                            <td><button type="button" class="btn btn-danger btn-sm remove-row">削除</button></td>
+                        </tr>
+                        {% endfor %}
+                    {% elif not has_source_request %}
+                        {% for i in range(3) %}
+                        <tr class="item-row">
+                            <td class="item-no">{{ i + 1 }}</td>
+                            <td>
+                                <input type="text" name="item_name[]" class="form-control">
+                                <input type="hidden" name="merchandise_id[]" value="">
+                                <input type="hidden" name="unit[]" value="点">
+                            </td>
+                            <td><input type="number" name="quantity[]" value="1" class="form-control calc-input" min="1"></td>
+                            <td><input type="number" name="unit_price[]" value="0" class="form-control calc-input" min="0" step="1"></td>
+                            <td class="row-amount">¥0</td>
+                            <td><button type="button" class="btn btn-danger btn-sm remove-row">削除</button></td>
+                        </tr>
+                        {% endfor %}
+                    {% endif %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="6">
+                            <button type="button" class="btn btn-secondary" id="add-row">+ 行を追加</button>
+                        </td>
+                    </tr>
+                    <tr class="totals-row">
+                        <td colspan="3"></td>
+                        <td class="text-right"><strong>合計金額</strong></td>
+                        <td id="total-amount">¥0</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+
+    <div class="form-section">
+        <h3>備考</h3>
+        <div class="form-group">
+            <textarea name="notes" rows="4" class="form-control" placeholder="条件、特記事項など">{{ mitsumori.notes if mitsumori else notes_default|default('', true) }}</textarea>
+        </div>
+    </div>
+
+    <div class="form-section preview-check-section">
+        <div>
+            <h3>書類プレビュー確認</h3>
+            <p>作成完了の前に、実際の見積依頼書としてどのように表示されるか確認できます。</p>
+        </div>
+        <button type="button" class="btn btn-primary" id="open-admin-preview-btn">書類を確認する</button>
+    </div>
+
+    <div class="form-actions">
+        <button type="submit" name="status" value="draft" class="btn btn-secondary">下書き保存</button>
+    </div>
+</form>
+
+<div class="document-preview-modal" id="admin-document-preview-modal" aria-hidden="true">
+    <div class="document-preview-backdrop" data-close-admin-preview></div>
+    <div class="document-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="admin-preview-title">
+        <div class="document-preview-toolbar">
+            <div>
+                <span class="preview-kicker">送信前プレビュー</span>
+                <h2 id="admin-preview-title">見積依頼書の確認</h2>
+            </div>
+            <button type="button" class="preview-close-btn" data-close-admin-preview>閉じる</button>
+        </div>
+
+        <div class="preview-sheet">
+            <div class="preview-sheet-title">見 積 依 頼 書</div>
+            <div class="preview-header">
+                <div>
+                    <div class="preview-recipient"><span id="admin-preview-company-name">-</span><span class="preview-suffix">御中</span></div>
+                    <div id="admin-preview-department" class="preview-muted"></div>
+                    <div id="admin-preview-contact-person" class="preview-muted"></div>
+                </div>
+                <div class="preview-meta">
+                    <div>No.：{{ mitsumori.document_no if mitsumori else document_no }}</div>
+                    <div>発行日：<span id="admin-preview-issue-date"></span></div>
+                    <div id="admin-preview-valid-row">有効期限：<span id="admin-preview-valid-until"></span></div>
+                </div>
+            </div>
+            <p class="preview-message">下記商品の見積りを依頼いたします。ご確認のほどよろしくお願いいたします。</p>
+            <div class="preview-amount-row">
+                <div class="preview-amount-box">
+                    <span>見積依頼金額</span>
+                    <strong id="admin-preview-total-main">¥0 (税込)</strong>
+                </div>
+                <div class="preview-sender-box">
+                    <strong>株式会社 開花</strong>
+                    <span>見積り依頼者</span>
+                    <span>件名：<span id="admin-preview-subject-inline"></span></span>
+                </div>
+            </div>
+            <table class="preview-items-table">
+                <thead>
+                    <tr>
+                        <th>No.</th>
+                        <th>商品名・内容</th>
+                        <th>数量</th>
+                        <th>単価</th>
+                        <th>金額(税込)</th>
+                    </tr>
+                </thead>
+                <tbody id="admin-preview-items-body"></tbody>
+            </table>
+            <div class="preview-footer">
+                <div class="preview-note-block">
+                    <strong>備考・条件：</strong>
+                    <div id="admin-preview-notes"></div>
+                </div>
+                <table class="preview-summary-table">
+                    <tr>
+                        <th>合計点数</th>
+                        <td id="admin-preview-item-count">0 点</td>
+                    </tr>
+                    <tr>
+                        <th>小計</th>
+                        <td id="admin-preview-subtotal">¥0</td>
+                    </tr>
+                    <tr class="preview-summary-total">
+                        <th>合計(税込)</th>
+                        <td id="admin-preview-total">¥0</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <div class="document-preview-actions">
+            <button type="button" class="btn btn-secondary" data-close-admin-preview>編集に戻る</button>
+            <button type="button" class="btn btn-primary" id="complete-admin-from-preview-btn">この内容で作成完了</button>
+        </div>
+    </div>
+</div>
+
+<style>
+.mitsumori-form {
+    width: min(1280px, 100%);
+    max-width: 100%;
+    margin: 0 auto;
+}
+
+.form-info-box {
+    background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%);
+    border: 1px solid #bfdbfe;
+    padding: 16px 20px;
+    border-radius: 12px;
+    margin-bottom: 20px;
+}
+
+.form-info-box p {
+    margin: 0;
+    color: #1d4ed8;
+    line-height: 1.7;
+}
+
+.source-info-box {
+    display: grid;
+    gap: 0.35rem;
+}
+
+.form-section {
+    background: #fff;
+    border-radius: 14px;
+    padding: 22px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.06);
+    border: 1px solid #e2e8f0;
+}
+
+.form-section h3 {
+    margin: 0 0 16px 0;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #60a5fa;
+    color: #0f172a;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.form-group.full-width {
+    grid-column: 1 / -1;
+}
+
+.form-group label {
+    font-weight: 600;
+    color: #334155;
+}
+
+.form-control {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 14px;
+    background: #fff;
+}
+
+.form-control.readonly {
+    background: #f8fafc;
+    color: #64748b;
+}
+
+.product-selector {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.product-selector label {
+    min-width: 88px;
+    font-weight: 600;
+    color: #334155;
+}
+
+.product-filter-select {
+    flex: 1 1 180px;
+    max-width: 260px;
+}
+
+.product-select-box {
+    flex: 1 1 320px;
+    min-width: 240px;
+}
+
+.source-filter-note {
+    color: #0f766e;
+    font-size: 0.88rem;
+    font-weight: 600;
+}
+
+.product-select-meta {
+    min-height: 22px;
+    margin-bottom: 10px;
+    color: #475569;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.product-select-meta img {
+    width: 48px;
+    height: 48px;
+    border-radius: 6px;
+    object-fit: cover;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+}
+
+.items-table {
+    width: 100%;
+    min-width: 760px;
+    border-collapse: collapse;
+}
+
+.items-table th,
+.items-table td {
+    border: 1px solid #e2e8f0;
+    padding: 10px;
+    vertical-align: middle;
+}
+
+.items-table th {
+    background: #f8fafc;
+    color: #334155;
+    font-size: 0.9rem;
+}
+
+.item-no,
+.row-amount,
+.text-right {
+    text-align: right;
+}
+
+.row-amount,
+#total-amount {
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.totals-row td {
+    background: #f8fafc;
+}
+
+.form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 24px;
+}
+
+.preview-check-section {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.preview-check-section p {
+    margin: 0;
+    color: #64748b;
+    line-height: 1.7;
+}
+
+.document-preview-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: none;
+}
+
+.document-preview-modal.open {
+    display: block;
+}
+
+.document-preview-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.64);
+}
+
+.document-preview-dialog {
+    position: relative;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    width: min(1120px, calc(100vw - 32px));
+    max-height: calc(100vh - 32px);
+    margin: 16px auto;
+    overflow: hidden;
+    border-radius: 22px;
+    background: #f8fafc;
+    box-shadow: 0 28px 80px rgba(15, 23, 42, 0.35);
+}
+
+.document-preview-toolbar,
+.document-preview-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    background: #fff;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.document-preview-actions {
+    justify-content: flex-end;
+    border-top: 1px solid #e2e8f0;
+    border-bottom: none;
+}
+
+.document-preview-toolbar h2 {
+    margin: 0.15rem 0 0;
+    color: #0f172a;
+    font-size: 1.2rem;
+}
+
+.preview-kicker {
+    color: #2563eb;
+    font-size: 0.78rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+}
+
+.preview-close-btn {
+    min-height: 36px;
+    padding: 0.45rem 0.8rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 999px;
+    background: #fff;
+    color: #475569;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.preview-sheet {
+    width: min(820px, calc(100% - 32px));
+    margin: 1rem auto;
+    padding: 32px;
+    overflow: auto;
+    background: #fff;
+    color: #111827;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+    font-size: 0.86rem;
+}
+
+.preview-sheet-title {
+    margin-bottom: 1.2rem;
+    padding-bottom: 0.65rem;
+    border-bottom: 2px solid #111827;
+    text-align: center;
+    font-size: 1.55rem;
+    font-weight: 900;
+    letter-spacing: 0.32em;
+}
+
+.preview-header,
+.preview-amount-row,
+.preview-footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 1.25rem;
+}
+
+.preview-recipient {
+    display: inline-block;
+    margin-bottom: 0.35rem;
+    padding-bottom: 0.25rem;
+    border-bottom: 1px solid #111827;
+    font-size: 1.1rem;
+    font-weight: 900;
+}
+
+.preview-suffix {
+    margin-left: 0.5rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.preview-muted,
+.preview-message,
+.preview-note-block {
+    color: #4b5563;
+}
+
+.preview-meta {
+    min-width: 220px;
+    text-align: right;
+    line-height: 1.8;
+}
+
+.preview-message {
+    margin: 1.2rem 0;
+    text-align: center;
+}
+
+.preview-amount-row {
+    align-items: stretch;
+    margin-bottom: 1.2rem;
+}
+
+.preview-amount-box,
+.preview-sender-box {
+    flex: 1;
+    display: grid;
+    gap: 0.35rem;
+    padding: 1rem;
+    border: 1px solid #d1d5db;
+    background: #f9fafb;
+}
+
+.preview-amount-box {
+    place-items: center;
+    border: 2px solid #111827;
+}
+
+.preview-amount-box span {
+    font-weight: 800;
+}
+
+.preview-amount-box strong {
+    color: #1d4ed8;
+    font-size: 1.45rem;
+}
+
+.preview-sender-box {
+    text-align: right;
+}
+
+.preview-items-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+}
+
+.preview-items-table th,
+.preview-items-table td,
+.preview-summary-table th,
+.preview-summary-table td {
+    padding: 0.48rem 0.55rem;
+    border: 1px solid #111827;
+}
+
+.preview-items-table th,
+.preview-summary-table th {
+    background: #f3f4f6;
+}
+
+.preview-items-table th {
+    text-align: center;
+}
+
+.preview-footer {
+    align-items: flex-start;
+    margin-top: 1rem;
+}
+
+.preview-note-block {
+    flex: 1;
+    min-height: 48px;
+    white-space: pre-wrap;
+}
+
+.preview-summary-table {
+    width: 320px;
+    border-collapse: collapse;
+}
+
+.preview-summary-table td {
+    text-align: right;
+}
+
+.preview-summary-total th,
+.preview-summary-total td {
+    font-weight: 900;
+}
+
+@media (max-width: 768px) {
+    .product-selector {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .product-selector label {
+        min-width: 0;
+    }
+
+    .table-responsive {
+        overflow: visible;
+        border: 0;
+        border-radius: 0;
+    }
+
+    .items-table,
+    .items-table thead,
+    .items-table tbody,
+    .items-table tfoot,
+    .items-table tr,
+    .items-table th,
+    .items-table td {
+        display: block;
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+    }
+
+    .items-table {
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+
+    .items-table thead {
+        display: none;
+    }
+
+    .items-table tbody {
+        display: grid;
+        gap: 0.75rem;
+    }
+
+    .items-table .item-row {
+        padding: 0.8rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        background: #fff;
+        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+    }
+
+    .items-table .item-row td {
+        display: grid;
+        grid-template-columns: 86px minmax(0, 1fr);
+        gap: 0.5rem;
+        align-items: center;
+        padding: 0.42rem 0;
+        border: 0;
+        text-align: left;
+    }
+
+    .items-table .item-row td::before {
+        color: #64748b;
+        font-size: 0.78rem;
+        font-weight: 800;
+    }
+
+    .items-table .item-row td:nth-child(1)::before {
+        content: "No.";
+    }
+
+    .items-table .item-row td:nth-child(2) {
+        grid-template-columns: 1fr;
+    }
+
+    .items-table .item-row td:nth-child(2)::before {
+        content: "商品名・内容";
+    }
+
+    .items-table .item-row td:nth-child(3)::before {
+        content: "数量";
+    }
+
+    .items-table .item-row td:nth-child(4)::before {
+        content: "単価";
+    }
+
+    .items-table .item-row td:nth-child(5)::before {
+        content: "金額";
+    }
+
+    .items-table .item-row td:nth-child(6)::before {
+        content: "操作";
+    }
+
+    .items-table .item-row .row-amount,
+    .items-table .item-row .item-no {
+        text-align: left;
+    }
+
+    .items-table tfoot {
+        margin-top: 0.75rem;
+    }
+
+    .items-table tfoot tr {
+        display: grid;
+        gap: 0.45rem;
+        padding: 0.85rem;
+        border-radius: 6px;
+        background: #eff6ff;
+    }
+
+    .items-table tfoot td {
+        padding: 0;
+        border: 0;
+        background: transparent;
+        text-align: left;
+    }
+
+    .items-table tfoot td:empty {
+        display: none;
+    }
+
+    .items-table tfoot .text-right,
+    #total-amount {
+        text-align: left;
+    }
+
+    .form-actions,
+    .preview-check-section,
+    .document-preview-toolbar,
+    .document-preview-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .preview-sheet {
+        width: calc(100% - 16px);
+        padding: 18px;
+    }
+
+    .preview-header,
+    .preview-amount-row,
+    .preview-footer {
+        flex-direction: column;
+    }
+
+    .preview-meta,
+    .preview-sender-box {
+        text-align: left;
+    }
+}
+</style>
+
+{% if is_kaika_scope %}
+<script src="{{ url_for('static', filename='js/kaika_document_product_picker.js') }}"></script>
+{% endif %}
+<script>
+const hasSourceRequest = {{ 'true' if has_source_request else 'false' }};
+const isKaikaScope = {{ is_kaika_scope|tojson }};
+const usesKaikaPicker = isKaikaScope && !hasSourceRequest;
+const sourceProducts = {{ source_request_products|default([], true)|tojson }};
+let targetUserId = {{ (target_user_id or 0)|int }};
+
+const itemsBody = document.getElementById('items-body');
+const productSelect = document.getElementById('product-select');
+const productSearchClient = document.getElementById('product-search-client');
+const productSearchUserId = document.getElementById('product-search-user-id');
+const productSearchName = document.getElementById('product-search-name');
+const productSelectMeta = document.getElementById('product-select-meta');
+const productFilter = document.getElementById('product-filter');
+const soldDaysFilter = document.getElementById('sold-days-filter');
+const clientSelect = document.getElementById('client-select');
+const targetUserHidden = document.getElementById('target_user_id');
+const targetUserDisplay = document.getElementById('target-user-display');
+const vendorSelect = document.getElementById('vendor_id');
+const adminForm = document.getElementById('admin-mitsumori-form');
+const adminPreviewModal = document.getElementById('admin-document-preview-modal');
+const openAdminPreviewButton = document.getElementById('open-admin-preview-btn');
+const completeAdminFromPreviewButton = document.getElementById('complete-admin-from-preview-btn');
+let kaikaProductPicker = null;
+
+function formatYen(value) {
+    const amount = Number(value || 0);
+    return `¥${amount.toLocaleString('ja-JP')}`;
+}
+
+function updateRowNumbers() {
+    document.querySelectorAll('#items-body .item-row').forEach((row, index) => {
+        const noCell = row.querySelector('.item-no');
+        if (noCell) {
+            noCell.textContent = index + 1;
+        }
+    });
+}
+
+function updateRowAmount(row) {
+    const quantity = Number(row.querySelector('input[name="quantity[]"]').value || 0);
+    const unitPrice = Number(row.querySelector('input[name="unit_price[]"]').value || 0);
+    row.querySelector('.row-amount').textContent = formatYen(quantity * unitPrice);
+}
+
+function updateTotalAmount() {
+    let total = 0;
+    document.querySelectorAll('#items-body .item-row').forEach((row) => {
+        const quantity = Number(row.querySelector('input[name="quantity[]"]').value || 0);
+        const unitPrice = Number(row.querySelector('input[name="unit_price[]"]').value || 0);
+        total += quantity * unitPrice;
+    });
+    document.getElementById('total-amount').textContent = formatYen(total);
+}
+
+function bindRowEvents(row) {
+    row.querySelectorAll('.calc-input').forEach((input) => {
+        input.addEventListener('input', () => {
+            updateRowAmount(row);
+            updateTotalAmount();
+        });
+    });
+
+    const removeButton = row.querySelector('.remove-row');
+    if (removeButton) {
+        removeButton.addEventListener('click', () => {
+            row.remove();
+            updateRowNumbers();
+            updateTotalAmount();
+        });
+    }
+
+    updateRowAmount(row);
+}
+
+function createRow(item = {}) {
+    const row = document.createElement('tr');
+    row.className = 'item-row';
+    row.innerHTML = `
+        <td class="item-no"></td>
+        <td>
+            <input type="text" name="item_name[]" class="form-control" required>
+            <input type="hidden" name="merchandise_id[]" value="">
+            <input type="hidden" name="unit[]" value="点">
+        </td>
+        <td><input type="number" name="quantity[]" class="form-control calc-input" min="1" value="1"></td>
+        <td><input type="number" name="unit_price[]" class="form-control calc-input" min="0" step="1" value="0"></td>
+        <td class="row-amount">¥0</td>
+        <td><button type="button" class="btn btn-danger btn-sm remove-row">削除</button></td>
+    `;
+
+    row.querySelector('input[name="item_name[]"]').value = item.item_name || item.product_name || '';
+    row.querySelector('input[name="merchandise_id[]"]').value = item.merchandise_id || item.id || '';
+    row.querySelector('input[name="quantity[]"]').value = item.quantity || 1;
+    row.querySelector('input[name="unit[]"]').value = item.unit || '点';
+    row.querySelector('input[name="unit_price[]"]').value = item.unit_price || item.purchase_price || item.listing_price || 0;
+
+    itemsBody.appendChild(row);
+    bindRowEvents(row);
+    updateRowNumbers();
+    updateTotalAmount();
+    return row;
+}
+
+function getExistingMerchandiseIds() {
+    return Array.from(document.querySelectorAll('input[name="merchandise_id[]"]'))
+        .map((input) => input.value)
+        .filter((value) => value);
+}
+
+function setProductMeta(option) {
+    if (!productSelectMeta) return;
+    productSelectMeta.innerHTML = '';
+    if (!option || !option.value) {
+        return;
+    }
+
+    const pieces = [];
+    if (option.dataset.kaikaProductCode) {
+        pieces.push(`管理番号: ${option.dataset.kaikaProductCode}`);
+    }
+    if (option.dataset.brandName) {
+        pieces.push(`ブランド: ${option.dataset.brandName}`);
+    }
+    if (option.dataset.unitPrice) {
+        pieces.push(`参考単価: ${formatYen(option.dataset.unitPrice)}`);
+    }
+    if (option.dataset.appraisalStatusLabel) {
+        pieces.push(`状態: ${option.dataset.appraisalStatusLabel}`);
+    }
+    if (option.dataset.photoUrl) {
+        const image = document.createElement('img');
+        image.src = option.dataset.photoUrl;
+        image.alt = '';
+        productSelectMeta.appendChild(image);
+    }
+    const text = document.createElement('span');
+    text.textContent = pieces.join(' / ');
+    productSelectMeta.appendChild(text);
+}
+
+function normalizeSearchText(value) {
+    return String(value || '').trim().toLowerCase();
+}
+
+function filterProductOptions(products) {
+    if (hasSourceRequest) return products;
+    const clientQuery = normalizeSearchText(productSearchClient?.value);
+    const userIdQuery = normalizeSearchText(productSearchUserId?.value);
+    const nameQuery = normalizeSearchText(productSearchName?.value);
+    return products.filter((product) => {
+        const clientName = normalizeSearchText(product.user_name || product.owner_name || '');
+        const userId = normalizeSearchText(product.user_id || '');
+        const productName = normalizeSearchText(`${product.product_name || ''} ${product.brand_name || ''} ${product.kaika_product_code || ''}`);
+        if (!isKaikaScope && clientQuery && !clientName.includes(clientQuery)) return false;
+        if (!isKaikaScope && userIdQuery && !userId.includes(userIdQuery)) return false;
+        if (nameQuery && !productName.includes(nameQuery)) return false;
+        return true;
+    });
+}
+
+let cachedProducts = [];
+
+function setProductOptions(products) {
+    if (usesKaikaPicker) {
+        kaikaProductPicker?.setProducts(products);
+        return;
+    }
+    productSelect.innerHTML = '<option value="">-- 商品を選択 --</option>';
+    filterProductOptions(products).forEach((product) => {
+        const option = document.createElement('option');
+        const code = product.kaika_product_code || '';
+        const labelParts = [product.product_name || `商品ID ${product.id}`];
+        if (product.brand_name) labelParts.push(product.brand_name);
+        if (code) labelParts.push(`管理番号 ${code}`);
+        option.value = product.id;
+        option.textContent = labelParts.join(' / ');
+        option.dataset.productName = product.product_name || '';
+        option.dataset.brandName = product.brand_name || '';
+        option.dataset.kaikaProductCode = code;
+        option.dataset.unitPrice = product.purchase_price || product.listing_price || 0;
+        option.dataset.appraisalStatusLabel = product.appraisal_status_label || '';
+        option.dataset.userName = product.user_name || '';
+        option.dataset.userId = product.user_id || '';
+        option.dataset.photoUrl = resolveProductPhotoUrl(product.photo_path || '');
+        productSelect.appendChild(option);
+    });
+    setProductMeta(productSelect.options[productSelect.selectedIndex]);
+}
+
+function resolveProductPhotoUrl(path) {
+    const value = String(path || '').replace(/\\/g, '/').trim();
+    if (!value) return '';
+    if (/^https?:\/\//.test(value)) return value;
+    const normalized = value.replace(/^\/+/, '').replace(/^static\//, '');
+    return `/static/${normalized}`;
+}
+
+async function loadProducts() {
+    if (hasSourceRequest) {
+        setProductOptions(sourceProducts);
+        return;
+    }
+
+    const params = new URLSearchParams();
+    params.set('exclude_used', '1');
+    if (isKaikaScope) {
+        params.set('scope', 'kaika');
+        params.set('inventory_only', '1');
+    } else {
+        params.set('scope', 'user');
+    }
+    if (targetUserId) {
+        params.set('user_id', String(targetUserId));
+    }
+
+    try {
+        const response = await fetch(`/api/admin/products?${params.toString()}`);
+        if (!response.ok) {
+            throw new Error(`商品APIがHTTP ${response.status}を返しました`);
+        }
+        const products = await response.json();
+        cachedProducts = Array.isArray(products) ? products : [];
+        setProductOptions(cachedProducts);
+    } catch (error) {
+        console.warn('商品一覧の取得に失敗しました', error);
+        cachedProducts = [];
+        if (usesKaikaPicker) {
+            kaikaProductPicker?.setLoadError('商品一覧の取得に失敗しました。ページを再読み込みしてください。');
+        } else if (productSelect) {
+            productSelect.innerHTML = '<option value="">商品取得に失敗しました</option>';
+            setProductMeta(null);
+        }
+    }
+}
+
+[productSearchClient, productSearchUserId, productSearchName].forEach((input) => {
+    if (!input) return;
+    input.addEventListener('input', () => setProductOptions(cachedProducts));
+});
+
+if (clientSelect) {
+    clientSelect.addEventListener('change', () => {
+        targetUserId = Number(clientSelect.value || 0);
+        if (targetUserHidden) {
+            targetUserHidden.value = targetUserId ? String(targetUserId) : '';
+        }
+        if (targetUserDisplay) {
+            targetUserDisplay.value = targetUserId ? String(targetUserId) : '';
+        }
+        if (productSearchUserId) {
+            productSearchUserId.value = targetUserId ? String(targetUserId) : '';
+        }
+        loadProducts();
+    });
+}
+
+if (vendorSelect) {
+    vendorSelect.addEventListener('change', () => {
+        const option = vendorSelect.options[vendorSelect.selectedIndex];
+        if (!option || !option.value) return;
+        const companyName = document.getElementById('company_name');
+        const contactPerson = document.getElementById('contact_person');
+        const address = document.getElementById('address');
+        if (companyName && !companyName.value) companyName.value = option.dataset.name || '';
+        if (contactPerson && !contactPerson.value) contactPerson.value = option.dataset.contact || '';
+        if (address && !address.value) address.value = option.dataset.address || '';
+    });
+}
+
+function addSelectedProduct() {
+    if (usesKaikaPicker) {
+        const product = kaikaProductPicker?.getSelected();
+        if (!product) {
+            alert('追加する開花商品を選択してください。');
+            return;
+        }
+        if (getExistingMerchandiseIds().includes(String(product.id))) {
+            alert('選択した商品はすでに追加済みです。');
+            return;
+        }
+        createRow({
+            id: product.id,
+            product_name: product.product_name || `商品ID ${product.id}`,
+            purchase_price: product.purchase_price || product.listing_price || 0
+        });
+        return;
+    }
+    const option = productSelect.options[productSelect.selectedIndex];
+    if (!option || !option.value) {
+        alert('追加する商品を選択してください。');
+        return;
+    }
+
+    if (getExistingMerchandiseIds().includes(option.value)) {
+        alert('選択した商品はすでに追加済みです。');
+        return;
+    }
+
+    createRow({
+        id: option.value,
+        product_name: option.dataset.productName || option.textContent,
+        purchase_price: option.dataset.unitPrice || 0
+    });
+}
+
+function setAdminPreviewText(id, value) {
+    const element = document.getElementById(id);
+    if (element) {
+        element.textContent = value || '';
+    }
+}
+
+function collectAdminPreviewData() {
+    const rows = [];
+    document.querySelectorAll('#items-body .item-row').forEach((row) => {
+        const itemName = row.querySelector('input[name="item_name[]"]')?.value.trim() || '';
+        if (!itemName) {
+            return;
+        }
+        const quantity = Number(row.querySelector('input[name="quantity[]"]')?.value || 0) || 1;
+        const unitPrice = Number(row.querySelector('input[name="unit_price[]"]')?.value || 0);
+        rows.push({
+            itemName,
+            quantity,
+            unitPrice,
+            amount: quantity * unitPrice
+        });
+    });
+
+    const total = rows.reduce((sum, row) => sum + row.amount, 0);
+    return {
+        issueDate: document.getElementById('issue_date')?.value || '',
+        validUntil: document.getElementById('valid_until')?.value || '',
+        companyName: document.getElementById('company_name')?.value || '-',
+        department: document.getElementById('department')?.value || '',
+        contactPerson: document.getElementById('contact_person')?.value || '',
+        subject: document.getElementById('subject')?.value || '見積依頼書',
+        notes: document.querySelector('textarea[name="notes"]')?.value || '',
+        rows,
+        total
+    };
+}
+
+function renderAdminPreview(data) {
+    setAdminPreviewText('admin-preview-company-name', data.companyName);
+    setAdminPreviewText('admin-preview-department', data.department);
+    setAdminPreviewText('admin-preview-contact-person', data.contactPerson ? `${data.contactPerson} 様` : '');
+    setAdminPreviewText('admin-preview-issue-date', data.issueDate || '-');
+    setAdminPreviewText('admin-preview-valid-until', data.validUntil || '-');
+    setAdminPreviewText('admin-preview-subject-inline', data.subject);
+    setAdminPreviewText('admin-preview-notes', data.notes || 'なし');
+    setAdminPreviewText('admin-preview-total-main', `${formatYen(data.total)} (税込)`);
+    setAdminPreviewText('admin-preview-item-count', `${data.rows.reduce((total, row) => total + row.quantity, 0)} 点`);
+    setAdminPreviewText('admin-preview-subtotal', formatYen(data.total));
+    setAdminPreviewText('admin-preview-total', formatYen(data.total));
+
+    const validRow = document.getElementById('admin-preview-valid-row');
+    if (validRow) {
+        validRow.style.display = data.validUntil ? '' : 'none';
+    }
+
+    const body = document.getElementById('admin-preview-items-body');
+    body.innerHTML = '';
+    const visibleRows = Math.max(8, data.rows.length);
+    for (let index = 0; index < visibleRows; index += 1) {
+        const item = data.rows[index];
+        const row = document.createElement('tr');
+        const values = item
+            ? [index + 1, item.itemName, item.quantity, formatYen(item.unitPrice), formatYen(item.amount)]
+            : [index + 1, '', '', '', ''];
+        values.forEach((value, valueIndex) => {
+            const cell = document.createElement('td');
+            cell.textContent = value;
+            if ([0, 2, 3, 4].includes(valueIndex)) {
+                cell.classList.add(valueIndex >= 3 ? 'text-right' : 'text-center');
+            }
+            row.appendChild(cell);
+        });
+        body.appendChild(row);
+    }
+}
+
+function validateAdminBeforePreview() {
+    if (!adminForm.reportValidity()) {
+        return false;
+    }
+    const data = collectAdminPreviewData();
+    if (data.rows.length === 0) {
+        alert('商品名・内容を1件以上入力してください。');
+        return false;
+    }
+    return data;
+}
+
+function openAdminPreview() {
+    const data = validateAdminBeforePreview();
+    if (!data) {
+        return;
+    }
+    renderAdminPreview(data);
+    adminPreviewModal.classList.add('open');
+    adminPreviewModal.setAttribute('aria-hidden', 'false');
+}
+
+function closeAdminPreview() {
+    adminPreviewModal.classList.remove('open');
+    adminPreviewModal.setAttribute('aria-hidden', 'true');
+}
+
+function submitAdminCompletedFromPreview() {
+    const data = validateAdminBeforePreview();
+    if (!data) {
+        closeAdminPreview();
+        return;
+    }
+    adminForm.querySelectorAll('input[data-preview-status]').forEach((input) => input.remove());
+    const statusInput = document.createElement('input');
+    statusInput.type = 'hidden';
+    statusInput.name = 'status';
+    statusInput.value = 'completed';
+    statusInput.dataset.previewStatus = 'true';
+    adminForm.appendChild(statusInput);
+    adminForm.submit();
+}
+
+document.getElementById('add-row').addEventListener('click', () => {
+    createRow();
+});
+
+document.getElementById('add-product-btn').addEventListener('click', addSelectedProduct);
+
+openAdminPreviewButton.addEventListener('click', openAdminPreview);
+completeAdminFromPreviewButton.addEventListener('click', submitAdminCompletedFromPreview);
+document.querySelectorAll('[data-close-admin-preview]').forEach((button) => {
+    button.addEventListener('click', closeAdminPreview);
+});
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && adminPreviewModal.classList.contains('open')) {
+        closeAdminPreview();
+    }
+});
+
+if (productSelect) {
+    productSelect.addEventListener('change', () => {
+        setProductMeta(productSelect.options[productSelect.selectedIndex]);
+    });
+}
+
+if (productFilter) {
+    productFilter.addEventListener('change', () => {
+        if (productFilter.value !== 'sold' && soldDaysFilter) {
+            soldDaysFilter.value = '';
+        }
+        loadProducts();
+    });
+}
+
+if (soldDaysFilter) {
+    soldDaysFilter.addEventListener('change', loadProducts);
+}
+
+document.querySelectorAll('#items-body .item-row').forEach(bindRowEvents);
+updateRowNumbers();
+updateTotalAmount();
+if (usesKaikaPicker) {
+    kaikaProductPicker = window.KaikaDocumentProductPicker.mount('#mitsumori-kaika-product-picker');
+}
+loadProducts().then(() => {
+    if (hasSourceRequest && !document.querySelector('#items-body .item-row') && sourceProducts.length) {
+        sourceProducts.forEach((product) => createRow(product));
+    }
+});
+</script>
+{% endblock %}

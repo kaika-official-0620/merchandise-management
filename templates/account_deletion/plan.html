@@ -1,0 +1,43 @@
+<section class="ad-card" aria-labelledby="erasure-plan-heading">
+<h2 id="erasure-plan-heading">削除・保持の計画</h2>
+<p>不要な個人情報の削除と、商品の返送・精算・必要な取引記録の保存を分けて管理します。ここでは方針案と根拠を保存し、実データを消去しません。</p>
+{% if not erasure_ready %}
+<p class="ad-notice">削除計画の検証用データ構造は未適用です。既存の申請・確認機能は引き続き利用できます。</p>
+{% elif not erasure_plan %}
+{% if row.state in ['requested','reviewing','erasure_pending'] %}
+<form method="post" action="{{ url_for('account_lifecycle.erasure_prepare',customer_id=row.customer_id) }}">
+<input type="hidden" name="registry_csrf" value="{{ csrf }}"><input type="hidden" name="operation_token" value="{{ erasure_prepare_token }}"><input type="hidden" name="request_id" value="{{ row.request_id }}">
+<p>個人情報の本文をコピーせず、関連データの件数と未確認の区分を調査します。</p>
+<label for="plan-password">スタッフの現在のパスワード</label><input id="plan-password" type="password" name="password" autocomplete="current-password" maxlength="1024" required>
+<button class="ad-button">削除計画の下書きを作る</button></form>
+{% endif %}
+{% else %}
+<p class="ad-notice">下書きです。保存理由・期限の案があっても法的確認済みとは判定しません。未分類・外部サービス・バックアップを含めた削除完了の判定は未実装です。</p>
+<p>計画版：{{ erasure_plan.revision }}。未確定：{{ erasure_plan.unresolved|length }}項目。</p>
+<div class="ad-scroll" tabindex="0" role="region" aria-label="削除と保持の方針案">
+<table><thead><tr><th>対象</th><th>方針案</th><th>理由・根拠</th><th>保持期限</th></tr></thead><tbody>
+{% for key,label in erasure_tasks.items() %}{% set d=erasure_plan.decisions.get(key) %}<tr><th>{{ label }}</th><td>{{ erasure_actions.get(d.action,'未確定') if d else '未確定' }}</td><td>{% if d %}{{ d.reason }}<br>{{ d.reference }}{% else %}要確認{% endif %}</td><td>{{ d.retain_until or '—' if d else '—' }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% if erasure_plan.fixture_result %}<p class="ad-notice">架空データの一部消去を検証済みです。実顧客の削除完了ではありません。写真・外部サービス・保存が必要な記録等は別に確認します。</p>{% endif %}
+{% if erasure_plan.editable %}
+<form method="post" action="{{ url_for('account_lifecycle.erasure_decide',customer_id=row.customer_id) }}">
+<h3>方針案を記録する</h3>
+<input type="hidden" name="registry_csrf" value="{{ csrf }}"><input type="hidden" name="operation_token" value="{{ erasure_decide_token }}"><input type="hidden" name="request_id" value="{{ row.request_id }}"><input type="hidden" name="revision" value="{{ erasure_plan.revision }}">
+<label for="plan-task">対象</label><select id="plan-task" name="task_key" required>{% for key,label in erasure_tasks.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select>
+<label for="plan-action">方針案</label><select id="plan-action" name="action" required>{% for key,label in erasure_actions.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select>
+<label for="plan-reason">理由（個人情報の本文は記載しない）</label><textarea id="plan-reason" name="reason" maxlength="600"></textarea>
+<label for="plan-reference">確認記録の参照</label><input id="plan-reference" name="reference" maxlength="200">
+<label for="plan-until">保持期限（保持する案の場合のみ）</label><input id="plan-until" name="retain_until" type="date">
+<p class="ad-muted">期限を決められない項目は「未確定」にします。商品・資金・契約や未分類の記録の一括削除は選べません。</p>
+<label for="decision-password">スタッフの現在のパスワード</label><input id="decision-password" type="password" name="password" autocomplete="current-password" maxlength="1024" required>
+<button class="ad-button">方針案を保存する</button></form>
+{% endif %}
+<h3>間接的に関連するデータの調査</h3>
+<p>作成時点の調査です。写真ファイルの存在・外部サービス・バックアップの内容・JSON内の個人情報をすべて確認した一覧ではありません。未集計と0件を区別します。</p>
+<div class="ad-scroll" tabindex="0" role="region" aria-label="関連するデータの調査">
+<table><thead><tr><th>区分</th><th>関連件数</th><th>対応</th></tr></thead><tbody>
+{% set action_labels={'review_and_minimize':'確認して必要最小限へ','revoke_then_review':'認証失効と削除範囲を確認','suppress_then_review':'通知停止と削除範囲を確認','retain_pending_policy':'保持理由・期限を確認','shared_not_customer_erasure':'共通データ。個別削除対象外','manual_scope_review':'関連範囲を確認'} %}
+{% for group in erasure_plan.inventory.groups %}<tr><th>{{ group.label }}</th><td>{{ group.record_count if group.record_count is not none else '未集計あり' }}</td><td>{{ action_labels.get(group.action,'個別に確認が必要') }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% endif %}
+</section>

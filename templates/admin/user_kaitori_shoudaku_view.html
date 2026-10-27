@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block title %}買取依頼書詳細 - 株式会社 開花{% endblock %}
+
+{% block content %}
+{% include "admin/_document_detail_styles.html" %}
+{% set total_amount = kaitori.total_amount|default(0, true) or 0 %}
+
+<div class="admin-doc-page">
+    <div class="admin-doc-toolbar">
+        <div>
+            <h1>買取依頼書</h1>
+            <p>クライアントから届いた買取依頼書です。受付内容と商品明細を確認できます。</p>
+        </div>
+        <div class="admin-doc-actions">
+            <a href="{{ url_for('admin_documents_history') }}" class="doc-btn doc-btn-secondary context-back-inline">書類履歴へ戻る</a>
+            {% if can_edit_final_documents() %}
+            <a href="{{ url_for('admin_final_document_edit', document_kind='user_kaitori_shoudaku', document_id=kaitori.id) }}" class="doc-btn doc-btn-primary">&#20462;&#27491;</a>
+            {% endif %}
+            <a href="{{ url_for('user_kaitori_shoudaku_download', id=kaitori.id) }}" class="doc-btn doc-btn-csv js-csv-download" download>CSV</a>
+            <a href="{{ url_for('admin_user_kaitori_shoudaku_pdf', id=kaitori.id) }}" class="doc-btn doc-btn-pdf" target="_blank" rel="noopener">PDF</a>
+        </div>
+    </div>
+
+    <article class="admin-doc-sheet">
+        <header class="admin-doc-hero">
+            <div>
+                <div class="admin-doc-kicker">クライアントから受付</div>
+                <h2 class="admin-doc-title">買取依頼書</h2>
+                <p class="admin-doc-no">{{ kaitori.document_no or '-' }}</p>
+            </div>
+            <div class="admin-doc-status">
+                <span class="status-badge status-{{ kaitori.status or 'draft' }}">
+                    {% if kaitori.status == 'approved' %}承認済み
+                    {% elif kaitori.status == 'completed' %}完了
+                    {% elif kaitori.status in ['sent', 'submitted'] %}送信済み
+                    {% elif kaitori.status == 'rejected' %}差し戻し
+                    {% else %}下書き{% endif %}
+                </span>
+                <span class="admin-doc-sub">発行日: {{ kaitori.issue_date or '-' }}</span>
+            </div>
+        </header>
+
+        <div class="admin-doc-body">
+            <div class="admin-doc-info-grid">
+                <section class="admin-doc-card">
+                    <h2>クライアント情報</h2>
+                    <dl class="admin-doc-dl">
+                        <div>
+                            <dt>クライアント名</dt>
+                            <dd>{{ kaitori.user_name or kaitori.username or '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt>ユーザーID</dt>
+                            <dd>{{ kaitori.user_id or '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt>更新日時</dt>
+                            <dd>{{ kaitori.updated_at or kaitori.created_at or '-' }}</dd>
+                        </div>
+                    </dl>
+                </section>
+
+                <section class="admin-doc-card">
+                    <h2>送付・支払情報</h2>
+                    <dl class="admin-doc-dl">
+                        <div>
+                            <dt>宛名</dt>
+                            <dd>{{ kaitori.customer_name or '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt>住所</dt>
+                            <dd>{{ kaitori.customer_address or '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt>電話番号</dt>
+                            <dd>{{ kaitori.customer_phone or '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt>支払方法</dt>
+                            <dd>{{ kaitori.payment_method or '-' }}</dd>
+                        </div>
+                    </dl>
+                </section>
+            </div>
+
+            {% if kaitori.status == 'cancelled' %}
+            <section class="admin-doc-notes is-cancelled">
+                <h2>&#21462;&#28040;&#28168;&#12415;</h2>
+                <div class="admin-doc-notes-body">{{ kaitori.cancel_reason or '-' }}</div>
+            </section>
+            {% elif can_cancel_documents() %}
+            <section class="admin-doc-cancel-panel">
+                <h2>&#26360;&#39006;&#21462;&#28040;</h2>
+                <form method="POST" action="{{ url_for('admin_cancel_final_document', document_kind='user_kaitori_shoudaku', document_id=kaitori.id) }}" onsubmit="return confirm('&#12371;&#12398;&#26360;&#39006;&#12434;&#21462;&#28040;&#28168;&#12415;&#12395;&#12375;&#12414;&#12377;&#12363;&#65311;');">
+                    <textarea name="reason" rows="3" required placeholder="&#21462;&#28040;&#29702;&#30001;"></textarea>
+                    <button type="submit" class="doc-btn doc-btn-danger">&#21462;&#28040;&#12377;&#12427;</button>
+                </form>
+            </section>
+            {% endif %}
+
+            <div class="admin-doc-total">
+                <span>希望・申請合計金額</span>
+                <strong>¥{{ "{:,}".format(total_amount) }}</strong>
+            </div>
+
+            <section class="admin-doc-section">
+                <div class="admin-doc-section-head">
+                    <h2>商品明細</h2>
+                    <strong>{{ items|length }}件</strong>
+                </div>
+                <div class="table-scroll">
+                    <table class="admin-doc-table">
+                        <thead>
+                            <tr>
+                                <th>No.</th>
+                                <th>商品名</th>
+                                <th>ブランド</th>
+                                <th>状態</th>
+                                <th>数量</th>
+                                <th>単価</th>
+                                <th>金額</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in items %}
+                            <tr>
+                                <td>{{ item.item_no or loop.index }}</td>
+                                <td>{{ item.product_name or '-' }}</td>
+                                <td>{{ item.brand_name or '-' }}</td>
+                                <td>{{ item.condition or item.item_condition or '-' }}</td>
+                                <td class="text-right">{{ item.quantity or 1 }}</td>
+                                <td class="text-right">¥{{ "{:,}".format(item.unit_price or 0) }}</td>
+                                <td class="text-right">¥{{ "{:,}".format(item.amount or 0) }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="7" class="admin-doc-empty">明細はまだ登録されていません。</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            {% if kaitori.notes %}
+            <section class="admin-doc-notes">
+                <h2>備考</h2>
+                <div class="admin-doc-notes-body">{{ kaitori.notes }}</div>
+            </section>
+            {% endif %}
+
+            {% set final_document_kind = 'user_kaitori_shoudaku' %}
+            {% set final_document_id = kaitori.id %}
+            {% include "admin/_final_document_event_history.html" %}
+        </div>
+    </article>
+</div>
+{% endblock %}

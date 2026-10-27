@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% block title %}{% block deletion_title %}アカウントとデータの削除について{% endblock %} - 開花{% endblock %}
+{% block content %}
+<style>
+.account-deletion{max-width:1000px;margin:1.5rem auto;line-height:1.75;overflow-wrap:anywhere}.account-deletion .ad-card{background:#fff;border:1px solid #dce3ea;border-radius:12px;padding:1.3rem;margin:1rem 0}.account-deletion .ad-notice{background:#fff7de;border-left:4px solid #b7791f;padding:1rem}.account-deletion .ad-muted{color:#53667a;font-size:.92rem}.account-deletion .ad-scroll{overflow-x:auto}.account-deletion table{width:100%;min-width:600px;border-collapse:collapse}.account-deletion th,.account-deletion td{text-align:left;padding:.7rem;vertical-align:top;border-bottom:1px solid #dce3ea}.account-deletion caption{text-align:left;font-weight:600;margin-bottom:.6rem}.account-deletion label{display:block;margin-top:1rem}.account-deletion input:not([type=checkbox]),.account-deletion textarea,.account-deletion select{display:block;width:100%;padding:.65rem;border:1px solid #8498ab;border-radius:5px;box-sizing:border-box;font:inherit}.account-deletion textarea{min-height:100px}.account-deletion input[type=checkbox]{width:20px;height:20px;vertical-align:middle;margin-right:.5rem}.account-deletion .ad-button{display:inline-flex;align-items:center;justify-content:center;min-height:44px;box-sizing:border-box;padding:.65rem 1rem;margin:.7rem .5rem .3rem 0;border:1px solid #246354;border-radius:6px;background:#246354;color:#fff;text-decoration:none;font:inherit;cursor:pointer}.account-deletion .ad-secondary{background:#fff;color:#246354}.account-deletion a:focus-visible,.account-deletion button:focus-visible,.account-deletion input:focus-visible,.account-deletion textarea:focus-visible,.account-deletion select:focus-visible,.account-deletion .ad-scroll:focus-visible{outline:3px solid #2563eb;outline-offset:3px}.account-deletion dt{font-weight:600;margin-top:.6rem}.account-deletion dd{margin-left:0;white-space:pre-wrap}.account-deletion .ad-preserve{white-space:pre-wrap}.account-deletion nav{display:flex;flex-wrap:wrap;gap:1rem}.account-deletion code{overflow-wrap:anywhere}@media(max-width:680px){.account-deletion .ad-card{padding:.9rem}.account-deletion .ad-button{width:100%;margin-right:0}}
+</style>
+<section class="account-deletion" aria-labelledby="deletion-heading">
+{% block deletion_content %}
+<h1 id="deletion-heading">アカウントとデータの削除について</h1>
+<p>株式会社開花のアカウントと、そのアカウントに関連するデータの削除を申請するための案内です。この案内はログインせずに確認できます。</p>
+<p class="ad-notice">現在は検証環境向けの申請・確認機能です。実顧客のデータを削除する処理は有効にしていません。申請の受付や利用停止だけで、データの削除が完了したことにはなりません。</p>
+<div class="ad-card">
+  <h2>申請の流れ</h2>
+  <ol>
+    <li>このページの入口、またはアプリの「アカウント設定とページの操作」から削除申請の画面を開きます。Webからも手続きでき、アプリの再インストールは不要です。</li>
+    <li>ご本人のアカウントでログインし、説明を確認して、パスワードで本人確認を行います。</li>
+    <li>申請後は受付状態と開花からの案内を同じ画面で確認できます。処理開始前の申請は、この画面から取り下げられます。</li>
+  </ol>
+  {% if enabled %}
+  <a class="ad-button" href="{{ url_for('account_lifecycle.page') }}">ログインして削除申請へ</a>
+  {% else %}
+  <p class="ad-notice">削除申請の受付機能は準備中です。現在、このページから本番の削除申請を受け付けることはできません。</p>
+  {% endif %}
+</div>
+<div class="ad-card">
+  <h2>商品・売上・請求が残っている場合</h2>
+  <p>預かり商品、未発送の商品、未精算の売上や未払請求があっても申請できます。返送や精算などの対応を確認し、必要な手続きと削除の対象を案内します。削除申請だけで商品の処分、残高の放棄、請求の免除を行うことはありません。</p>
+  <h2>有料プランの解約は別の手続きです</h2>
+  <p>削除申請だけでは、Apple・Google・Web等で契約した継続課金は解約されません。現在の購入元と契約を確認し、購入元の管理画面で解約してください。解約済みであることを削除申請の受付条件にはしません。</p>
+</div>
+<div class="ad-card">
+  <h2>削除する情報・保持する情報</h2>
+  <p>アカウント情報、商品写真・添付ファイル、通知先、決済などの外部サービス、バックアップを含めて確認します。取引・契約等で保持が必要な情報は、対象・理由・保持期間を明示する必要があります。</p>
+  <p>不要になった個人情報の削除と、商品の返送・精算・必要な取引記録の保存は分けて確認します。完了連絡は、希望する方の本人確認済みメールへ1回送る方針です。通常通知とは別に同意を取り、その連絡のために宛先1件を一時的に保持します。</p>
+  <p class="ad-notice">削除・保持の詳細、削除完了までの期間、メールの送信元、問い合わせ窓口はまだ決まっていません。実際のメール送信・実データ削除の完了処理は有効にしていません。ログインできない場合や確認済みメールを使えない場合の確認方法も準備中です。</p>
+  <p>アプリを端末から削除しても、サーバー上のアカウントや継続課金は削除・解約されません。また、ご自身で他のアプリや端末へ保存した帳票・写真のコピーは、開花側の処理では消せません。</p>
+</div>
+{% endblock %}
+</section>
+{% endblock %}

@@ -1,0 +1,6 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>開花 テスト決済</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:auto;padding:24px;background:#f7f9fb;color:#16263b}a{color:#185c79}section,article,form.card{background:white;border:1px solid #dce3eb;border-radius:12px;padding:18px;margin:16px 0}label{display:block;margin:12px 0}button{padding:12px 18px;border-radius:8px;border:0;background:#145b69;color:white;cursor:pointer}input,select{padding:10px;max-width:100%;box-sizing:border-box}p{line-height:1.7}.notice{padding:14px;background:#fff1cc}.muted{color:#526377}form{margin:12px 0}table{border-collapse:collapse;width:100%}td,th{padding:9px;border-bottom:1px solid #ddd;text-align:left}</style></head><body>
+<nav><a href="/payments">月額・現物料金</a> ／ <a href="{{ url_for('sandbox_payments.index') }}">テスト決済一覧</a></nav>
+<p class="notice">検証専用です。テスト用カードだけで操作し、実際のカード番号は入力しないでください。本番の請求・入金・利用権には反映しません。</p>
+{% macro tokens(purpose,target='') %}<input type="hidden" name="registry_csrf" value="{{ stage9_csrf() }}"><input type="hidden" name="operation_token" value="{{ stage9_operation(purpose,target) }}">{% endmacro %}
+{% block content %}{% endblock %}</body></html>

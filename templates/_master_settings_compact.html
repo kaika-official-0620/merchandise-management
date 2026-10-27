@@ -1,0 +1,407 @@
+{% set active_brand_query = request.args.get('brand_query', brand_query|default(''))|trim %}
+{% set active_category_query = request.args.get('category_query', category_query|default(''))|trim %}
+{% set active_brand_category_filter = request.args.get('brand_category_filter', brand_category_filter|default(''))|trim %}
+{% set default_master_tab = 'categories' if active_category_query and not active_brand_query and not active_brand_category_filter else 'brands' %}
+
+<style>
+.master-shell{display:grid;grid-template-columns:minmax(0,1fr);gap:1.5rem;min-width:0}
+.master-tabs{display:flex;gap:0;overflow-x:auto;border-bottom:2px solid var(--border)}
+.master-shell > *, .master-card-header, .master-toolbar, .master-filter-row{min-width:0}
+.master-tab{padding:.75rem 1.2rem;background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;color:var(--text-secondary);font-weight:500;white-space:nowrap;cursor:pointer}
+.master-tab.active{color:var(--primary);border-bottom-color:var(--primary)}
+.master-panel{display:none;min-width:0 !important;width:100%;max-width:100%}
+.master-panel.active{display:block}
+.master-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);min-width:0 !important;width:100%;max-width:100%}
+.master-card-header,.master-toolbar{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;padding:1rem 1.25rem}
+.master-card-header{border-bottom:1px solid var(--border);background:var(--bg-main)}
+.master-toolbar{border-bottom:1px solid var(--border);background:rgba(248,250,252,.7);justify-content:flex-start}
+.master-card-header h3{margin:0;font-size:1rem}
+.master-search{display:flex;gap:.85rem;align-items:center;flex-wrap:wrap;justify-content:flex-start;flex:1 1 760px}
+.master-search input{min-width:460px;flex:1 1 560px;max-width:720px;min-height:46px;padding:.8rem .95rem}
+.master-search select{min-width:240px;flex:0 0 240px;min-height:46px;padding:.75rem .9rem}
+.master-search .btn{min-height:46px;padding:.72rem 1.05rem}
+.master-badge{display:inline-flex;align-items:center;padding:.2rem .55rem;margin-left:.5rem;border-radius:999px;background:#e0f2fe;color:#0369a1;font-size:.75rem;font-weight:700}
+.master-filter-row{display:flex;gap:.6rem;flex-wrap:wrap;padding:.85rem 1.25rem 1rem;border-bottom:1px solid var(--border);background:rgba(248,250,252,.74)}
+.master-filter-chip{display:inline-flex;align-items:center;justify-content:center;padding:.5rem 1rem;border:1px solid #d7dfeb;border-radius:999px;background:#eef2f7;color:var(--text-secondary);font-size:.82rem;font-weight:500;text-decoration:none;line-height:1.2;transition:all .18s ease}
+.master-filter-chip:hover{border-color:#93c5fd;background:#eff6ff;color:#1d4ed8}
+.master-filter-chip.active{border-color:var(--primary);color:var(--primary);background:rgba(59,130,246,.08);font-weight:600}
+.master-table-wrap{max-width:100%;position:relative}
+.table-container.master-table-wrap{width:100%;max-width:100%;min-width:0;background:#fff;border-radius:10px;overflow-x:auto;overflow-y:hidden;box-shadow:0 2px 10px rgba(0,0,0,.08)}
+.table-container.master-table-wrap .table-scroll{width:max-content;min-width:100%}
+.master-table{width:100%;border-collapse:collapse}
+.master-table--brands{min-width:1260px}
+.master-table--simple{min-width:860px}
+.master-table th,.master-table td{padding:.72rem .88rem;border-bottom:1px solid var(--border);text-align:left;vertical-align:top}
+.master-table th{background:var(--bg-main);font-size:.85rem;color:var(--text-secondary)}
+.master-table tr:last-child td{border-bottom:none}
+.master-table th,.master-table td{word-break:normal;overflow-wrap:anywhere}
+.master-table--brands th:nth-last-child(-n+3),.master-table--brands td:nth-last-child(-n+3){white-space:nowrap;text-align:center}
+.master-table--brands th:nth-child(1),.master-table--brands td:nth-child(1){min-width:165px}
+.master-table--brands th:nth-child(2),.master-table--brands td:nth-child(2){min-width:145px}
+.master-table--brands th:nth-child(3),.master-table--brands td:nth-child(3){min-width:550px}
+.master-table--brands th:nth-child(4),.master-table--brands td:nth-child(4){min-width:90px}
+.master-table--brands th:nth-child(5),.master-table--brands td:nth-child(5){min-width:80px}
+.master-table--brands th:nth-child(6),.master-table--brands td:nth-child(6){min-width:100px}
+.master-text{display:inline-block;max-width:440px;color:var(--text-muted);font-size:.8rem;line-height:1.65;word-break:break-word;white-space:normal}
+.master-text--clamp{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;max-height:calc(1.65em * 2)}
+.master-meta-group{display:grid;gap:.42rem;max-width:560px}
+.master-meta-section{display:grid;gap:.22rem}
+.master-meta-label{font-size:.71rem;font-weight:700;color:var(--text-secondary);letter-spacing:.01em}
+.master-meta-grid{display:grid;gap:.16rem .36rem}
+.master-meta-grid--aliases{grid-template-columns:repeat(6,minmax(0,1fr))}
+.master-meta-grid--keywords{grid-template-columns:repeat(5,minmax(0,1fr))}
+.master-meta-item{display:block;font-size:.76rem;line-height:1.3;color:var(--text-secondary);white-space:normal;word-break:break-word;letter-spacing:-.025em}
+.master-meta-item--empty{grid-column:1 / -1;color:var(--text-muted)}
+.master-brand-name{font-size:.9rem;line-height:1.3;letter-spacing:-.02em}
+.master-section-note{font-size:.78rem;color:var(--text-muted)}
+.edit-form{display:none;padding:1rem;background:#fffbeb;border-top:1px solid #fcd34d}
+.edit-form.show{display:block}
+.form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;align-items:end}
+.form-grid .form-group{margin:0}
+.edit-form-footer{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-top:1rem}
+.master-active-toggle{display:inline-flex;align-items:center;gap:.7rem;padding:.75rem 1rem;border:1px solid #bfdbfe;border-radius:12px;background:#eff6ff;color:#1d4ed8;font-size:.92rem;font-weight:600;cursor:pointer;min-height:48px}
+.master-active-toggle input{width:18px;height:18px;accent-color:#2563eb}
+.master-edit-actions{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;justify-content:flex-end}
+.master-edit-actions .btn{min-width:92px}
+.add-form{padding:1.25rem;background:#f0f9ff;border-top:1px solid var(--border)}
+.add-form h4{margin:0 0 1rem 0;font-size:.9rem;color:var(--primary)}
+.btn-edit-toggle{background:var(--info);color:#fff;padding:.25rem .5rem;font-size:.75rem}
+.btn-delete{background:var(--danger);color:#fff;padding:.25rem .5rem;font-size:.75rem}
+.status-active{color:var(--success)}
+.status-inactive{color:var(--text-muted)}
+@media (max-width:1080px){.master-meta-grid--aliases{grid-template-columns:repeat(3,minmax(0,1fr))}.master-meta-grid--keywords{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:768px){.master-card-header,.master-toolbar{flex-direction:column;align-items:stretch}.master-search{justify-content:flex-start}.master-search input{min-width:100%;max-width:none}.master-search select{min-width:100%;flex:1 1 100%}.master-table--brands{min-width:920px}.master-table--simple{min-width:680px}.edit-form-footer{flex-direction:column;align-items:stretch}.master-edit-actions{justify-content:flex-start}.master-meta-grid--aliases,.master-meta-grid--keywords{grid-template-columns:1fr}}
+</style>
+
+<div class="master-shell">
+<div class="page-header">
+    <h1 class="page-title">{{ page_title }}{% if page_badge %}<span class="master-badge">{{ page_badge }}</span>{% endif %}</h1>
+    {% if page_subtitle %}<p style="color:var(--text-secondary);margin-top:.5rem;">{{ page_subtitle }}</p>{% endif %}
+</div>
+
+<div class="master-tabs">
+    <button type="button" class="master-tab {% if default_master_tab == 'brands' %}active{% endif %}" onclick="showMasterTab('brands', this)">ブランド名</button>
+    <button type="button" class="master-tab {% if default_master_tab == 'categories' %}active{% endif %}" onclick="showMasterTab('categories', this)">ブランドカテゴリー</button>
+    <button type="button" class="master-tab {% if default_master_tab == 'conditions' %}active{% endif %}" onclick="showMasterTab('conditions', this)">商品状態</button>
+</div>
+
+<div id="panel-brands" class="master-panel {% if default_master_tab == 'brands' %}active{% endif %}">
+    <div class="master-card">
+        <div class="master-toolbar">
+            <form method="GET" action="{{ url_for(search_endpoint) }}" class="master-search">
+                <input type="hidden" name="category_query" value="{{ active_category_query }}">
+                <input type="text" name="brand_query" value="{{ active_brand_query }}" placeholder="ブランド名・英字・別名・代表ライン名で検索　例: ルイヴィトン / Louis Vuitton / オンザゴー">
+                <select name="brand_category_filter">
+                    <option value="">すべてのブランドカテゴリー</option>
+                    {% for cat in brand_categories %}
+                    <option value="{{ cat.id }}" {% if active_brand_category_filter == (cat.id|string) %}selected{% endif %}>{{ cat.name }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-primary btn-sm">検索</button>
+                {% if active_brand_query or active_brand_category_filter %}<a href="{{ url_for(search_endpoint, category_query=active_category_query) }}" class="btn btn-secondary btn-sm">クリア</a>{% endif %}
+            </form>
+        </div>
+        <div class="master-filter-row">
+            <a class="master-filter-chip {% if not active_brand_category_filter %}active{% endif %}" href="{{ url_for(search_endpoint, brand_query=active_brand_query, category_query=active_category_query) }}">すべて</a>
+            {% for cat in brand_categories %}
+            <a class="master-filter-chip {% if active_brand_category_filter == (cat.id|string) %}active{% endif %}" href="{{ url_for(search_endpoint, brand_query=active_brand_query, category_query=active_category_query, brand_category_filter=cat.id) }}">{{ cat.name }}</a>
+            {% endfor %}
+        </div>
+        {% set filtered_brands = namespace(count=0) %}
+        <div class="master-card-header">
+            <div>
+                <h3>ブランド一覧</h3>
+                <div class="master-section-note">検索欄はブランド名、検索名、キーワード、ライン名の絞り込みに対応しています。</div>
+            </div>
+            <span id="brand-result-count"></span>
+        </div>
+        <div class="table-container master-table-wrap">
+            <div class="table-scroll">
+            <table class="master-table master-table--brands">
+                <thead><tr><th>ブランド名</th><th>ブランドカテゴリー</th><th>検索名・キーワード</th><th>利用回数</th><th>状態</th><th>操作</th></tr></thead>
+                <tbody>
+                {% for brand in brands %}
+                    {% set brand_meta = namespace(category_name='') %}
+                    {% for cat in brand_categories %}
+                        {% if cat.id == brand.category_id %}
+                            {% set brand_meta.category_name = cat.name %}
+                        {% endif %}
+                    {% endfor %}
+                    {% set brand_search_text = ((brand.value or '') ~ ' ' ~ (brand.display_name or '') ~ ' ' ~ (brand.aliases or '') ~ ' ' ~ (brand.keywords or '') ~ ' ' ~ brand_meta.category_name)|lower %}
+                    {% set brand_matches_query = (not active_brand_query) or (active_brand_query|lower in brand_search_text) %}
+                    {% set brand_matches_category = (not active_brand_category_filter) or (active_brand_category_filter == (brand.category_id|string)) %}
+                    {% if brand_matches_query and brand_matches_category %}
+                    {% set filtered_brands.count = filtered_brands.count + 1 %}
+                    <tr>
+                        <td><span class="master-brand-name">{{ brand.value }}</span></td>
+                        <td>{{ brand_meta.category_name or '-' }}</td>
+                        <td>
+                            <div class="master-meta-group">
+                                <div class="master-meta-section">
+                                    <span class="master-meta-label">検索名</span>
+                                    <div class="master-meta-grid master-meta-grid--aliases">
+                                        {% set alias_items = brand.aliases.split(',') if brand.aliases else [] %}
+                                        {% set alias_ns = namespace(has_items=false) %}
+                                        {% for alias in alias_items %}
+                                            {% set trimmed_alias = alias|trim %}
+                                            {% if trimmed_alias %}
+                                                {% set alias_ns.has_items = true %}
+                                                <span class="master-meta-item" title="{{ trimmed_alias }}">{{ trimmed_alias }}</span>
+                                            {% endif %}
+                                        {% endfor %}
+                                        {% if not alias_ns.has_items %}
+                                        <span class="master-meta-item master-meta-item--empty">-</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="master-meta-section">
+                                    <span class="master-meta-label">キーワード</span>
+                                    <div class="master-meta-grid master-meta-grid--keywords">
+                                        {% set keyword_items = brand.keywords.split(',') if brand.keywords else [] %}
+                                        {% set keyword_ns = namespace(has_items=false) %}
+                                        {% for keyword in keyword_items %}
+                                            {% set trimmed_keyword = keyword|trim %}
+                                            {% if trimmed_keyword %}
+                                                {% set keyword_ns.has_items = true %}
+                                                <span class="master-meta-item" title="{{ trimmed_keyword }}">{{ trimmed_keyword }}</span>
+                                            {% endif %}
+                                        {% endfor %}
+                                        {% if not keyword_ns.has_items %}
+                                        <span class="master-meta-item master-meta-item--empty">-</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                        <td>{{ brand.use_count or 0 }}</td>
+                        <td>{% if brand.is_active %}<span class="status-active">有効</span>{% else %}<span class="status-inactive">無効</span>{% endif %}</td>
+                        <td><button type="button" class="btn btn-sm btn-edit-toggle" onclick="toggleEdit('brands', {{ brand.id }})">編集</button></td>
+                    </tr>
+                    <tr><td colspan="6" style="padding:0;">
+                        <div id="edit-brands-{{ brand.id }}" class="edit-form">
+                            <form action="{{ url_for(edit_endpoint, table_name='brands', id=brand.id) }}" method="POST" onsubmit="syncBrandDisplayName(this)">
+                                <div class="form-grid">
+                                    <div class="form-group"><label>ブランド名</label><input type="text" name="value" value="{{ brand.value }}" required></div>
+                                    <input type="hidden" name="display_name" value="{{ brand.display_name or brand.value }}">
+                                    <div class="form-group"><label>ブランドカテゴリー</label><select name="category_id"><option value="">未設定</option>{% for cat in brand_categories %}<option value="{{ cat.id }}" {% if cat.id == brand.category_id %}selected{% endif %}>{{ cat.name }}</option>{% endfor %}</select></div>
+                                    <div class="form-group"><label>検索名</label><input type="text" name="aliases" value="{{ brand.aliases or '' }}"></div>
+                                    <div class="form-group"><label>キーワード</label><input type="text" name="keywords" value="{{ brand.keywords or '' }}"></div>
+                                    <div class="form-group"><label>表示順</label><input type="number" name="display_order" value="{{ brand.display_order }}"></div>
+                                </div>
+                                <div class="edit-form-footer">
+                                    <label class="master-active-toggle"><input type="checkbox" name="is_active" {% if brand.is_active %}checked{% endif %}>有効にする</label>
+                                    <div class="master-edit-actions">
+                                        <button type="submit" class="btn btn-primary btn-sm">更新</button>
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="toggleEdit('brands', {{ brand.id }})">キャンセル</button>
+                                    </div>
+                                </div>
+                            </form>
+                            <form action="{{ url_for(delete_endpoint, table_name='brands', id=brand.id) }}" method="POST" style="margin-top:.5rem;" onsubmit="return confirm('削除しますか？');">
+                                <div class="master-edit-actions"><button type="submit" class="btn btn-delete btn-sm">削除</button></div>
+                            </form>
+                        </div>
+                    </td></tr>
+                    {% endif %}
+                {% endfor %}
+                {% if filtered_brands.count == 0 %}
+                    <tr>
+                        <td colspan="6" style="padding:1rem;text-align:center;color:var(--text-muted);">条件に一致するブランドはありません。</td>
+                    </tr>
+                {% endif %}
+                </tbody>
+            </table>
+            </div>
+        </div>
+        <div class="add-form">
+            <h4>＋ 新規追加</h4>
+            <form action="{{ url_for(add_endpoint, table_name='brands') }}" method="POST" onsubmit="syncBrandDisplayName(this)">
+                <div class="form-grid">
+                    <div class="form-group"><label>ブランド名</label><input type="text" name="value" required placeholder="例: Louis Vuitton"></div>
+                    <input type="hidden" name="display_name" value="">
+                    <div class="form-group"><label>ブランドカテゴリー</label><select name="category_id"><option value="">未設定</option>{% for cat in brand_categories %}<option value="{{ cat.id }}">{{ cat.name }}</option>{% endfor %}</select></div>
+                    <div class="form-group"><label>検索名</label><input type="text" name="aliases" placeholder="例: ルイヴィトン, LV"></div>
+                    <div class="form-group"><label>キーワード</label><input type="text" name="keywords" placeholder="例: ルイヴィトン,ヴィトン"></div>
+                    <div class="form-group"><label>表示順</label><input type="number" name="display_order" value="0"></div>
+                    <div class="form-group"><button type="submit" class="btn btn-primary">追加</button></div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div id="panel-categories" class="master-panel {% if default_master_tab == 'categories' %}active{% endif %}">
+    <div class="master-card">
+        <div class="master-toolbar">
+            <form method="GET" action="{{ url_for(search_endpoint) }}" class="master-search">
+                <input type="hidden" name="brand_query" value="{{ active_brand_query }}">
+                <input type="text" name="category_query" value="{{ active_category_query }}" placeholder="ブランドカテゴリー名・検索名で検索　例: ハイブランド / 時計ブランド">
+                <button type="submit" class="btn btn-primary btn-sm">検索</button>
+                {% if active_category_query %}<a href="{{ url_for(search_endpoint, brand_query=active_brand_query) }}" class="btn btn-secondary btn-sm">クリア</a>{% endif %}
+            </form>
+        </div>
+        {% set filtered_categories = namespace(count=0) %}
+        <div class="master-card-header">
+            <div>
+                <h3>ブランドカテゴリー一覧</h3>
+                <div class="master-section-note">カテゴリー名と検索名で絞り込みできます。</div>
+            </div>
+            <span id="category-result-count"></span>
+        </div>
+        <div class="table-container master-table-wrap">
+            <div class="table-scroll">
+            <table class="master-table master-table--simple">
+                <thead><tr><th>ブランドカテゴリー</th><th>検索名</th><th>表示順</th><th>状態</th><th>操作</th></tr></thead>
+                <tbody>
+                {% for cat in brand_categories %}
+                    {% set category_search_text = ((cat.name or '') ~ ' ' ~ (cat.aliases or ''))|lower %}
+                    {% set category_matches = (not active_category_query) or (active_category_query|lower in category_search_text) %}
+                    {% if category_matches %}
+                    {% set filtered_categories.count = filtered_categories.count + 1 %}
+                    <tr>
+                        <td>{{ cat.name }}</td>
+                        <td><span class="master-text master-text--clamp" title="{{ cat.aliases }}">{{ cat.aliases or '-' }}</span></td>
+                        <td>{{ cat.display_order }}</td>
+                        <td>{% if cat.is_active %}<span class="status-active">有効</span>{% else %}<span class="status-inactive">無効</span>{% endif %}</td>
+                        <td><button type="button" class="btn btn-sm btn-edit-toggle" onclick="toggleEdit('brand_categories', {{ cat.id }})">編集</button></td>
+                    </tr>
+                    <tr><td colspan="5" style="padding:0;">
+                        <div id="edit-brand_categories-{{ cat.id }}" class="edit-form">
+                            <form action="{{ url_for(edit_endpoint, table_name='brand_categories', id=cat.id) }}" method="POST">
+                                <div class="form-grid">
+                                    <div class="form-group"><label>ブランドカテゴリー</label><input type="text" name="name" value="{{ cat.name }}" required></div>
+                                    <div class="form-group"><label>検索名</label><input type="text" name="aliases" value="{{ cat.aliases or '' }}"></div>
+                                    <div class="form-group"><label>表示順</label><input type="number" name="display_order" value="{{ cat.display_order }}"></div>
+                                </div>
+                                <div class="edit-form-footer">
+                                    <label class="master-active-toggle"><input type="checkbox" name="is_active" {% if cat.is_active %}checked{% endif %}>有効にする</label>
+                                    <div class="master-edit-actions">
+                                        <button type="submit" class="btn btn-primary btn-sm">更新</button>
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="toggleEdit('brand_categories', {{ cat.id }})">キャンセル</button>
+                                    </div>
+                                </div>
+                            </form>
+                            <form action="{{ url_for(delete_endpoint, table_name='brand_categories', id=cat.id) }}" method="POST" style="margin-top:.5rem;" onsubmit="return confirm('削除しますか？');">
+                                <div class="master-edit-actions"><button type="submit" class="btn btn-delete btn-sm">削除</button></div>
+                            </form>
+                        </div>
+                    </td></tr>
+                    {% endif %}
+                {% endfor %}
+                {% if filtered_categories.count == 0 %}
+                    <tr>
+                        <td colspan="5" style="padding:1rem;text-align:center;color:var(--text-muted);">条件に一致するブランドカテゴリーはありません。</td>
+                    </tr>
+                {% endif %}
+                </tbody>
+            </table>
+            </div>
+        </div>
+        <div class="add-form">
+            <h4>＋ 新規追加</h4>
+            <form action="{{ url_for(add_endpoint, table_name='brand_categories') }}" method="POST">
+                <div class="form-grid">
+                    <div class="form-group"><label>ブランドカテゴリー</label><input type="text" name="name" required placeholder="例: ハイブランド"></div>
+                    <div class="form-group"><label>検索名</label><input type="text" name="aliases" placeholder="例: 高級ブランド, luxury"></div>
+                    <div class="form-group"><label>表示順</label><input type="number" name="display_order" value="0"></div>
+                    <div class="form-group"><button type="submit" class="btn btn-primary">追加</button></div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div id="panel-conditions" class="master-panel {% if default_master_tab == 'conditions' %}active{% endif %}">
+    <div class="master-card">
+        <div class="master-card-header"><h3>商品状態一覧</h3><span>{{ conditions|length }}件</span></div>
+        <div class="table-container master-table-wrap">
+            <div class="table-scroll">
+            <table class="master-table master-table--simple">
+                <thead><tr><th>値</th><th>表示名</th><th>説明</th><th>表示順</th><th>状態</th><th>操作</th></tr></thead>
+                <tbody>
+                {% for item in conditions %}
+                    <tr>
+                        <td>{{ item.value }}</td>
+                        <td>{{ item.display_name }}</td>
+                        <td><span class="master-text master-text--clamp" title="{{ item.description }}">{{ item.description or '-' }}</span></td>
+                        <td>{{ item.display_order }}</td>
+                        <td>{% if item.is_active %}<span class="status-active">有効</span>{% else %}<span class="status-inactive">無効</span>{% endif %}</td>
+                        <td><button type="button" class="btn btn-sm btn-edit-toggle" onclick="toggleEdit('conditions', {{ item.id }})">編集</button></td>
+                    </tr>
+                    <tr><td colspan="6" style="padding:0;">
+                        <div id="edit-conditions-{{ item.id }}" class="edit-form">
+                            <form action="{{ url_for(edit_endpoint, table_name='conditions', id=item.id) }}" method="POST">
+                                <div class="form-grid">
+                                    <div class="form-group"><label>値</label><input type="text" name="value" value="{{ item.value }}" required></div>
+                                    <div class="form-group"><label>表示名</label><input type="text" name="display_name" value="{{ item.display_name }}" required></div>
+                                    <div class="form-group"><label>説明</label><input type="text" name="description" value="{{ item.description or '' }}"></div>
+                                    <div class="form-group"><label>表示順</label><input type="number" name="display_order" value="{{ item.display_order }}"></div>
+                                </div>
+                                <div class="edit-form-footer">
+                                    <label class="master-active-toggle"><input type="checkbox" name="is_active" {% if item.is_active %}checked{% endif %}>有効にする</label>
+                                    <div class="master-edit-actions">
+                                        <button type="submit" class="btn btn-primary btn-sm">更新</button>
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="toggleEdit('conditions', {{ item.id }})">キャンセル</button>
+                                    </div>
+                                </div>
+                            </form>
+                            <form action="{{ url_for(delete_endpoint, table_name='conditions', id=item.id) }}" method="POST" style="margin-top:.5rem;" onsubmit="return confirm('削除しますか？');">
+                                <div class="master-edit-actions"><button type="submit" class="btn btn-delete btn-sm">削除</button></div>
+                            </form>
+                        </div>
+                    </td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            </div>
+        </div>
+        <div class="add-form">
+            <h4>＋ 新規追加</h4>
+            <form action="{{ url_for(add_endpoint, table_name='conditions') }}" method="POST">
+                <div class="form-grid">
+                    <div class="form-group"><label>値</label><input type="text" name="value" required placeholder="例: good"></div>
+                    <div class="form-group"><label>表示名</label><input type="text" name="display_name" required placeholder="例: 良好"></div>
+                    <div class="form-group"><label>説明</label><input type="text" name="description" placeholder="例: 目立つ傷なし"></div>
+                    <div class="form-group"><label>表示順</label><input type="number" name="display_order" value="0"></div>
+                    <div class="form-group"><button type="submit" class="btn btn-primary">追加</button></div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+</div>
+
+<script>
+function showMasterTab(tabName, button) {
+    document.querySelectorAll('.master-tab').forEach((tab) => tab.classList.remove('active'));
+    document.querySelectorAll('.master-panel').forEach((panel) => panel.classList.remove('active'));
+    button.classList.add('active');
+    document.getElementById('panel-' + tabName).classList.add('active');
+}
+
+function toggleEdit(tableName, id) {
+    const element = document.getElementById('edit-' + tableName + '-' + id);
+    if (element) {
+        element.classList.toggle('show');
+    }
+}
+
+function syncBrandDisplayName(form) {
+    const valueInput = form.querySelector('input[name="value"]');
+    const displayNameInput = form.querySelector('input[name="display_name"]');
+    if (valueInput && displayNameInput) {
+        displayNameInput.value = valueInput.value.trim();
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const brandCount = document.getElementById('brand-result-count');
+    if (brandCount) {
+        brandCount.textContent = '{{ filtered_brands.count }} / {{ brands|length }}件表示';
+    }
+    const categoryCount = document.getElementById('category-result-count');
+    if (categoryCount) {
+        categoryCount.textContent = '{{ filtered_categories.count }} / {{ brand_categories|length }}件表示';
+    }
+});
+</script>

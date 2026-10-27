@@ -1,0 +1,3394 @@
+{% extends "base.html" %}
+{% block title %}{% if analytics.use_admin_links and request.args.get('from_client_reports') == '1' %}各クライアント売上分析{% elif analytics.use_admin_links %}全体クライアント売上分析{% else %}売上分析{% endif %} - 株式会社 開花{% endblock %}
+
+{% block content %}
+{% set from_client_reports = request.args.get('from_client_reports') == '1' %}
+
+{% if analytics.show_admin_overview %}
+{% set analytics_back_url = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path %}
+<style>
+.client-analysis-page {
+    display: grid;
+    gap: 1.2rem;
+}
+
+.client-analysis-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+    padding: 1.2rem 1.25rem;
+    min-width: 0;
+}
+
+.client-analysis-header h1 {
+    margin: 0 0 0.35rem;
+}
+
+.client-analysis-header p {
+    margin: 0;
+    color: #64748b;
+    line-height: 1.85;
+    letter-spacing: 0.02em;
+}
+
+.client-analysis-toolbar {
+    display: grid;
+    gap: 1rem;
+}
+
+.period-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+}
+
+.period-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.55rem 0.9rem;
+    border-radius: 999px;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    color: #475569;
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.period-chip.active {
+    border-color: #2563eb;
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+
+.client-filter-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 170px 170px auto auto;
+    gap: 0.75rem;
+    align-items: end;
+}
+
+.client-filter-group {
+    display: grid;
+    gap: 0.35rem;
+}
+
+.client-filter-group label {
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: #475569;
+    line-height: 1.6;
+    letter-spacing: 0.02em;
+}
+
+.client-filter-group input {
+    width: 100%;
+    padding: 0.75rem 0.9rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    font-size: 0.96rem;
+    line-height: 1.6;
+}
+
+.client-analysis-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    color: #475569;
+    font-size: 0.95rem;
+    line-height: 1.75;
+}
+
+.client-analysis-summary strong {
+    color: #0f172a;
+}
+
+.client-analysis-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 0.9rem;
+}
+
+.client-analysis-section-header h2 {
+    margin: 0;
+}
+
+.client-analysis-section-header p {
+    margin: 0.35rem 0 0;
+    color: #64748b;
+    font-size: 0.94rem;
+    line-height: 1.8;
+    letter-spacing: 0.02em;
+}
+
+.client-total-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.85rem;
+}
+
+.client-total-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 1rem;
+}
+
+.client-total-card__label {
+    font-size: 0.86rem;
+    color: #64748b;
+    line-height: 1.6;
+    letter-spacing: 0.03em;
+}
+
+.client-total-card__value {
+    margin-top: 0.35rem;
+    font-size: 1.26rem;
+    font-weight: 700;
+    color: #0f172a;
+    line-height: 1.4;
+}
+
+.client-table-wrap {
+    overflow-x: auto;
+    max-width: 100%;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-gutter: stable both-edges;
+}
+
+.client-analysis-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 980px;
+}
+
+.client-analysis-table th,
+.client-analysis-table td {
+    padding: 0.95rem 1rem;
+    border-bottom: 1px solid #e2e8f0;
+    text-align: left;
+    vertical-align: top;
+    line-height: 1.75;
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+}
+
+.client-analysis-table th {
+    background: #f8fafc;
+    color: #475569;
+    font-size: 0.86rem;
+    white-space: nowrap;
+    letter-spacing: 0.045em;
+}
+
+.client-analysis-table td:first-child {
+    min-width: 180px;
+}
+
+.client-analysis-table td:nth-child(5),
+.client-analysis-table td:nth-child(6),
+.client-analysis-table td:nth-child(7),
+.client-analysis-table td:nth-child(8) {
+    min-width: 140px;
+}
+
+.client-analysis-link {
+    color: #2563eb;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.client-analysis-link:hover {
+    text-decoration: underline;
+}
+
+.metric-link {
+    color: inherit;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.metric-link:hover {
+    color: #2563eb;
+}
+
+.client-analysis-empty {
+    padding: 1rem 0;
+    color: #64748b;
+    line-height: 1.8;
+}
+
+@media (max-width: 900px) {
+    .client-filter-form {
+        grid-template-columns: 1fr;
+    }
+
+    .client-total-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+</style>
+
+<div class="client-analysis-page">
+    <section class="client-analysis-card client-analysis-header">
+        <h1>全体クライアント売上分析</h1>
+        <p>クライアントごとの在庫・売上・手数料・利益をまとめて確認できます。クライアント名を選ぶと、そのクライアントの分析画面と商品管理へ進めます。</p>
+    </section>
+
+    <section class="client-analysis-card client-analysis-toolbar">
+        <div class="period-chip-row">
+            <a class="period-chip {% if analytics.period_preset == 'month' %}active{% endif %}" href="{{ url_for('user_analytics', period_preset='month', client_keyword=analytics.client_keyword or None, from_client_reports=1 if from_client_reports else None) }}">1ヶ月</a>
+            <a class="period-chip {% if analytics.period_preset == '3months' %}active{% endif %}" href="{{ url_for('user_analytics', period_preset='3months', client_keyword=analytics.client_keyword or None, from_client_reports=1 if from_client_reports else None) }}">3ヶ月</a>
+            <a class="period-chip {% if analytics.period_preset == '6months' %}active{% endif %}" href="{{ url_for('user_analytics', period_preset='6months', client_keyword=analytics.client_keyword or None, from_client_reports=1 if from_client_reports else None) }}">半年</a>
+            <a class="period-chip {% if analytics.period_preset == '12months' or analytics.period_preset == 'year' %}active{% endif %}" href="{{ url_for('user_analytics', period_preset='12months', client_keyword=analytics.client_keyword or None, from_client_reports=1 if from_client_reports else None) }}">1年</a>
+            <a class="period-chip {% if analytics.period_preset == 'all' %}active{% endif %}" href="{{ url_for('user_analytics', period_preset='all', client_keyword=analytics.client_keyword or None, from_client_reports=1 if from_client_reports else None) }}">全期間</a>
+            <span class="period-chip active">表示期間: {{ analytics.period_label }}</span>
+        </div>
+
+        <form method="GET" action="{{ url_for('user_analytics') }}" class="client-filter-form">
+            {% if from_client_reports %}
+            <input type="hidden" name="from_client_reports" value="1">
+            {% endif %}
+            <input type="hidden" name="period_preset" value="custom">
+            <div class="client-filter-group">
+                <label for="client_keyword">クライアント名で絞り込み</label>
+                <input id="client_keyword" type="text" name="client_keyword" value="{{ analytics.client_keyword or '' }}" placeholder="クライアント名を入力">
+            </div>
+            <div class="client-filter-group">
+                <label for="start_month">開始月</label>
+                <input id="start_month" type="month" name="start_month" value="{{ start_month }}">
+            </div>
+            <div class="client-filter-group">
+                <label for="end_month">終了月</label>
+                <input id="end_month" type="month" name="end_month" value="{{ end_month }}">
+            </div>
+            <button type="submit" class="btn btn-primary">適用</button>
+            <a href="{{ url_for('user_analytics', period_preset='month', from_client_reports=1 if from_client_reports else None) }}" class="btn btn-secondary">リセット</a>
+        </form>
+
+        <div class="client-analysis-summary">
+            <span>対象クライアント数: <strong>{{ analytics.client_summaries|length }}</strong></span>
+            <span>対象期間: <strong>{{ analytics.period_label }}</strong></span>
+        </div>
+    </section>
+
+    <section class="client-analysis-card">
+        <div class="client-analysis-section-header">
+            <div>
+                <h2>クライアントトータル分析</h2>
+                <p>表示中のクライアント全体について、売上・利益・開花手数料・在庫の状況をまとめて確認できます。</p>
+            </div>
+        </div>
+        <div class="client-total-grid">
+            {% for metric in analytics.client_total_metrics or [] %}
+            <div class="client-total-card">
+                <div class="client-total-card__label">{{ metric.label }}</div>
+                <div class="client-total-card__value {{ metric.value_class or '' }}">{{ metric.display_value }}</div>
+                <button type="button" class="analytics-detail-trigger" onclick="openAnalyticsDetail('client-total-{{ metric.id }}')">詳細</button>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="client-analysis-card">
+        <div class="client-analysis-section-header">
+            <div>
+                <h2>クライアント別分析</h2>
+                <p>クライアント名を押すと、そのクライアントの商品一覧と月次サマリーへ移動できます。</p>
+            </div>
+        </div>
+        {% if analytics.client_summaries %}
+        <div class="client-table-wrap js-edge-hover-scroll">
+            <table class="client-analysis-table">
+                <thead>
+                    <tr>
+                        <th>クライアント名</th>
+                        <th>商品登録数</th>
+                        <th>販売済み</th>
+                        <th>現正在庫数</th>
+                        <th>現正在庫金額</th>
+                        <th>対象期間売上</th>
+                        <th>開花手数料</th>
+                        <th>対象期間利益</th>
+                        <th>詳細</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for client in analytics.client_summaries %}
+                    <tr>
+                        <td>
+                            <a class="client-analysis-link" href="{{ url_for('admin_user_items', id=client.user_id, start_month=start_month, end_month=end_month, period_preset=analytics.period_preset, back_url=analytics_back_url) }}">
+                                {{ client.client_name }}
+                            </a>
+                        </td>
+                        <td>
+                            <a class="metric-link" href="{{ url_for('admin_user_items', id=client.user_id, status='all', start_month=start_month, end_month=end_month, period_preset=analytics.period_preset, back_url=analytics_back_url) }}">{{ client.total_items or 0 }}商品</a>
+                        </td>
+                        <td>
+                            <a class="metric-link" href="{{ url_for('admin_user_items', id=client.user_id, status='sold', start_month=start_month, end_month=end_month, period_preset=analytics.period_preset, back_url=analytics_back_url) }}">{{ client.sold_count or 0 }}商品</a>
+                        </td>
+                        <td>
+                            <a class="metric-link" href="{{ url_for('admin_user_items', id=client.user_id, status='unsold', start_month=start_month, end_month=end_month, period_preset=analytics.period_preset, back_url=analytics_back_url) }}">{{ client.inventory_count or 0 }}商品</a>
+                        </td>
+                        <td>¥{{ "{:,}".format((client.inventory_value or 0)|int) }}</td>
+                        <td>¥{{ "{:,}".format((client.total_sales or 0)|int) }}</td>
+                        <td>¥{{ "{:,}".format((client.total_fees or 0)|int) }}</td>
+                        <td class="{% if client.total_profit and client.total_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">¥{{ "{:,}".format((client.total_profit or 0)|int) }}</td>
+                        <td>
+                            <button type="button" class="analytics-detail-trigger" onclick="openAnalyticsDetail('client-row-{{ client.user_id }}')">詳細</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="client-analysis-empty">条件に一致するクライアントはありません。</p>
+        {% endif %}
+    </section>
+
+    {% for metric in analytics.client_total_metrics or [] %}
+    <div class="analytics-detail-modal" id="client-total-{{ metric.id }}">
+        <div class="analytics-detail-dialog">
+            <div class="analytics-detail-header">
+                <h3>{{ metric.title }}</h3>
+                <button type="button" class="analytics-detail-close" onclick="closeAnalyticsDetail('client-total-{{ metric.id }}')">×</button>
+            </div>
+            <div class="analytics-detail-body">
+                {% if metric.formula %}
+                <div class="analytics-detail-formula">{{ metric.formula }}</div>
+                {% endif %}
+                <div class="analytics-detail-lines">
+                    {% for line in metric.lines or [] %}
+                    <div class="analytics-detail-line">
+                        <span class="analytics-detail-line-label">{{ line.label }}</span>
+                        <span class="analytics-detail-line-value">{{ line.display }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% if metric.note %}
+                <div class="analytics-detail-note">{{ metric.note }}</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+
+    {% for client in analytics.client_summaries %}
+    <div class="analytics-detail-modal" id="client-row-{{ client.user_id }}">
+        <div class="analytics-detail-dialog">
+            <div class="analytics-detail-header">
+                <h3>{{ client.detail_title }}</h3>
+                <button type="button" class="analytics-detail-close" onclick="closeAnalyticsDetail('client-row-{{ client.user_id }}')">×</button>
+            </div>
+            <div class="analytics-detail-body">
+                <div class="analytics-detail-formula">{{ client.detail_formula }}</div>
+                <div class="analytics-detail-lines">
+                    {% for line in client.detail_lines or [] %}
+                    <div class="analytics-detail-line">
+                        <span class="analytics-detail-line-label">{{ line.label }}</span>
+                        <span class="analytics-detail-line-value">{{ line.display }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% if client.detail_note %}
+                <div class="analytics-detail-note">{{ client.detail_note }}</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+
+{% if analytics.use_admin_links %}
+<div class="page-header">
+    <div>
+        <h1>{% if analytics.selected_client_name and from_client_reports %}{{ analytics.selected_client_name }} の売上分析{% else %}各クライアント売上分析{% endif %}</h1>
+        <p class="page-description">
+            {% if analytics.selected_client_name %}
+            {{ analytics.selected_client_name }} の売上・利益・在庫状況を確認できます。
+            {% else %}
+            クライアントごとの売上・利益・在庫状況を確認できます。
+            {% endif %}
+        </p>
+    </div>
+    {% if from_client_reports %}
+    <div class="page-header-actions">
+        <a href="{{ url_for('client_analytics_reports') }}" class="btn btn-secondary btn-sm">各クライアント売上分析一覧へ戻る</a>
+        {% if analytics.selected_client_id %}
+        <a href="{{ url_for('reports', client_id=analytics.selected_client_id) }}" class="btn btn-primary btn-sm">レポートCSVを見る</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- 期間フィルター -->
+<div class="period-filter-card">
+    <form method="GET" action="{{ url_for('user_analytics') }}" class="period-filter-form">
+        {% if from_client_reports %}
+        <input type="hidden" name="from_client_reports" value="1">
+        {% endif %}
+        {% if analytics.selected_client_id %}
+        <input type="hidden" name="client_id" value="{{ analytics.selected_client_id }}">
+        {% endif %}
+        <div class="period-filter-top">
+            <div>
+                <div class="filter-label">表示期間</div>
+                <div class="filter-description">1ヶ月、3ヶ月、半年、1年でページ全体の分析内容を切り替えます。</div>
+            </div>
+            <div class="period-filter-meta">
+                <span class="filter-badge">表示中: {{ analytics.period_label }}</span>
+            </div>
+        </div>
+        <div class="period-preset-list">
+            <button type="submit" name="period_preset" value="month" class="period-preset-btn {% if analytics.period_preset == 'month' %}is-active{% endif %}">1ヶ月</button>
+            <button type="submit" name="period_preset" value="3months" class="period-preset-btn {% if analytics.period_preset == '3months' %}is-active{% endif %}">3ヶ月</button>
+            <button type="submit" name="period_preset" value="6months" class="period-preset-btn {% if analytics.period_preset == '6months' %}is-active{% endif %}">半年</button>
+            <button type="submit" name="period_preset" value="12months" class="period-preset-btn {% if analytics.period_preset == '12months' or analytics.period_preset == 'year' %}is-active{% endif %}">1年</button>
+        </div>
+        <div class="period-range-fields">
+            <label class="period-range-field">
+                <span>開始月</span>
+                <input type="month" name="start_month" value="{{ start_month }}" class="month-input">
+            </label>
+            <label class="period-range-field">
+                <span>終了月</span>
+                <input type="month" name="end_month" value="{{ end_month }}" class="month-input">
+            </label>
+            <button type="submit" name="period_preset" value="custom" class="btn btn-primary btn-sm">この期間で表示</button>
+            <a href="{{ url_for('user_analytics', client_id=analytics.selected_client_id if analytics.selected_client_id else None, from_client_reports=1 if from_client_reports else None, period_preset='month') }}" class="btn btn-secondary btn-sm">今月に戻す</a>
+        </div>
+    </form>
+</div>
+
+<style>
+.period-filter-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    border: 1px solid #e2e8f0;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.period-filter-form {
+    display: grid;
+    gap: 1rem;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.period-filter-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+}
+
+.filter-label {
+    font-weight: 600;
+    color: #374151;
+    font-size: 0.98rem;
+}
+
+.filter-description {
+    margin-top: 0.3rem;
+    color: #64748b;
+    font-size: 0.88rem;
+    line-height: 1.7;
+}
+
+.period-filter-meta {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    min-width: 0;
+}
+
+.period-preset-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    max-width: 100%;
+}
+
+.period-preset-btn {
+    border: 1px solid #cbd5e1;
+    border-radius: 999px;
+    background: #fff;
+    color: #334155;
+    padding: 0.55rem 0.95rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.period-preset-btn:hover {
+    border-color: #93c5fd;
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+
+.period-preset-btn.is-active {
+    border-color: #2563eb;
+    background: #2563eb;
+    color: #fff;
+}
+
+.period-range-fields {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.period-range-field {
+    display: grid;
+    gap: 0.35rem;
+    flex: 1 1 148px;
+    font-size: 0.84rem;
+    color: #475569;
+    min-width: 132px;
+    max-width: 170px;
+}
+
+.month-input {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    background: white;
+    min-width: 0;
+    min-height: 42px;
+    box-sizing: border-box;
+    background-clip: padding-box;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.period-range-fields .btn {
+    min-height: 42px;
+    flex: 0 1 148px;
+    min-width: 132px;
+    max-width: 170px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.55rem 0.95rem;
+    box-sizing: border-box;
+    white-space: nowrap;
+}
+
+.month-input:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.filter-badge {
+    display: inline-block;
+    max-width: 100%;
+    background: #eff6ff;
+    color: #1d4ed8;
+    padding: 0.35rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    white-space: normal;
+}
+
+.client-filter-select {
+    flex: 1 1 240px;
+    min-width: 0;
+    max-width: 320px;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    background: white;
+    box-sizing: border-box;
+}
+
+.client-summary-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.client-summary-table th,
+.client-summary-table td {
+    padding: 0.8rem 0.9rem;
+    border-bottom: 1px solid #e2e8f0;
+    text-align: left;
+}
+
+.client-summary-table th {
+    background: #f8fafc;
+    color: #475569;
+    font-size: 0.82rem;
+    white-space: nowrap;
+}
+
+.client-summary-link {
+    color: #2563eb;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.client-summary-link:hover {
+    text-decoration: underline;
+}
+
+.analytics-billing-panel {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.85rem;
+    margin-bottom: 1.5rem;
+}
+
+.analytics-billing-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 1rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.analytics-billing-label {
+    color: #64748b;
+    font-size: 0.84rem;
+    font-weight: 700;
+    line-height: 1.6;
+}
+
+.analytics-billing-value {
+    margin-top: 0.35rem;
+    color: #0f172a;
+    font-size: 1.25rem;
+    font-weight: 800;
+    line-height: 1.35;
+}
+
+.analytics-billing-note {
+    margin-top: 0.3rem;
+    color: #64748b;
+    font-size: 0.8rem;
+    line-height: 1.6;
+}
+
+.analytics-billing-detail {
+    margin-top: 0.75rem;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 0.65rem;
+    color: #475569;
+    font-size: 0.82rem;
+    line-height: 1.7;
+}
+
+.analytics-billing-detail summary {
+    cursor: pointer;
+    color: #1d4ed8;
+    font-weight: 800;
+    list-style: none;
+}
+
+.analytics-billing-detail summary::-webkit-details-marker {
+    display: none;
+}
+
+.analytics-billing-detail ul {
+    margin: 0.55rem 0 0;
+    padding-left: 1rem;
+}
+
+@media (max-width: 768px) {
+    .period-filter-card {
+        padding: 0.9rem;
+        overflow: hidden;
+    }
+
+    .period-filter-top {
+        flex-direction: column;
+        align-items: flex-start;
+        min-width: 0;
+    }
+
+    .period-filter-meta {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .period-preset-list {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.5rem;
+    }
+
+    .period-preset-btn {
+        width: 100%;
+        min-width: 0;
+        padding: 0.55rem 0.5rem;
+        white-space: normal;
+    }
+
+    .period-range-fields {
+        width: 100%;
+        gap: 0.55rem;
+    }
+
+    .period-range-field {
+        flex: 1 1 100%;
+        width: 100%;
+        max-width: none;
+    }
+
+    .month-input,
+    .client-filter-select,
+    .period-range-fields .btn {
+        width: 100%;
+        min-width: 0;
+        max-width: none;
+        flex-basis: 100%;
+    }
+
+    .analytics-billing-panel {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 420px) {
+    .period-preset-list {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+
+{% if analytics.billing_metrics %}
+<div class="analytics-billing-panel">
+    <div class="analytics-billing-card">
+        <div class="analytics-billing-label">開花の在庫料金の目安</div>
+        <div class="analytics-billing-value">{{ analytics.billing_metrics.current_plan_label }}</div>
+        <div class="analytics-billing-note">開花で受領済み {{ analytics.billing_metrics.item_count }}件 / 月額目安 ¥{{ "{:,}".format(analytics.billing_metrics.monthly_fee or 0) }}。自己保管・開花へ移動中の商品は含みません。実際の請求は契約・精算書をご確認ください。</div>
+        <details class="analytics-billing-detail">
+            <summary>内訳を見る</summary>
+            <ul>
+                <li>現在プラン: {{ analytics.billing_metrics.current_plan_label }}</li>
+                <li>月額利用料: ¥{{ "{:,}".format(analytics.billing_metrics.monthly_fee or 0) }}</li>
+                <li>開花で受領済みの商品数: {{ analytics.billing_metrics.item_count }}件</li>
+            </ul>
+        </details>
+    </div>
+    <div class="analytics-billing-card">
+        <div class="analytics-billing-label">開花へ支払う手数料</div>
+        <div class="analytics-billing-value">¥{{ "{:,}".format(analytics.billing_metrics.kaika_fee_total or 0) }}</div>
+        <div class="analytics-billing-note">{{ analytics.billing_metrics.period_label }} の送料・販売手数料合計</div>
+        <details class="analytics-billing-detail">
+            <summary>内訳を見る</summary>
+            <ul>
+                <li>対象期間: {{ analytics.billing_metrics.period_label }}</li>
+                <li>送料・販売代行・各種手数料の合計: ¥{{ "{:,}".format(analytics.billing_metrics.kaika_fee_total or 0) }}</li>
+                <li>下の月別売上集計表で月ごとの詳細を確認できます。</li>
+            </ul>
+        </details>
+    </div>
+    <div class="analytics-billing-card">
+        <div class="analytics-billing-label">月額＋期間内手数料</div>
+        <div class="analytics-billing-value">¥{{ "{:,}".format(analytics.billing_metrics.client_payment_total or 0) }}</div>
+        <div class="analytics-billing-note">精算書・計算書で確認する支払い目安です。</div>
+        <details class="analytics-billing-detail">
+            <summary>内訳を見る</summary>
+            <ul>
+                <li>月額利用料: ¥{{ "{:,}".format(analytics.billing_metrics.monthly_fee or 0) }}</li>
+                <li>期間内手数料: ¥{{ "{:,}".format(analytics.billing_metrics.kaika_fee_total or 0) }}</li>
+                <li>合計: ¥{{ "{:,}".format(analytics.billing_metrics.client_payment_total or 0) }}</li>
+            </ul>
+        </details>
+    </div>
+</div>
+{% endif %}
+
+{% if analytics.show_admin_overview %}
+<div class="period-filter-card">
+    <form method="GET" action="{{ url_for('user_analytics') }}" class="period-filter-form">
+        {% if from_client_reports %}
+        <input type="hidden" name="from_client_reports" value="1">
+        {% endif %}
+        <div class="period-filter-top">
+            <div>
+                <div class="filter-label">クライアントと表示期間</div>
+                <div class="filter-description">一覧の数字は、下の期間ボタンと月指定に合わせてまとめて切り替わります。</div>
+            </div>
+            <div class="period-filter-meta">
+                <span class="filter-badge">表示中: {{ analytics.period_label }}</span>
+            </div>
+        </div>
+        <div class="period-range-fields">
+            <select name="client_id" class="client-filter-select">
+                <option value="">すべてのクライアント</option>
+                {% for client in analytics.available_users or [] %}
+                <option value="{{ client.id }}" {% if analytics.selected_client_id == client.id %}selected{% endif %}>
+                    {{ client.display_name or client.username }}
+                </option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-primary btn-sm">この条件で表示</button>
+            {% if analytics.selected_client_id %}
+            <a href="{{ url_for('user_analytics', start_month=start_month, end_month=end_month, from_client_reports=1 if from_client_reports else None) }}" class="btn btn-secondary btn-sm">全体へ戻す</a>
+            {% endif %}
+        </div>
+        <div class="period-preset-list">
+            <button type="submit" name="period_preset" value="month" class="period-preset-btn {% if analytics.period_preset == 'month' %}is-active{% endif %}">1ヶ月</button>
+            <button type="submit" name="period_preset" value="3months" class="period-preset-btn {% if analytics.period_preset == '3months' %}is-active{% endif %}">3ヶ月</button>
+            <button type="submit" name="period_preset" value="6months" class="period-preset-btn {% if analytics.period_preset == '6months' %}is-active{% endif %}">半年</button>
+            <button type="submit" name="period_preset" value="12months" class="period-preset-btn {% if analytics.period_preset == '12months' or analytics.period_preset == 'year' %}is-active{% endif %}">1年</button>
+        </div>
+        <div class="period-range-fields">
+            <label class="period-range-field">
+                <span>開始月</span>
+                <input type="month" name="start_month" value="{{ start_month }}" class="month-input">
+            </label>
+            <label class="period-range-field">
+                <span>終了月</span>
+                <input type="month" name="end_month" value="{{ end_month }}" class="month-input">
+            </label>
+            <button type="submit" name="period_preset" value="custom" class="btn btn-primary btn-sm">この期間で表示</button>
+        </div>
+    </form>
+</div>
+
+{% if analytics.client_summaries %}
+<div class="analytics-section">
+    <h2>クライアント別サマリー</h2>
+    <div class="admin-table-container js-edge-hover-scroll">
+        <table class="client-summary-table">
+            <thead>
+                <tr>
+                    <th>クライアント名</th>
+                    <th>商品数</th>
+                    <th>販売済み</th>
+                    <th>売上</th>
+                    <th>利益</th>
+                    <th>在庫評価</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for client in analytics.client_summaries %}
+                <tr>
+                    <td>
+                        <a class="client-summary-link" href="{{ url_for('user_analytics', start_month=start_month, end_month=end_month, client_id=client.user_id, from_client_reports=1 if from_client_reports else None) }}">
+                            {{ client.client_name }}
+                        </a>
+                    </td>
+                    <td>{{ client.total_items or 0 }}商品</td>
+                    <td>{{ client.sold_count or 0 }}商品</td>
+                    <td>¥{{ "{:,}".format((client.total_sales or 0)|int) }}</td>
+                    <td class="{% if client.total_profit and client.total_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
+                        ¥{{ "{:,}".format((client.total_profit or 0)|int) }}
+                    </td>
+                    <td>¥{{ "{:,}".format((client.inventory_value or 0)|int) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endif %}
+
+<!-- 総合サマリー -->
+{% set dashboard = analytics.analysis_dashboard or {} %}
+<div class="analytics-summary">
+    {% for card in dashboard.overview_cards or [] %}
+    <div class="summary-card">
+        <div class="summary-label">{{ card.label }}</div>
+        <div class="summary-value {{ card.value_class or '' }}">{{ card.display_value }}</div>
+        {% if card.subvalue %}
+        <div class="summary-sub">{{ card.subvalue }}</div>
+        {% endif %}
+        {% if card.formula or card.lines %}
+        <button type="button" class="analytics-detail-trigger" onclick="openAnalyticsDetail('overview-{{ card.id }}')">この数字の見方</button>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+
+<!-- 運営分析 -->
+<div class="kpi-dashboard">
+    <h2>運営分析</h2>
+    <p class="section-note">売上、利益、手数料、在庫回転、販売スピードを、最初に確認しやすい順番で整理しています。数字の意味が迷いやすいものは「計算の見方」から内訳を確認できます。</p>
+    <div class="kpi-grid">
+        {% for card in dashboard.kpi_cards or [] %}
+        <div class="kpi-card">
+            <div class="kpi-content">
+                <div class="kpi-value {{ card.value_class or '' }}">{{ card.display_value }}</div>
+                <div class="kpi-label">{{ card.label }}</div>
+                <div class="kpi-detail">{{ card.subvalue }}</div>
+                {% if card.formula or card.lines %}
+                <button type="button" class="analytics-detail-trigger" onclick="openAnalyticsDetail('kpi-{{ card.id }}')">計算の見方</button>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- 月別売上集計表 -->
+<div class="cashflow-section">
+    <h2>月別売上集計表</h2>
+    <p class="section-note">レポートCSVの売上推移と同じ考え方で、売上、当月仕入額、送料・手数料、販売利益、月末在庫原価を月ごとに確認できます。各月の詳細を開くと、売れた商品や仕入れた商品まで見られます。</p>
+    {% if dashboard.business_trend_rows %}
+    <div class="analysis-table-container js-edge-hover-scroll">
+        <table class="analysis-table analysis-table--monthly">
+            <thead>
+                <tr>
+                    <th>月</th>
+                    <th>販売商品数</th>
+                    <th>売上</th>
+                    <th>当月仕入額</th>
+                    <th>送料・手数料</th>
+                    <th>販売利益</th>
+                    <th>運営残額</th>
+                    <th>累計運営残額</th>
+                    <th>利益率</th>
+                    <th>平均販売日数</th>
+                    <th>月末在庫原価</th>
+                    <th>詳細</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in dashboard.business_trend_rows %}
+                <tr>
+                    <td>{{ row.label }}</td>
+                    <td>{{ row.sold_count }}商品</td>
+                    <td class="amount">¥{{ "{:,}".format((row.sales_total or 0)|int) }}</td>
+                    <td class="amount">¥{{ "{:,}".format((row.purchase_total or 0)|int) }}</td>
+                    <td class="amount">¥{{ "{:,}".format((row.expense_total or 0)|int) }}</td>
+                    <td class="amount {% if row.profit_total > 0 %}profit-positive{% else %}profit-negative{% endif %}">¥{{ "{:,}".format((row.profit_total or 0)|int) }}</td>
+                    <td class="amount {% if row.cashflow_total > 0 %}profit-positive{% else %}profit-negative{% endif %}">¥{{ "{:,}".format((row.cashflow_total or 0)|int) }}</td>
+                    <td class="amount {% if row.cumulative_cashflow > 0 %}profit-positive{% else %}profit-negative{% endif %}">¥{{ "{:,}".format((row.cumulative_cashflow or 0)|int) }}</td>
+                    <td>{{ "%.1f"|format(row.profit_margin or 0) }}%</td>
+                    <td>{{ "%.1f"|format(row.avg_days_to_sell or 0) }}日</td>
+                    <td class="amount">¥{{ "{:,}".format((row.inventory_total or 0)|int) }}</td>
+                    <td>
+                        <button type="button" class="analytics-detail-trigger" onclick="openAnalyticsDetail('{{ row.id }}')">月の詳細</button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="empty-message">{{ dashboard.empty_message }}</p>
+    {% endif %}
+</div>
+
+<div class="analytics-grid">
+    <!-- 在庫回転分析 -->
+    <div class="analytics-section full-width">
+        <h2>在庫回転分析</h2>
+        <p class="section-note">在庫を抱えすぎていないかを見るために、月初在庫、当月仕入数、販売商品数、月末在庫数、在庫回転率を月ごとに確認できます。詳細では、どの商品が仕入・販売・在庫として残ったかまで確認できます。</p>
+        {% if dashboard.inventory_turnover_rows %}
+        <div class="analysis-table-container js-edge-hover-scroll">
+            <table class="analysis-table analysis-table--inventory">
+                <thead>
+                    <tr>
+                        <th>月</th>
+                        <th>月初在庫数</th>
+                        <th>当月仕入数</th>
+                        <th>販売商品数</th>
+                        <th>月末在庫数</th>
+                        <th>月末在庫原価</th>
+                        <th>消化率</th>
+                        <th>平均販売日数</th>
+                        <th>在庫回転率</th>
+                        <th>詳細</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in dashboard.inventory_turnover_rows %}
+                    <tr>
+                        <td>{{ row.label }}</td>
+                        <td>{{ row.opening_count }}商品</td>
+                        <td>{{ row.purchased_count }}商品</td>
+                        <td>{{ row.sold_count }}商品</td>
+                        <td>{{ row.closing_count }}商品</td>
+                        <td class="amount">¥{{ "{:,}".format((row.closing_value or 0)|int) }}</td>
+                        <td>{{ "%.1f"|format(row.sell_through_rate or 0) }}%</td>
+                        <td>{{ "%.1f"|format(row.avg_days_to_sell or 0) }}日</td>
+                        <td>{{ "%.2f"|format(row.turnover_ratio or 0) }}回</td>
+                        <td>
+                            <button type="button" class="analytics-detail-trigger" onclick="openAnalyticsDetail('{{ row.id }}')">月の詳細</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="empty-message">{{ dashboard.empty_message }}</p>
+        {% endif %}
+    </div>
+
+    <!-- 前期間との比較分析 -->
+    {% if dashboard.comparison_cards %}
+    <div class="analytics-section comparison-section full-width">
+        <div class="section-heading-row">
+            <div>
+                <h2>前期間との比較分析</h2>
+                <p class="section-note">今の表示期間と同じ長さのひとつ前の期間（{{ dashboard.comparison_period_label }}）と比べています。売上が伸びたのか、手数料が重くなったのか、在庫の回り方が良くなったのかを確認できます。</p>
+            </div>
+        </div>
+        <div class="comparison-grid">
+            {% for card in dashboard.comparison_cards %}
+            <article class="comparison-card comparison-card--{{ card.tone }}">
+                <div class="comparison-card-top">
+                    <span class="comparison-label">{{ card.label }}</span>
+                    <span class="comparison-change comparison-change--{{ card.direction }}">{{ card.change_text }}</span>
+                </div>
+                <div class="comparison-current">{{ card.display_current }}</div>
+                <div class="comparison-previous">前期間: {{ card.display_previous }}</div>
+                {% if card.note %}
+                <p class="comparison-note">{{ card.note }}</p>
+                {% endif %}
+                <button type="button" class="analytics-detail-trigger comparison-detail-button" onclick="openAnalyticsDetail('comparison-{{ card.id }}')">詳細を見る</button>
+            </article>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- メモ欄 -->
+    <div class="analytics-section memo-section full-width">
+        <div class="memo-heading-row">
+            <div>
+                <h2>メモ</h2>
+                <p class="memo-period-note">{{ analytics.memo_target_month or end_month or start_month }} のメモ</p>
+            </div>
+            <a href="{{ url_for('analytics_memo_history') }}" class="btn btn-secondary btn-sm">メモ履歴</a>
+        </div>
+        <form method="POST" action="{{ url_for('user_analytics', start_month=start_month, end_month=end_month, period_preset=analytics.period_preset, from_client_reports=1 if from_client_reports else None) }}" class="memo-form">
+            <textarea name="analytics_memo" class="memo-textarea" rows="4" placeholder="分析メモを記録できます（次回も保持されます）">{{ analytics.analytics_memo or '' }}</textarea>
+            <div class="memo-actions">
+                <button type="submit" class="btn btn-primary btn-sm">メモを保存</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- 価格帯別統計 -->
+    <div class="analytics-section">
+        <h2>価格帯別売上状況</h2>
+        {% if analytics.price_stats %}
+        <div class="price-line-chart">
+            <div class="price-line-chart__plot">
+                <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="価格帯別売上グラフ">
+                    <line x1="8" y1="88" x2="96" y2="88" class="chart-axis"></line>
+                    <line x1="8" y1="12" x2="8" y2="88" class="chart-axis"></line>
+                    <polyline points="{{ analytics.price_chart.sales_points }}" class="price-sales-line"></polyline>
+                    {% for point in analytics.price_chart.points %}
+                    <circle cx="{{ point.x }}" cy="{{ point.y }}" r="2.2" class="price-sales-point"></circle>
+                    {% endfor %}
+                </svg>
+            </div>
+            <div class="price-line-chart__legend">
+                <span class="legend-dot legend-dot--sales"></span>
+                <span>価格帯ごとの売上合計</span>
+            </div>
+        </div>
+        <div class="price-chart-labels">
+            {% for point in analytics.price_chart.points %}
+            <div class="price-chart-label">
+                <strong>{{ point.label }}</strong>
+                <span>売上 ¥{{ "{:,}".format(point.sales|int) }}</span>
+                <span>{{ point.count }}商品 / 利益 ¥{{ "{:,}".format(point.profit|int) }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="stats-list stats-list--compact">
+            {% for price in analytics.price_stats %}
+            <div class="stats-item">
+                <div class="stats-info">
+                    <span class="stats-name">{{ price.price_range }}</span>
+                    <span class="stats-count">{{ price.count }}商品</span>
+                </div>
+                <div class="stats-values">
+                    <span>売上: ¥{{ "{:,}".format(price.total_sales|int) }}</span>
+                    <span>平均利益: ¥{{ "{:,}".format((price.avg_profit or 0)|int) }}</span>
+                    <span class="{% if price.total_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
+                        利益: ¥{{ "{:,}".format(price.total_profit|int) }}
+                    </span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="empty-message">データがありません</p>
+        {% endif %}
+    </div>
+
+    <!-- ブランド別統計 -->
+    <div class="analytics-section">
+        <h2>ブランド別取引状況</h2>
+        {% if analytics.brand_stats %}
+        <div class="brand-performance-grid">
+            {% for brand in analytics.brand_stats %}
+            <article class="performance-card">
+                <div class="performance-card__head">
+                    <span class="stats-rank">#{{ loop.index }}</span>
+                    <div>
+                        <h3>{{ brand.brand_name }}</h3>
+                        <p>{{ brand.count }}商品が販売されました</p>
+                    </div>
+                </div>
+                <div class="performance-card__metrics">
+                    <div>
+                        <span>売上</span>
+                        <strong>¥{{ "{:,}".format((brand.total_sales or 0)|int) }}</strong>
+                    </div>
+                    <div>
+                        <span>平均利益</span>
+                        <strong class="{% if brand.avg_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">¥{{ "{:,}".format((brand.avg_profit or 0)|int) }}</strong>
+                    </div>
+                    <div>
+                        <span>総利益</span>
+                        <strong class="{% if brand.total_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">¥{{ "{:,}".format((brand.total_profit or 0)|int) }}</strong>
+                    </div>
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="empty-message">データがありません</p>
+        {% endif %}
+    </div>
+
+    <div class="analytics-section">
+        <h2>販売先別売上・利益</h2>
+        {% if dashboard.channel_stats %}
+        <div class="channel-performance-list">
+            {% for channel in dashboard.channel_stats %}
+            <article class="channel-performance-card">
+                <div class="performance-card__head">
+                    <span class="stats-rank">#{{ loop.index }}</span>
+                    <div>
+                        <h3>{{ channel.name }}</h3>
+                        <p>{{ channel.count }}商品を販売</p>
+                    </div>
+                </div>
+                <div class="performance-card__metrics performance-card__metrics--wide">
+                    <div>
+                        <span>売上</span>
+                        <strong>¥{{ "{:,}".format(channel.sales_total|int) }}</strong>
+                    </div>
+                    <div>
+                        <span>平均利益</span>
+                        <strong class="{% if channel.avg_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">¥{{ "{:,}".format((channel.avg_profit or 0)|int) }}</strong>
+                    </div>
+                    <div>
+                        <span>総利益</span>
+                        <strong class="{% if channel.profit_total > 0 %}profit-positive{% else %}profit-negative{% endif %}">¥{{ "{:,}".format(channel.profit_total|int) }}</strong>
+                    </div>
+                    <div>
+                        <span>利益率</span>
+                        <strong>{{ "%.1f"|format(channel.profit_rate or 0) }}%</strong>
+                    </div>
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="empty-message">{{ dashboard.empty_message }}</p>
+        {% endif %}
+    </div>
+</div>
+
+{% for card in dashboard.overview_cards or [] %}
+<div class="analytics-detail-modal" id="overview-{{ card.id }}">
+    <div class="analytics-detail-dialog">
+        <div class="analytics-detail-header">
+            <h3>{{ card.title }}</h3>
+            <button type="button" class="analytics-detail-close" onclick="closeAnalyticsDetail('overview-{{ card.id }}')">×</button>
+        </div>
+        <div class="analytics-detail-body">
+            {% if card.formula %}
+            <div class="analytics-detail-formula">{{ card.formula }}</div>
+            {% endif %}
+            {% if card.lines %}
+            <div class="analytics-detail-lines">
+                {% for line in card.lines %}
+                <div class="analytics-detail-line">
+                    <span class="analytics-detail-line-label">{{ line.label }}</span>
+                    <span class="analytics-detail-line-value">{{ line.display }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if card.note %}
+            <div class="analytics-detail-note">{{ card.note }}</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+{% for card in dashboard.kpi_cards or [] %}
+<div class="analytics-detail-modal" id="kpi-{{ card.id }}">
+    <div class="analytics-detail-dialog">
+        <div class="analytics-detail-header">
+            <h3>{{ card.title }}</h3>
+            <button type="button" class="analytics-detail-close" onclick="closeAnalyticsDetail('kpi-{{ card.id }}')">×</button>
+        </div>
+        <div class="analytics-detail-body">
+            {% if card.formula %}
+            <div class="analytics-detail-formula">{{ card.formula }}</div>
+            {% endif %}
+            {% if card.lines %}
+            <div class="analytics-detail-lines">
+                {% for line in card.lines %}
+                <div class="analytics-detail-line">
+                    <span class="analytics-detail-line-label">{{ line.label }}</span>
+                    <span class="analytics-detail-line-value">{{ line.display }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if card.note %}
+            <div class="analytics-detail-note">{{ card.note }}</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+{% for card in dashboard.comparison_cards or [] %}
+<div class="analytics-detail-modal" id="comparison-{{ card.id }}">
+    <div class="analytics-detail-dialog analytics-detail-dialog-wide">
+        <div class="analytics-detail-header">
+            <h3>{{ card.detail_title }}</h3>
+            <button type="button" class="analytics-detail-close" onclick="closeAnalyticsDetail('comparison-{{ card.id }}')">×</button>
+        </div>
+        <div class="analytics-detail-body">
+            {% if card.detail_formula %}
+            <div class="analytics-detail-formula">{{ card.detail_formula }}</div>
+            {% endif %}
+            {% if card.detail_lines %}
+            <div class="analytics-detail-lines">
+                {% for line in card.detail_lines %}
+                <div class="analytics-detail-line">
+                    <span class="analytics-detail-line-label">{{ line.label }}</span>
+                    <span class="analytics-detail-line-value">{{ line.display }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if card.note %}
+            <div class="analytics-detail-note">{{ card.note }}</div>
+            {% endif %}
+
+            <details class="analytics-detail-panel" {% if card.current_items %}open{% endif %}>
+                <summary>表示期間に売れた商品を見る</summary>
+                {% if card.current_items %}
+                <div class="analytics-detail-table-wrap js-edge-hover-scroll">
+                    <table class="analytics-detail-table">
+                        <thead>
+                            <tr>
+                                <th>売却日</th>
+                                <th>商品</th>
+                                <th>販売先</th>
+                                <th>売上</th>
+                                <th>仕入原価</th>
+                                <th>送料・手数料</th>
+                                <th>利益</th>
+                                <th>手数料の内容</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in card.current_items %}
+                            <tr>
+                                <td>{{ item.sale_date }}</td>
+                                <td>
+                                    <div class="detail-item-name">{{ item.product_name }}</div>
+                                    <div class="detail-item-sub">{{ item.brand_name }}</div>
+                                </td>
+                                <td>{{ item.sales_destination }}</td>
+                                <td class="amount">{{ item.sale_value }}</td>
+                                <td class="amount">{{ item.purchase_value }}</td>
+                                <td class="amount">{{ item.expense_value }}</td>
+                                <td class="amount">{{ item.profit_value }}</td>
+                                <td>{{ item.fee_breakdown }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="empty-message">表示期間に売れた商品はありません。</p>
+                {% endif %}
+            </details>
+
+            <details class="analytics-detail-panel">
+                <summary>前期間に売れた商品を見る</summary>
+                {% if card.previous_items %}
+                <div class="analytics-detail-table-wrap js-edge-hover-scroll">
+                    <table class="analytics-detail-table">
+                        <thead>
+                            <tr>
+                                <th>売却日</th>
+                                <th>商品</th>
+                                <th>販売先</th>
+                                <th>売上</th>
+                                <th>仕入原価</th>
+                                <th>送料・手数料</th>
+                                <th>利益</th>
+                                <th>手数料の内容</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in card.previous_items %}
+                            <tr>
+                                <td>{{ item.sale_date }}</td>
+                                <td>
+                                    <div class="detail-item-name">{{ item.product_name }}</div>
+                                    <div class="detail-item-sub">{{ item.brand_name }}</div>
+                                </td>
+                                <td>{{ item.sales_destination }}</td>
+                                <td class="amount">{{ item.sale_value }}</td>
+                                <td class="amount">{{ item.purchase_value }}</td>
+                                <td class="amount">{{ item.expense_value }}</td>
+                                <td class="amount">{{ item.profit_value }}</td>
+                                <td>{{ item.fee_breakdown }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="empty-message">前期間に売れた商品はありません。</p>
+                {% endif %}
+            </details>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+{% for row in dashboard.business_trend_rows or [] %}
+<div class="analytics-detail-modal" id="{{ row.id }}">
+    <div class="analytics-detail-dialog analytics-detail-dialog-wide">
+        <div class="analytics-detail-header">
+            <h3>{{ row.detail_title }}</h3>
+            <button type="button" class="analytics-detail-close" onclick="closeAnalyticsDetail('{{ row.id }}')">×</button>
+        </div>
+        <div class="analytics-detail-body">
+            {% if row.detail_formula %}
+            <div class="analytics-detail-formula">{{ row.detail_formula }}</div>
+            {% endif %}
+            {% if row.detail_lines %}
+            <div class="analytics-detail-lines">
+                {% for line in row.detail_lines %}
+                <div class="analytics-detail-line">
+                    <span class="analytics-detail-line-label">{{ line.label }}</span>
+                    <span class="analytics-detail-line-value">{{ line.display }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if row.detail_note %}
+            <div class="analytics-detail-note">{{ row.detail_note }}</div>
+            {% endif %}
+
+            <details class="analytics-detail-panel" {% if row.sold_items %}open{% endif %}>
+                <summary>この月に売れた商品を見る</summary>
+                {% if row.sold_items %}
+                <div class="analytics-detail-table-wrap js-edge-hover-scroll">
+                    <table class="analytics-detail-table">
+                        <thead>
+                            <tr>
+                                <th>売却日</th>
+                                <th>商品</th>
+                                <th>販売先</th>
+                                <th>売上</th>
+                                <th>仕入原価</th>
+                                <th>送料・手数料</th>
+                                <th>利益</th>
+                                <th>手数料の内容</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in row.sold_items %}
+                            <tr>
+                                <td>{{ item.sale_date }}</td>
+                                <td>
+                                    <div class="detail-item-name">{{ item.product_name }}</div>
+                                    <div class="detail-item-sub">{{ item.brand_name }}</div>
+                                </td>
+                                <td>{{ item.sales_destination }}</td>
+                                <td class="amount">{{ item.sale_value }}</td>
+                                <td class="amount">{{ item.purchase_value }}</td>
+                                <td class="amount">{{ item.expense_value }}</td>
+                                <td class="amount">{{ item.profit_value }}</td>
+                                <td>{{ item.fee_breakdown }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="empty-message">この月に売れた商品はありません。</p>
+                {% endif %}
+            </details>
+
+            <details class="analytics-detail-panel">
+                <summary>この月に仕入れた商品を見る</summary>
+                {% if row.purchase_items %}
+                <div class="analytics-detail-table-wrap js-edge-hover-scroll">
+                    <table class="analytics-detail-table">
+                        <thead>
+                            <tr>
+                                <th>仕入日</th>
+                                <th>商品</th>
+                                <th>仕入先</th>
+                                <th>仕入額</th>
+                                <th>出品状況</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in row.purchase_items %}
+                            <tr>
+                                <td>{{ item.purchase_date }}</td>
+                                <td>
+                                    <div class="detail-item-name">{{ item.product_name }}</div>
+                                    <div class="detail-item-sub">{{ item.brand_name }}</div>
+                                </td>
+                                <td>{{ item.supplier_name }}</td>
+                                <td class="amount">{{ item.purchase_value }}</td>
+                                <td>{{ item.status_label }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="empty-message">この月に仕入れた商品はありません。</p>
+                {% endif %}
+            </details>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+{% for row in dashboard.inventory_turnover_rows or [] %}
+<div class="analytics-detail-modal" id="{{ row.id }}">
+    <div class="analytics-detail-dialog analytics-detail-dialog-wide">
+        <div class="analytics-detail-header">
+            <h3>{{ row.detail_title }}</h3>
+            <button type="button" class="analytics-detail-close" onclick="closeAnalyticsDetail('{{ row.id }}')">×</button>
+        </div>
+        <div class="analytics-detail-body">
+            {% if row.detail_formula %}
+            <div class="analytics-detail-formula">{{ row.detail_formula }}</div>
+            {% endif %}
+            {% if row.detail_lines %}
+            <div class="analytics-detail-lines">
+                {% for line in row.detail_lines %}
+                <div class="analytics-detail-line">
+                    <span class="analytics-detail-line-label">{{ line.label }}</span>
+                    <span class="analytics-detail-line-value">{{ line.display }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if row.detail_note %}
+            <div class="analytics-detail-note">{{ row.detail_note }}</div>
+            {% endif %}
+
+            <details class="analytics-detail-panel" {% if row.purchase_items %}open{% endif %}>
+                <summary>この月に仕入れた商品を見る</summary>
+                {% if row.purchase_items %}
+                <div class="analytics-detail-table-wrap js-edge-hover-scroll">
+                    <table class="analytics-detail-table">
+                        <thead>
+                            <tr>
+                                <th>仕入日</th>
+                                <th>商品</th>
+                                <th>仕入先</th>
+                                <th>仕入額</th>
+                                <th>出品状況</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in row.purchase_items %}
+                            <tr>
+                                <td>{{ item.purchase_date }}</td>
+                                <td>
+                                    <div class="detail-item-name">{{ item.product_name }}</div>
+                                    <div class="detail-item-sub">{{ item.brand_name }}</div>
+                                </td>
+                                <td>{{ item.supplier_name }}</td>
+                                <td class="amount">{{ item.purchase_value }}</td>
+                                <td>{{ item.status_label }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="empty-message">この月に仕入れた商品はありません。</p>
+                {% endif %}
+            </details>
+
+            <details class="analytics-detail-panel">
+                <summary>この月に売れた商品を見る</summary>
+                {% if row.sold_items %}
+                <div class="analytics-detail-table-wrap js-edge-hover-scroll">
+                    <table class="analytics-detail-table">
+                        <thead>
+                            <tr>
+                                <th>売却日</th>
+                                <th>商品</th>
+                                <th>販売先</th>
+                                <th>売上</th>
+                                <th>仕入原価</th>
+                                <th>利益</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in row.sold_items %}
+                            <tr>
+                                <td>{{ item.sale_date }}</td>
+                                <td>
+                                    <div class="detail-item-name">{{ item.product_name }}</div>
+                                    <div class="detail-item-sub">{{ item.brand_name }}</div>
+                                </td>
+                                <td>{{ item.sales_destination }}</td>
+                                <td class="amount">{{ item.sale_value }}</td>
+                                <td class="amount">{{ item.purchase_value }}</td>
+                                <td class="amount">{{ item.profit_value }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="empty-message">この月に売れた商品はありません。</p>
+                {% endif %}
+            </details>
+
+            <details class="analytics-detail-panel">
+                <summary>月末に残っていた在庫を見る</summary>
+                {% if row.closing_items %}
+                <div class="analytics-detail-table-wrap js-edge-hover-scroll">
+                    <table class="analytics-detail-table">
+                        <thead>
+                            <tr>
+                                <th>仕入日</th>
+                                <th>商品</th>
+                                <th>仕入額</th>
+                                <th>出品状況</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in row.closing_items %}
+                            <tr>
+                                <td>{{ item.purchase_date }}</td>
+                                <td>
+                                    <div class="detail-item-name">{{ item.product_name }}</div>
+                                    <div class="detail-item-sub">{{ item.brand_name }}</div>
+                                </td>
+                                <td class="amount">{{ item.purchase_value }}</td>
+                                <td>{{ item.status_label }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="empty-message">月末時点で残っている在庫はありません。</p>
+                {% endif %}
+            </details>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+<style>
+.analytics-detail-dialog-wide {
+    width: min(1120px, 100%);
+}
+
+.analytics-detail-panel {
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    background: #fff;
+    overflow: hidden;
+}
+
+.analytics-detail-panel summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 0.85rem 1rem;
+    font-weight: 700;
+    color: #0f172a;
+    background: #f8fafc;
+}
+
+.analytics-detail-panel summary::-webkit-details-marker {
+    display: none;
+}
+
+.analytics-detail-table-wrap {
+    overflow-x: auto;
+}
+
+.analytics-detail-table {
+    width: 100%;
+    min-width: 760px;
+    border-collapse: collapse;
+}
+
+.analytics-detail-table th,
+.analytics-detail-table td {
+    padding: 0.8rem 0.85rem;
+    border-top: 1px solid #e2e8f0;
+    vertical-align: top;
+}
+
+.analytics-detail-table th {
+    background: #f8fafc;
+    color: #475569;
+    font-size: 0.82rem;
+    white-space: nowrap;
+    text-align: left;
+}
+
+.analytics-detail-table .amount {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.detail-item-name {
+    color: #0f172a;
+    font-weight: 700;
+    line-height: 1.65;
+}
+
+.detail-item-sub {
+    color: #64748b;
+    font-size: 0.82rem;
+    line-height: 1.65;
+}
+
+/* 経費内訳サマリー */
+.expense-summary {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.expense-card {
+    background: white;
+    border-radius: 8px;
+    padding: 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    border-left: 4px solid #ef4444;
+}
+
+.expense-card.total {
+    border-left-color: #f59e0b;
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+}
+
+.expense-content {
+    flex: 1;
+}
+
+.expense-label {
+    font-size: 0.85rem;
+    color: #64748b;
+    margin-bottom: 0.25rem;
+}
+
+.expense-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #dc2626;
+}
+
+.expense-card.total .expense-value {
+    color: #d97706;
+}
+
+@media (max-width: 768px) {
+    .expense-summary {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* 運営分析 */
+.kpi-dashboard {
+    background: white;
+    border: 1px solid #d1d5db;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.kpi-dashboard h2 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #1e293b;
+    margin: 0 0 1.25rem 0;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.kpi-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+}
+
+.kpi-icon {
+    font-size: 2rem;
+    opacity: 0.8;
+}
+
+.kpi-content {
+    flex: 1;
+}
+
+.kpi-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #1e293b;
+    line-height: 1.2;
+}
+
+.kpi-label {
+    font-size: 0.85rem;
+    color: #64748b;
+    font-weight: 500;
+    margin-top: 0.25rem;
+}
+
+.kpi-detail {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    margin-top: 0.25rem;
+}
+
+.section-note {
+    margin: -0.35rem 0 1rem;
+    color: #64748b;
+    line-height: 1.8;
+    font-size: 0.92rem;
+}
+
+.section-heading-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: flex-start;
+}
+
+.comparison-section {
+    margin-bottom: 1.5rem;
+    border: 1px solid #dbeafe;
+    background: linear-gradient(135deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.comparison-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1rem;
+}
+
+.comparison-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    background: #fff;
+    padding: 1rem;
+    display: grid;
+    gap: 0.45rem;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
+}
+
+.comparison-card--good {
+    border-color: #bbf7d0;
+    background: linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%);
+}
+
+.comparison-card--watch {
+    border-color: #fed7aa;
+    background: linear-gradient(135deg, #ffffff 0%, #fff7ed 100%);
+}
+
+.comparison-card-top {
+    display: grid;
+    gap: 0.55rem;
+    align-items: flex-start;
+}
+
+.comparison-label {
+    color: #475569;
+    font-size: 0.86rem;
+    font-weight: 700;
+}
+
+.comparison-change {
+    border-radius: 999px;
+    padding: 0.3rem 0.65rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    line-height: 1.45;
+    max-width: 100%;
+    width: fit-content;
+    overflow-wrap: anywhere;
+}
+
+.comparison-change--up {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.comparison-change--down {
+    background: #ffedd5;
+    color: #9a3412;
+}
+
+.comparison-change--flat {
+    background: #e2e8f0;
+    color: #475569;
+}
+
+.comparison-current {
+    color: #0f172a;
+    font-size: 1.35rem;
+    font-weight: 800;
+    line-height: 1.25;
+}
+
+.comparison-previous,
+.comparison-note {
+    color: #64748b;
+    font-size: 0.8rem;
+    line-height: 1.6;
+}
+
+.comparison-note {
+    margin: 0;
+}
+
+/* 月別分析表 */
+.cashflow-section {
+    background: white;
+    border: 1px solid #d1d5db;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.cashflow-section h2 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #1e293b;
+    margin: 0 0 1.25rem 0;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.cashflow-table-container,
+.analysis-table-container {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-gutter: stable both-edges;
+}
+
+.cashflow-table,
+.analysis-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.analysis-table--monthly {
+    min-width: 1380px;
+}
+
+.analysis-table--inventory {
+    min-width: 1120px;
+}
+
+.cashflow-table th,
+.cashflow-table td,
+.analysis-table th,
+.analysis-table td {
+    padding: 0.75rem 1rem;
+    border: 1px solid #d1d5db;
+    text-align: center;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+.cashflow-table th,
+.analysis-table th {
+    background: #f8fafc;
+    font-weight: 600;
+    color: #475569;
+}
+
+.cashflow-table tbody tr:hover,
+.analysis-table tbody tr:hover {
+    background: #f8fafc;
+}
+
+.cashflow-table tfoot tr {
+    background: #f1f5f9;
+    font-weight: 600;
+}
+
+.cashflow-table .amount,
+.analysis-table .amount {
+    font-family: 'Consolas', monospace;
+}
+
+.analysis-table .analytics-detail-trigger {
+    margin-top: 0;
+    min-width: 96px;
+    justify-content: center;
+    border-radius: 12px;
+    padding: 0.44rem 0.95rem;
+    white-space: nowrap;
+    line-height: 1.2;
+}
+
+.cashflow-table .positive {
+    color: #2563eb;
+}
+
+.cashflow-table .negative {
+    color: #dc2626;
+}
+
+.analytics-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.summary-card {
+    background: white;
+    border-radius: 8px;
+    padding: 1.25rem;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.summary-link-card {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+}
+
+.summary-card.highlight {
+    background: white;
+    border: 2px solid #10b981;
+}
+
+.summary-card.highlight .summary-label {
+    color: #64748b;
+}
+
+.summary-card.highlight .summary-value {
+    color: #10b981;
+}
+
+.summary-card.inventory-card {
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    border: 2px solid #f59e0b;
+}
+
+.summary-card.inventory-card .summary-label {
+    color: #92400e;
+}
+
+.summary-card.inventory-card .summary-value {
+    color: #b45309;
+    font-weight: 700;
+}
+
+.summary-label {
+    font-size: 0.8rem;
+    color: #64748b;
+    margin-bottom: 0.5rem;
+}
+
+.summary-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #1e293b;
+}
+
+.extra-analytics-cards {
+    margin-top: -0.75rem;
+}
+
+.analytics-report-hub {
+    display: grid;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.analytics-report-section {
+    background: white;
+    border: 1px solid #d1d5db;
+    padding: 1.5rem;
+}
+
+.analytics-report-heading h2 {
+    margin: 0 0 0.4rem;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.analytics-report-heading p {
+    margin: 0;
+    color: #64748b;
+    line-height: 1.8;
+}
+
+.analytics-inline-report-list {
+    display: grid;
+    gap: 1rem;
+}
+
+.analytics-inline-report-card {
+    display: grid;
+    gap: 1rem;
+    padding: 1.2rem;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    border-radius: 16px;
+    min-width: 0;
+}
+
+.analytics-inline-report-card-head h3 {
+    margin: 0 0 0.45rem;
+    color: #0f172a;
+    font-size: 1.02rem;
+}
+
+.analytics-inline-report-card-head p {
+    margin: 0;
+    color: #64748b;
+    line-height: 1.75;
+}
+
+.analytics-inline-report-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.analytics-inline-report-control {
+    display: grid;
+    gap: 0.35rem;
+    flex: 1 1 140px;
+}
+
+.analytics-inline-report-control[hidden] {
+    display: none !important;
+}
+
+.analytics-inline-report-control span {
+    font-size: 0.82rem;
+    color: #64748b;
+}
+
+.analytics-inline-report-select {
+    width: 100%;
+    padding: 0.72rem 0.85rem;
+    border-radius: 10px;
+    border: 1px solid #d1d5db;
+    background: #fff;
+    color: #0f172a;
+    font-size: 0.92rem;
+}
+
+.analytics-inline-report-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+}
+
+.analytics-inline-report-preview {
+    display: grid;
+    gap: 1rem;
+}
+
+.analytics-report-loading,
+.analytics-report-empty,
+.analytics-report-error {
+    padding: 1.4rem 1rem;
+    text-align: center;
+    color: #64748b;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+}
+
+.analytics-report-error {
+    color: #b91c1c;
+}
+
+.analytics-report-preview {
+    display: grid;
+    gap: 1rem;
+}
+
+.analytics-report-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.8rem;
+}
+
+.analytics-report-summary-item {
+    padding: 0.95rem 1rem;
+    border-radius: 14px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+}
+
+.analytics-report-summary-label {
+    display: block;
+    margin-bottom: 0.35rem;
+    color: #64748b;
+    font-size: 0.8rem;
+}
+
+.analytics-report-summary-value {
+    color: #0f172a;
+    font-size: 1.05rem;
+    font-weight: 700;
+}
+
+.analytics-report-notes {
+    display: grid;
+    gap: 0.7rem;
+}
+
+.analytics-report-notes summary {
+    list-style: none;
+}
+
+.analytics-report-notes summary::-webkit-details-marker {
+    display: none;
+}
+
+.analytics-report-notes-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    width: fit-content;
+    padding: 0.45rem 0.8rem;
+    border-radius: 999px;
+    border: 1px solid #bfdbfe;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.analytics-report-notes-toggle::after {
+    content: '＋';
+    font-size: 0.9rem;
+    line-height: 1;
+}
+
+.analytics-report-notes[open] .analytics-report-notes-toggle::after {
+    content: '－';
+}
+
+.analytics-report-notes-content {
+    padding: 0.95rem 1rem;
+    border-radius: 14px;
+    border: 1px solid #dbeafe;
+    background: #fff;
+}
+
+.analytics-report-notes-content ul {
+    margin: 0;
+    padding-left: 1.1rem;
+    color: #334155;
+    line-height: 1.7;
+}
+
+.analytics-report-table-shell {
+    display: grid;
+    gap: 0.55rem;
+}
+
+.analytics-report-scroll-note {
+    color: #64748b;
+    font-size: 0.82rem;
+}
+
+.analytics-report-table-wrapper {
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    cursor: grab;
+    overscroll-behavior-x: contain;
+    scrollbar-gutter: stable both-edges;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 0.15rem;
+}
+
+.analytics-report-table-wrapper.dragging {
+    cursor: grabbing;
+    user-select: none;
+}
+
+.analytics-report-table-track {
+    display: inline-block;
+    min-width: 100%;
+    padding-right: 1.25rem;
+    box-sizing: border-box;
+}
+
+.analytics-report-table {
+    width: 100%;
+    min-width: 760px;
+    border-collapse: collapse;
+}
+
+.analytics-report-table th,
+.analytics-report-table td {
+    padding: 0.85rem 0.9rem;
+    border-bottom: 1px solid #e2e8f0;
+    font-size: 0.9rem;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+.analytics-report-table thead th {
+    position: sticky;
+    top: 0;
+    background: #f8fafc;
+    color: #475569;
+    font-weight: 700;
+    z-index: 1;
+}
+
+.analytics-report-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.text-right {
+    text-align: right;
+}
+
+.text-center {
+    text-align: center;
+}
+
+.summary-sub {
+    margin-top: 4px;
+    font-size: 0.82rem;
+    color: #64748b;
+}
+
+.memo-section {
+    margin-top: -0.25rem;
+    margin-bottom: 2rem;
+}
+
+.memo-heading-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+}
+
+.memo-heading-row h2 {
+    margin-bottom: 0.25rem;
+}
+
+.memo-period-note {
+    margin: 0;
+    color: #64748b;
+    font-size: 0.86rem;
+    line-height: 1.6;
+}
+
+.memo-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.memo-textarea {
+    width: 100%;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    padding: 0.75rem;
+    font-size: 0.95rem;
+    resize: vertical;
+    background: #fff;
+}
+
+.memo-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+@media (max-width: 640px) {
+    .memo-heading-row {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .memo-heading-row .btn {
+        width: 100%;
+        text-align: center;
+    }
+}
+
+.analytics-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.5rem;
+}
+
+.analytics-section {
+    background: white;
+    border-radius: 8px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    min-width: 0;
+}
+
+.analytics-section.full-width {
+    grid-column: 1 / -1;
+}
+
+.analytics-section h2 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1e293b;
+    margin: 0 0 1.25rem 0;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+/* 横棒グラフ */
+.bar-chart-horizontal {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.chart-row {
+    display: grid;
+    grid-template-columns: 80px 1fr 140px;
+    align-items: center;
+    gap: 1rem;
+}
+
+.chart-label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #475569;
+}
+
+.chart-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.chart-bar-group {
+    height: 14px;
+    background: #f1f5f9;
+    border-radius: 7px;
+    overflow: hidden;
+}
+
+.chart-bar {
+    height: 100%;
+    border-radius: 7px;
+    position: relative;
+    min-width: 4px;
+    transition: width 0.3s ease;
+}
+
+.chart-bar.sales {
+    background: #2563eb;
+}
+
+.chart-bar.profit.positive {
+    background: #10b981;
+}
+
+.chart-bar.profit.negative {
+    background: #ef4444;
+}
+
+.chart-bar:hover .bar-tooltip {
+    opacity: 1;
+    visibility: visible;
+}
+
+.bar-tooltip {
+    position: absolute;
+    right: 0;
+    top: -30px;
+    background: #1e293b;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.2s;
+    z-index: 10;
+}
+
+.chart-values {
+    display: flex;
+    flex-direction: column;
+    text-align: right;
+    font-size: 0.8rem;
+}
+
+.val-count {
+    color: #64748b;
+}
+
+.val-profit {
+    font-weight: 600;
+}
+
+.chart-legend {
+    display: flex;
+    gap: 1.5rem;
+    justify-content: center;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid #e2e8f0;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: #64748b;
+}
+
+.legend-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+}
+
+.legend-color.sales {
+    background: #2563eb;
+}
+
+.legend-color.profit {
+    background: #10b981;
+}
+
+/* 統計リスト */
+.price-line-chart {
+    display: grid;
+    gap: 0.7rem;
+    margin-bottom: 1rem;
+}
+
+.price-line-chart__plot {
+    height: 220px;
+    padding: 0.7rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+}
+
+.price-line-chart__plot svg {
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+}
+
+.chart-axis {
+    stroke: #cbd5e1;
+    stroke-width: 0.8;
+}
+
+.price-sales-line {
+    fill: none;
+    stroke: #2563eb;
+    stroke-width: 2.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    vector-effect: non-scaling-stroke;
+}
+
+.price-sales-point {
+    fill: #fff;
+    stroke: #2563eb;
+    stroke-width: 1.4;
+    vector-effect: non-scaling-stroke;
+}
+
+.price-line-chart__legend {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: #475569;
+    font-size: 0.84rem;
+    font-weight: 700;
+}
+
+.legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    display: inline-block;
+}
+
+.legend-dot--sales {
+    background: #2563eb;
+}
+
+.price-chart-labels {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0.65rem;
+    margin-bottom: 1rem;
+}
+
+.price-chart-label {
+    display: grid;
+    gap: 0.22rem;
+    padding: 0.75rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #fff;
+}
+
+.price-chart-label strong {
+    color: #0f172a;
+    font-size: 0.9rem;
+}
+
+.price-chart-label span {
+    color: #64748b;
+    font-size: 0.78rem;
+}
+
+.brand-performance-grid,
+.channel-performance-list {
+    display: grid;
+    gap: 0.85rem;
+}
+
+.brand-performance-grid {
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.performance-card,
+.channel-performance-card {
+    padding: 1rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
+}
+
+.performance-card__head {
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-start;
+    margin-bottom: 0.85rem;
+}
+
+.performance-card__head h3 {
+    margin: 0;
+    color: #0f172a;
+    font-size: 0.98rem;
+    line-height: 1.45;
+}
+
+.performance-card__head p {
+    margin: 0.2rem 0 0;
+    color: #64748b;
+    font-size: 0.78rem;
+}
+
+.performance-card__metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.6rem;
+}
+
+.performance-card__metrics--wide {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.performance-card__metrics div {
+    min-width: 0;
+    display: grid;
+    gap: 0.2rem;
+    padding: 0.65rem;
+    border-radius: 12px;
+    background: #f8fafc;
+}
+
+.performance-card__metrics span {
+    color: #64748b;
+    font-size: 0.74rem;
+    white-space: nowrap;
+}
+
+.performance-card__metrics strong {
+    color: #0f172a;
+    font-size: 0.9rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.stats-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.stats-list--compact {
+    gap: 0.75rem;
+}
+
+.stats-item {
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.stats-item:last-child {
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.stats-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.stats-rank {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #94a3b8;
+    width: 24px;
+}
+
+.stats-name {
+    flex: 1;
+    font-weight: 500;
+    color: #1e293b;
+}
+
+.stats-count {
+    font-size: 0.8rem;
+    color: #64748b;
+}
+
+.stats-bar-container {
+    height: 8px;
+    background: #f1f5f9;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 0.5rem;
+}
+
+.stats-bar {
+    height: 100%;
+    background: #2563eb;
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+.stats-bar.positive {
+    background: #10b981;
+}
+
+.stats-bar.negative {
+    background: #ef4444;
+}
+
+.stats-values {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    color: #64748b;
+}
+
+/* 円グラフ風表示 */
+.pie-chart-container {
+    padding: 0.5rem 0;
+}
+
+.pie-chart-data {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.pie-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem;
+    background: #f8fafc;
+    border-radius: 6px;
+}
+
+.pie-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+.pie-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.pie-label {
+    font-weight: 500;
+    color: #1e293b;
+    font-size: 0.9rem;
+}
+
+.pie-count {
+    font-size: 0.75rem;
+    color: #64748b;
+}
+
+.pie-values {
+    text-align: right;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.empty-message {
+    text-align: center;
+    color: #94a3b8;
+    padding: 2rem;
+}
+
+.profit-positive {
+    color: #10b981;
+}
+
+.profit-negative {
+    color: #ef4444;
+}
+
+.page-description {
+    color: #64748b;
+    font-size: 0.9rem;
+    margin-top: 0.5rem;
+}
+
+@media (max-width: 768px) {
+    .page-header h1 {
+        font-size: 1.1rem;
+    }
+    
+    .page-description {
+        font-size: 0.75rem;
+    }
+    
+    .analytics-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .chart-row {
+        grid-template-columns: 60px 1fr;
+    }
+    
+    .chart-values {
+        display: none;
+    }
+    
+    .analytics-summary {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.5rem;
+    }
+    
+    .summary-card {
+        padding: 0.75rem;
+    }
+    
+    .summary-label {
+        font-size: 0.65rem;
+    }
+    
+    .summary-value {
+        font-size: 0.9rem;
+    }
+    
+    .expense-summary {
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+    }
+    
+    .expense-card {
+        padding: 0.75rem;
+    }
+    
+    .expense-label {
+        font-size: 0.7rem;
+    }
+    
+    .expense-value {
+        font-size: 1rem;
+    }
+    
+    .kpi-dashboard {
+        padding: 1rem;
+    }
+    
+    .kpi-dashboard h2 {
+        font-size: 0.95rem;
+    }
+    
+    .kpi-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.5rem;
+    }
+    
+    .kpi-card {
+        padding: 0.6rem;
+        gap: 0.5rem;
+    }
+    
+    .kpi-icon {
+        font-size: 1.2rem;
+    }
+    
+    .kpi-value {
+        font-size: 1rem;
+    }
+    
+    .kpi-label {
+        font-size: 0.7rem;
+    }
+    
+    .kpi-detail {
+        font-size: 0.6rem;
+    }
+    
+    .cashflow-section {
+        padding: 1rem;
+    }
+    
+    .cashflow-section h2 {
+        font-size: 0.95rem;
+    }
+    
+    .cashflow-table {
+        font-size: 0.65rem;
+        min-width: 550px;
+    }
+
+    .analysis-table {
+        font-size: 0.78rem;
+    }
+
+    .analysis-table--monthly {
+        min-width: 1320px;
+    }
+
+    .analysis-table--inventory {
+        min-width: 1080px;
+    }
+    
+    .cashflow-table th,
+    .cashflow-table td {
+        padding: 0.4rem 0.3rem;
+        white-space: nowrap;
+        text-align: center;
+    }
+
+    .analysis-table th,
+    .analysis-table td {
+        padding: 0.55rem 0.65rem;
+        white-space: nowrap;
+        text-align: center;
+    }
+
+    .comparison-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    
+    .analytics-section {
+        padding: 1rem;
+    }
+    
+    .analytics-section h2 {
+        font-size: 0.9rem;
+        margin-bottom: 0.75rem;
+    }
+    
+    .chart-label {
+        font-size: 0.7rem;
+    }
+    
+    .chart-bar-group {
+        height: 10px;
+    }
+    
+    .chart-legend {
+        gap: 1rem;
+        font-size: 0.75rem;
+    }
+    
+    .legend-color {
+        width: 10px;
+        height: 10px;
+    }
+    
+    .stats-info {
+        font-size: 0.8rem;
+    }
+    
+    .stats-name {
+        font-size: 0.8rem;
+    }
+    
+    .stats-count {
+        font-size: 0.7rem;
+    }
+    
+    .stats-values {
+        font-size: 0.7rem;
+    }
+
+    .price-line-chart__plot {
+        height: 180px;
+    }
+
+    .brand-performance-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .performance-card__metrics,
+    .performance-card__metrics--wide {
+        grid-template-columns: 1fr 1fr;
+    }
+    
+    .pie-item {
+        padding: 0.4rem;
+    }
+    
+    .pie-label {
+        font-size: 0.75rem;
+    }
+    
+    .pie-count {
+        font-size: 0.65rem;
+    }
+    
+    .pie-values {
+        font-size: 0.75rem;
+    }
+
+    .analytics-report-section {
+        padding: 1rem;
+    }
+
+    .analytics-inline-report-card {
+        padding: 1rem;
+    }
+
+    .analytics-inline-report-controls {
+        flex-direction: column;
+    }
+
+    .analytics-inline-report-actions {
+        gap: 0.5rem;
+    }
+
+    .analytics-report-summary {
+        grid-template-columns: 1fr;
+    }
+
+    .analytics-report-table {
+        min-width: 680px;
+    }
+}
+
+@media (max-width: 480px) {
+    .analytics-summary {
+        grid-template-columns: 1fr 1fr;
+        gap: 0.4rem;
+    }
+    
+.summary-card {
+          padding: 0.6rem;
+      }
+
+      .summary-label {
+        font-size: 0.6rem;
+    }
+    
+    .summary-value {
+        font-size: 0.8rem;
+    }
+    
+    .kpi-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 0.4rem;
+    }
+    
+    .kpi-value {
+        font-size: 0.85rem;
+    }
+}
+</style>
+
+<script>
+function setupAnalysisTableWheelGuard(root = document) {
+    const wheelGuardTargets = root.querySelectorAll(
+        '.analysis-table-container, .analytics-detail-table-wrap, .analytics-report-table-wrapper'
+    );
+
+    wheelGuardTargets.forEach((container) => {
+        if (container.dataset.wheelGuardReady === '1') {
+            return;
+        }
+
+        container.dataset.wheelGuardReady = '1';
+        container.addEventListener('wheel', (event) => {
+            if (container.scrollWidth <= container.clientWidth + 4) {
+                return;
+            }
+
+            const deltaX = Number(event.deltaX || 0);
+            const deltaY = Number(event.deltaY || 0);
+            if (!deltaX && !deltaY) {
+                return;
+            }
+
+            event.preventDefault();
+
+            if (Math.abs(deltaY) >= Math.abs(deltaX)) {
+                const modalBody = container.closest('.analytics-detail-body');
+                const verticalTarget = modalBody || document.scrollingElement || document.documentElement;
+                if (verticalTarget) {
+                    verticalTarget.scrollTop += deltaY;
+                }
+            }
+        }, { passive: false });
+    });
+}
+
+function analyticsReportEscapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function getAnalyticsReportHub() {
+    return document.querySelector('.analytics-report-hub');
+}
+
+function collectAnalyticsReportParams(card) {
+    const params = {};
+    const aggregationInput = card.querySelector('[data-filter="aggregation"]');
+    const aggregationValue = aggregationInput ? aggregationInput.value : '';
+
+    card.querySelectorAll('[data-filter]').forEach((input) => {
+        if (input.dataset.filter === 'month' && aggregationValue === 'yearly') {
+            params[input.dataset.filter] = '0';
+            return;
+        }
+        params[input.dataset.filter] = input.value;
+    });
+
+    const reportHub = getAnalyticsReportHub();
+    const clientId = reportHub ? reportHub.dataset.reportClientId : '';
+    if (clientId) {
+        params.client_id = clientId;
+    }
+    return params;
+}
+
+function buildAnalyticsReportQuery(params) {
+    return new URLSearchParams(params).toString();
+}
+
+function syncAnalyticsReportControls(card) {
+    const aggregationInput = card.querySelector('[data-filter="aggregation"]');
+    const monthControl = card.querySelector('[data-control="month"]');
+    if (!aggregationInput || !monthControl) {
+        return;
+    }
+    monthControl.hidden = aggregationInput.value === 'yearly';
+}
+
+function renderAnalyticsReportTable(columns, rows, emptyText) {
+    if (!columns.length || !rows.length) {
+        return `<div class="analytics-report-empty">${analyticsReportEscapeHtml(emptyText || 'データがありません。')}</div>`;
+    }
+
+    const minWidth = `${Math.max(columns.length * 150, 820)}px`;
+
+    return `
+        <div class="analytics-report-table-shell">
+            <div class="analytics-report-scroll-note">表の端にカーソルを合わせると、横にスクロールして確認できます。</div>
+            <div class="analytics-report-table-wrapper js-edge-hover-scroll" data-draggable-scroll="true">
+                <div class="analytics-report-table-track" style="min-width: max(100%, ${minWidth});">
+                    <table class="analytics-report-table">
+                        <thead>
+                            <tr>
+                                ${columns.map((column) => `
+                                    <th class="${column.align === 'right' ? 'text-right' : column.align === 'center' ? 'text-center' : ''}">
+                                        ${analyticsReportEscapeHtml(column.label)}
+                                    </th>
+                                `).join('')}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows.map((row) => `
+                                <tr>
+                                    ${row.map((cell, index) => {
+                                        const align = columns[index] && columns[index].align ? columns[index].align : 'left';
+                                        const className = align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : '';
+                                        return `<td class="${className}">${analyticsReportEscapeHtml(cell)}</td>`;
+                                    }).join('')}
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function renderAnalyticsReportPreview(report) {
+    const summaryHtml = Array.isArray(report.summary) && report.summary.length
+        ? `
+            <div class="analytics-report-summary">
+                ${report.summary.map((item) => `
+                    <div class="analytics-report-summary-item">
+                        <span class="analytics-report-summary-label">${analyticsReportEscapeHtml(item.label)}</span>
+                        <span class="analytics-report-summary-value">${analyticsReportEscapeHtml(item.value)}</span>
+                    </div>
+                `).join('')}
+            </div>
+        `
+        : '';
+
+    const notesHtml = Array.isArray(report.notes) && report.notes.length
+        ? `
+            <details class="analytics-report-notes">
+                <summary class="analytics-report-notes-toggle">確認ポイント</summary>
+                <div class="analytics-report-notes-content">
+                    <ul>
+                        ${report.notes.map((note) => `<li>${analyticsReportEscapeHtml(note)}</li>`).join('')}
+                    </ul>
+                </div>
+            </details>
+        `
+        : '';
+
+    const tableHtml = renderAnalyticsReportTable(
+        report.columns || [],
+        report.rows || [],
+        report.empty_message || '対象データはありません。'
+    );
+
+    return `
+        <div class="analytics-report-preview">
+            ${summaryHtml}
+            ${notesHtml}
+            ${tableHtml}
+        </div>
+    `;
+}
+
+function enableAnalyticsReportTableDrag(wrapper) {
+    if (!wrapper || wrapper.dataset.dragReady === '1') {
+        return;
+    }
+
+    wrapper.dataset.dragReady = '1';
+
+    let isDragging = false;
+    let startX = 0;
+    let startScrollLeft = 0;
+
+    wrapper.addEventListener('pointerdown', (event) => {
+        if (wrapper.scrollWidth <= wrapper.clientWidth) {
+            return;
+        }
+        isDragging = true;
+        startX = event.clientX;
+        startScrollLeft = wrapper.scrollLeft;
+        wrapper.classList.add('dragging');
+        if (wrapper.setPointerCapture) {
+            wrapper.setPointerCapture(event.pointerId);
+        }
+    });
+
+    wrapper.addEventListener('pointermove', (event) => {
+        if (!isDragging) {
+            return;
+        }
+        const deltaX = event.clientX - startX;
+        wrapper.scrollLeft = startScrollLeft - deltaX;
+    });
+
+    const finishDrag = (event) => {
+        if (!isDragging) {
+            return;
+        }
+        isDragging = false;
+        wrapper.classList.remove('dragging');
+        if (event && wrapper.releasePointerCapture) {
+            try {
+                wrapper.releasePointerCapture(event.pointerId);
+            } catch (error) {
+                // no-op
+            }
+        }
+    };
+
+    wrapper.addEventListener('pointerup', finishDrag);
+    wrapper.addEventListener('pointercancel', finishDrag);
+    wrapper.addEventListener('pointerleave', finishDrag);
+}
+
+function setupAnalyticsReportTables(root) {
+    root.querySelectorAll('[data-draggable-scroll="true"]').forEach(enableAnalyticsReportTableDrag);
+    setupAnalysisTableWheelGuard(root);
+}
+
+function loadAnalyticsReportCard(card) {
+    const preview = card.querySelector('[data-report-preview]');
+    const reportType = card.dataset.reportType;
+    const params = collectAnalyticsReportParams(card);
+    const query = buildAnalyticsReportQuery(params);
+    const requestUrl = query ? `/api/report-v2/${reportType}?${query}` : `/api/report-v2/${reportType}`;
+
+    preview.innerHTML = '<div class="analytics-report-loading">読み込み中...</div>';
+
+    fetch(requestUrl)
+        .then((response) => {
+            if (!response.ok) {
+                throw new Error('レポートの読み込みに失敗しました。');
+            }
+            return response.json();
+        })
+        .then((data) => {
+            preview.innerHTML = renderAnalyticsReportPreview(data);
+            setupAnalyticsReportTables(preview);
+        })
+        .catch((error) => {
+            preview.innerHTML = `<div class="analytics-report-error">${analyticsReportEscapeHtml(error.message)}</div>`;
+        });
+}
+
+function downloadAnalyticsInlineReport(card, formatType) {
+    const reportType = card.dataset.reportType;
+    const params = collectAnalyticsReportParams(card);
+    params.format = formatType;
+    const query = buildAnalyticsReportQuery(params);
+    window.location.href = query
+        ? `/api/report-v2/${reportType}/download?${query}`
+        : `/api/report-v2/${reportType}/download`;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    setupAnalysisTableWheelGuard();
+
+    const cards = document.querySelectorAll('.analytics-inline-report-card');
+    if (!cards.length) {
+        return;
+    }
+
+    cards.forEach((card) => {
+        syncAnalyticsReportControls(card);
+
+        card.querySelectorAll('[data-filter]').forEach((input) => {
+            input.addEventListener('change', () => {
+                syncAnalyticsReportControls(card);
+                loadAnalyticsReportCard(card);
+            });
+        });
+
+        const refreshButton = card.querySelector('[data-action="refresh"]');
+        if (refreshButton) {
+            refreshButton.addEventListener('click', () => loadAnalyticsReportCard(card));
+        }
+
+        const csvButton = card.querySelector('[data-action="csv"]');
+        if (csvButton) {
+            csvButton.addEventListener('click', () => downloadAnalyticsInlineReport(card, 'csv'));
+        }
+
+        const pdfButton = card.querySelector('[data-action="pdf"]');
+        if (pdfButton) {
+            pdfButton.addEventListener('click', () => downloadAnalyticsInlineReport(card, 'pdf'));
+        }
+
+        loadAnalyticsReportCard(card);
+    });
+});
+</script>
+
+{% endif %}
+{% endblock %}
+

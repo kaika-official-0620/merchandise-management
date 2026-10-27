@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}料金・支払い・手数料 - 管理{% endblock %}
+
+{% block content %}
+<style>
+.settings-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:1.5rem}
+.settings-card-header{padding:1rem 1.25rem;border-bottom:1px solid var(--border);background:var(--bg-main)}
+.settings-card-header h3{margin:0;font-size:1rem}
+.settings-card-body{padding:1.25rem}
+.settings-note{margin-top:.45rem;color:var(--text-secondary);font-size:.85rem;line-height:1.7}
+.settings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem}
+.settings-grid .form-group{margin:0}
+.settings-grid label{display:block;margin-bottom:.4rem;font-size:.85rem;color:var(--text-secondary)}
+.master-table-wrap{overflow-x:auto}
+.master-table{width:100%;border-collapse:collapse}
+.master-table th,.master-table td{padding:.75rem .85rem;border-bottom:1px solid var(--border);text-align:left}
+.master-table th{background:var(--bg-main);font-size:.85rem;color:var(--text-secondary)}
+.master-table input{width:120px}
+</style>
+
+<div class="page-header">
+    <h1 class="page-title">料金・支払い・手数料</h1>
+    <p style="color:var(--text-secondary);margin-top:.5rem;">商品登録用マスターとは分けて、料金や手数料だけをここで管理します。</p>
+</div>
+
+<form action="{{ url_for('admin_fee_settings_save') }}" method="POST">
+    <div class="settings-card">
+        <div class="settings-card-header"><h3>月額利用料</h3></div>
+        <div class="settings-card-body">
+            <div class="settings-grid">
+                <div class="form-group"><label>20点プラン</label><input type="number" class="form-control" name="monthly_fee_20" value="{{ fee_settings.get('monthly_fee_20', '0') }}"></div>
+                <div class="form-group"><label>50点プラン</label><input type="number" class="form-control" name="monthly_fee_50" value="{{ fee_settings.get('monthly_fee_50', '0') }}"></div>
+                <div class="form-group"><label>100点プラン</label><input type="number" class="form-control" name="monthly_fee_100" value="{{ fee_settings.get('monthly_fee_100', '0') }}"></div>
+                <div class="form-group"><label>300点プラン</label><input type="number" class="form-control" name="monthly_fee_300" value="{{ fee_settings.get('monthly_fee_300', '0') }}"></div>
+                <div class="form-group"><label>300点超プラン</label><input type="number" class="form-control" name="monthly_fee_over" value="{{ fee_settings.get('monthly_fee_over', '0') }}"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="settings-card">
+        <div class="settings-card-header"><h3>通常販売の媒体手数料</h3></div>
+        <div class="settings-card-body">
+            <div class="settings-grid">
+                <div class="form-group"><label>通常販売の基準パーセント</label><input type="number" class="form-control" name="commission_normal" value="{{ fee_settings.get('commission_normal', '10') }}"></div>
+            </div>
+            <div class="settings-note">通常販売で使う媒体手数料の基準値です。商品側の個別設定がある場合はそちらを優先できます。</div>
+        </div>
+    </div>
+
+    <div class="settings-card">
+        <div class="settings-card-header"><h3>撮影梱包発送代行 手数料</h3></div>
+        <div class="settings-card-body">
+            <div class="master-table-wrap">
+                <table class="master-table">
+                    <thead><tr><th>区分</th><th>上限（円）</th><th>手数料（円）</th></tr></thead>
+                    <tbody>
+                        <tr><td>1段階目</td><td><input type="number" class="form-control" name="photo_packing_t1_max" value="{{ fee_settings.get('photo_packing_t1_max', '19999') }}"></td><td><input type="number" class="form-control" name="photo_packing_t1_fee" value="{{ fee_settings.get('photo_packing_t1_fee', '500') }}"></td></tr>
+                        <tr><td>2段階目</td><td><input type="number" class="form-control" name="photo_packing_t2_max" value="{{ fee_settings.get('photo_packing_t2_max', '49999') }}"></td><td><input type="number" class="form-control" name="photo_packing_t2_fee" value="{{ fee_settings.get('photo_packing_t2_fee', '650') }}"></td></tr>
+                        <tr><td>3段階目</td><td><input type="number" class="form-control" name="photo_packing_t3_max" value="{{ fee_settings.get('photo_packing_t3_max', '99999') }}"></td><td><input type="number" class="form-control" name="photo_packing_t3_fee" value="{{ fee_settings.get('photo_packing_t3_fee', '800') }}"></td></tr>
+                        <tr><td>4段階目</td><td>上限なし</td><td><input type="number" class="form-control" name="photo_packing_t4_fee" value="{{ fee_settings.get('photo_packing_t4_fee', '1000') }}"></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="settings-card">
+        <div class="settings-card-header"><h3>業者販売 / 同時出品 / オークション代行 手数料</h3></div>
+        <div class="settings-card-body">
+            <div class="master-table-wrap">
+                <table class="master-table">
+                    <thead><tr><th>項目</th><th>上限（円）</th><th>手数料（円）</th></tr></thead>
+                    <tbody>
+                        <tr><td>業者販売 1段階目</td><td><input type="number" class="form-control" name="wholesale_t1_max" value="{{ fee_settings.get('wholesale_t1_max', '19999') }}"></td><td><input type="number" class="form-control" name="wholesale_t1_fee" value="{{ fee_settings.get('wholesale_t1_fee', '500') }}"></td></tr>
+                        <tr><td>業者販売 2段階目</td><td><input type="number" class="form-control" name="wholesale_t2_max" value="{{ fee_settings.get('wholesale_t2_max', '49999') }}"></td><td><input type="number" class="form-control" name="wholesale_t2_fee" value="{{ fee_settings.get('wholesale_t2_fee', '1000') }}"></td></tr>
+                        <tr><td>業者販売 3段階目</td><td><input type="number" class="form-control" name="wholesale_t3_max" value="{{ fee_settings.get('wholesale_t3_max', '99999') }}"></td><td><input type="number" class="form-control" name="wholesale_t3_fee" value="{{ fee_settings.get('wholesale_t3_fee', '1500') }}"></td></tr>
+                        <tr><td>業者販売 4段階目</td><td><input type="number" class="form-control" name="wholesale_t4_max" value="{{ fee_settings.get('wholesale_t4_max', '199999') }}"></td><td><input type="number" class="form-control" name="wholesale_t4_fee" value="{{ fee_settings.get('wholesale_t4_fee', '2000') }}"></td></tr>
+                        <tr><td>業者販売 5段階目</td><td>上限なし</td><td><input type="number" class="form-control" name="wholesale_t5_fee" value="{{ fee_settings.get('wholesale_t5_fee', '3000') }}"></td></tr>
+                        <tr><td>同時出品 1段階目</td><td><input type="number" class="form-control" name="multi_listing_t1_max" value="{{ fee_settings.get('multi_listing_t1_max', '19999') }}"></td><td><input type="number" class="form-control" name="multi_listing_t1_fee" value="{{ fee_settings.get('multi_listing_t1_fee', '300') }}"></td></tr>
+                        <tr><td>同時出品 2段階目</td><td><input type="number" class="form-control" name="multi_listing_t2_max" value="{{ fee_settings.get('multi_listing_t2_max', '49999') }}"></td><td><input type="number" class="form-control" name="multi_listing_t2_fee" value="{{ fee_settings.get('multi_listing_t2_fee', '400') }}"></td></tr>
+                        <tr><td>同時出品 3段階目</td><td>上限なし</td><td><input type="number" class="form-control" name="multi_listing_t3_fee" value="{{ fee_settings.get('multi_listing_t3_fee', '500') }}"></td></tr>
+                        <tr><td>オークション 1段階目</td><td><input type="number" class="form-control" name="auction_t1_max" value="{{ fee_settings.get('auction_t1_max', '19999') }}"></td><td><input type="number" class="form-control" name="auction_t1_fee" value="{{ fee_settings.get('auction_t1_fee', '300') }}"></td></tr>
+                        <tr><td>オークション 2段階目</td><td><input type="number" class="form-control" name="auction_t2_max" value="{{ fee_settings.get('auction_t2_max', '49999') }}"></td><td><input type="number" class="form-control" name="auction_t2_fee" value="{{ fee_settings.get('auction_t2_fee', '400') }}"></td></tr>
+                        <tr><td>オークション 3段階目</td><td><input type="number" class="form-control" name="auction_t3_max" value="{{ fee_settings.get('auction_t3_max', '99999') }}"></td><td><input type="number" class="form-control" name="auction_t3_fee" value="{{ fee_settings.get('auction_t3_fee', '500') }}"></td></tr>
+                        <tr><td>オークション 4段階目</td><td>上限なし</td><td><input type="number" class="form-control" name="auction_t4_fee" value="{{ fee_settings.get('auction_t4_fee', '700') }}"></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div style="text-align:center;margin-top:1.5rem;">
+        <button type="submit" class="btn btn-primary">料金・支払い・手数料を保存</button>
+    </div>
+</form>
+{% endblock %}

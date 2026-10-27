@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+
+{% block title %}見積依頼書詳細（管理者用） - 株式会社 開花{% endblock %}
+
+{% block content %}
+{% include "admin/_document_detail_styles.html" %}
+
+<div class="admin-doc-page">
+    <div class="admin-doc-toolbar">
+        <div>
+            <h1>見積依頼書</h1>
+            <p>クライアントから届いた見積依頼書です。受付内容と対象品目をこの画面で確認できます。</p>
+        </div>
+        <div class="admin-doc-actions">
+            <a href="{{ url_for('admin_documents_history') }}" class="doc-btn doc-btn-secondary context-back-inline">書類履歴へ戻る</a>
+            {% if can_edit_final_documents() %}
+            <a href="{{ url_for('admin_final_document_edit', document_kind='user_mitsumori', document_id=mitsumori.id) }}" class="doc-btn doc-btn-primary">&#20462;&#27491;</a>
+            {% endif %}
+            <a href="{{ url_for('user_mitsumori_download', id=mitsumori.id) }}" class="doc-btn doc-btn-csv js-csv-download" download>CSV</a>
+            <a href="{{ url_for('admin_mitsumori_pdf', id=mitsumori.id) }}" class="doc-btn doc-btn-pdf" target="_blank" rel="noopener">PDF</a>
+        </div>
+    </div>
+
+    <article class="admin-doc-sheet">
+        <header class="admin-doc-hero">
+            <div>
+                <div class="admin-doc-kicker">クライアントから受付</div>
+                <h2 class="admin-doc-title">見積依頼書</h2>
+                <p class="admin-doc-no">{{ mitsumori.document_no or '-' }}</p>
+            </div>
+            <div class="admin-doc-status">
+                <span class="status-badge status-{{ mitsumori.status or 'draft' }}">
+                    {% if mitsumori.status == 'draft' %}下書き
+                    {% elif mitsumori.status in ['sent', 'submitted'] %}送信済み
+                    {% elif mitsumori.status == 'approved' %}承認済み
+                    {% elif mitsumori.status == 'rejected' %}差し戻し
+                    {% else %}完了{% endif %}
+                </span>
+                <span class="admin-doc-sub">発行日: {{ mitsumori.issue_date or '-' }}</span>
+            </div>
+        </header>
+
+            <div class="admin-doc-body">
+            <div class="admin-doc-info-grid">
+                <section class="admin-doc-card">
+                    <h2>送信者</h2>
+                    <dl class="admin-doc-dl">
+                        <div>
+                            <dt>クライアント</dt>
+                            <dd>{{ mitsumori.user_name or mitsumori.username or '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt>ユーザーID</dt>
+                            <dd>{{ mitsumori.user_id or '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt>作成日時</dt>
+                            <dd>{{ mitsumori.created_at or '-' }}</dd>
+                        </div>
+                    </dl>
+                </section>
+
+                <section class="admin-doc-card">
+                    <h2>宛先</h2>
+                    <dl class="admin-doc-dl">
+                        <div>
+                            <dt>会社名</dt>
+                            <dd>{{ mitsumori.company_name or '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt>部署・担当者</dt>
+                            <dd>
+                                {% if mitsumori.department %}{{ mitsumori.department }}<br>{% endif %}
+                                {{ (mitsumori.contact_person ~ ' 様') if mitsumori.contact_person else '-' }}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt>住所</dt>
+                            <dd>{{ mitsumori.address or '-' }}</dd>
+                        </div>
+                        {% if mitsumori.valid_until %}
+                        <div>
+                            <dt>有効期限</dt>
+                            <dd>{{ mitsumori.valid_until }}</dd>
+                        </div>
+                        {% endif %}
+                    </dl>
+                </section>
+            </div>
+
+            {% if source_invoice %}
+            <section class="admin-doc-section">
+                <div class="admin-doc-section-head">
+                    <h2>&#20803;&#12398;&#36023;&#21462;&#26126;&#32048;&#26360;</h2>
+                    <a href="{{ url_for('admin_kaitori_view', id=source_invoice.id) }}" class="doc-btn doc-btn-secondary">{{ source_invoice.invoice_no or source_invoice.id }}</a>
+                </div>
+                <p class="admin-doc-note">{{ source_invoice.issue_date or '-' }} / &#21512;&#35336; &#165;{{ "{:,}".format(source_invoice.total_amount or 0) }}</p>
+            </section>
+            {% endif %}
+
+            {% if mitsumori.status == 'cancelled' %}
+            <section class="admin-doc-notes is-cancelled">
+                <h2>&#21462;&#28040;&#28168;&#12415;</h2>
+                <div class="admin-doc-notes-body">{{ mitsumori.cancel_reason or '-' }}</div>
+            </section>
+            {% elif can_cancel_documents() %}
+            <section class="admin-doc-cancel-panel">
+                <h2>&#26360;&#39006;&#21462;&#28040;</h2>
+                <form method="POST" action="{{ url_for('admin_cancel_final_document', document_kind='user_mitsumori', document_id=mitsumori.id) }}" onsubmit="return confirm('&#12371;&#12398;&#26360;&#39006;&#12434;&#21462;&#28040;&#28168;&#12415;&#12395;&#12375;&#12414;&#12377;&#12363;&#65311;');">
+                    <textarea name="reason" rows="3" required placeholder="&#21462;&#28040;&#29702;&#30001;"></textarea>
+                    <button type="submit" class="doc-btn doc-btn-danger">&#21462;&#28040;&#12377;&#12427;</button>
+                </form>
+            </section>
+            {% endif %}
+
+            <section class="admin-doc-section">
+                <h2>件名</h2>
+                <p class="admin-doc-note">{{ mitsumori.subject or '-' }}</p>
+            </section>
+
+            <section class="admin-doc-section">
+                <div class="admin-doc-section-head">
+                    <h2>依頼品目</h2>
+                    <strong>合計 ¥{{ "{:,}".format(mitsumori.total_amount or 0) }}</strong>
+                </div>
+                <div class="table-scroll">
+                    <table class="admin-doc-table">
+                        <thead>
+                            <tr>
+                                <th>No.</th>
+                                <th>品名・内容</th>
+                                <th>数量</th>
+                                <th>単価</th>
+                                <th>金額</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in items %}
+                            <tr>
+                                <td>{{ item.item_no or loop.index }}</td>
+                                <td>{{ item.item_name or '-' }}</td>
+                                <td class="text-right">{{ item.quantity or '-' }}</td>
+                                <td class="text-right">¥{{ "{:,}".format(item.unit_price or 0) }}</td>
+                                <td class="text-right">¥{{ "{:,}".format(item.amount or 0) }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="5" class="admin-doc-empty">品目がありません。</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot>
+                            <tr class="total-row">
+                                <td colspan="4" class="text-right">合計</td>
+                                <td class="text-right">¥{{ "{:,}".format(mitsumori.total_amount or 0) }}</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </section>
+
+            {% if mitsumori.notes %}
+            <section class="admin-doc-notes">
+                <h2>備考・条件</h2>
+                <div class="admin-doc-notes-body">{{ mitsumori.notes }}</div>
+            </section>
+            {% endif %}
+
+            {% set final_document_kind = 'user_mitsumori' %}
+            {% set final_document_id = mitsumori.id %}
+            {% include "admin/_final_document_event_history.html" %}
+        </div>
+    </article>
+</div>
+{% endblock %}

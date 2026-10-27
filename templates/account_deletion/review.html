@@ -1,0 +1,49 @@
+{% extends 'account_deletion/info.html' %}
+{% block deletion_title %}削除申請の確認記録{% endblock %}
+{% block deletion_content %}
+<nav aria-label="削除申請"><a href="{{ url_for('account_lifecycle.admin_list') }}">申請一覧へ</a><a href="{{ url_for('account_lifecycle.information') }}">お客様向けの案内</a></nav>
+<h1 id="deletion-heading">削除申請の確認記録</h1>
+<p class="ad-notice">確認記録を保存する検証画面です。ここから本番のデータ削除・利用停止は行えません。認証を失効する試験も、専用の使い捨て架空データに限ります。利用停止は関連データの削除完了ではありません。</p>
+<section class="ad-card" aria-labelledby="review-status-heading">
+  <h2 id="review-status-heading">申請の状態</h2>
+  <dl><dt>顧客ID</dt><dd>{{ row.customer_id }}</dd><dt>受付番号</dt><dd><code>{{ row.request_id }}</code></dd><dt>状態</dt><dd>{{ labels.get(row.state, '要確認') }}</dd><dt>受付日時</dt><dd>{{ row.requested_at }}</dd><dt>最終更新日時</dt><dd>{{ row.updated_at }}</dd></dl>
+  <h3>お客様へ表示する現在の案内</h3><p class="ad-preserve">{{ row.customer_notice or 'まだ登録されていません。' }}</p>
+  <p class="ad-muted">保有商品・残高・継続課金を理由に申請の受付を拒まないでください。返送・精算・解約案内・保持の必要性を確認し、削除が完了したものと未完了のものを分けて記録します。</p>
+</section>
+<section class="ad-card" aria-labelledby="review-categories-heading">
+  <h2 id="review-categories-heading">確認項目</h2>
+  <p>保持する対象・理由・期間、処理期限、外部サービスとバックアップの扱いを確認します。確認済みの記録があっても、削除済みとは判定しません。</p>
+  <div class="ad-scroll" tabindex="0" role="region" aria-label="確認項目。小さい画面では横にスクロールできます">
+    <table><thead><tr><th scope="col">対象</th><th scope="col">記録</th><th scope="col">確認日時・担当ID</th></tr></thead><tbody>
+    {% for category, label in categories.items() %}{% set record = row.review.get(category) %}<tr><th scope="row">{{ label }}</th><td>{% if record %}{{ record.reference }}{% else %}未確認{% endif %}</td><td>{% if record %}{{ record.reviewed_at }}<br>担当ID {{ record.actor_id }}{% else %}—{% endif %}</td></tr>{% endfor %}
+    </tbody></table>
+  </div>
+</section>
+{% if row.state in ['requested', 'reviewing'] %}
+<form class="ad-card" method="post" action="{{ url_for('account_lifecycle.admin_review', customer_id=row.customer_id) }}">
+  <h2>確認の根拠とお客様への案内を記録する</h2>
+  <input type="hidden" name="registry_csrf" value="{{ csrf }}">
+  <input type="hidden" name="operation_token" value="{{ token }}">
+  <input type="hidden" name="request_id" value="{{ row.request_id }}">
+  <label for="review-category">確認する項目</label><select id="review-category" name="category" required><option value="">選択してください</option>{% for category, label in categories.items() %}<option value="{{ category }}">{{ label }}</option>{% endfor %}</select>
+  <label for="review-reference">根拠となる確認記録の番号・参照（200文字以内）</label><input id="review-reference" name="reference" maxlength="200" required aria-describedby="review-reference-help">
+  <p id="review-reference-help" class="ad-muted">スタッフ用の照合番号・記録名を入力します。秘密キー、カード番号、パスワード、不要な個人情報は入力しないでください。この欄はお客様の申請画面には表示しません。</p>
+  <label for="review-notice">お客様へ表示する案内（1,000文字以内）</label><textarea id="review-notice" name="notice" maxlength="1000" aria-describedby="review-notice-help">{{ row.customer_notice }}</textarea>
+  <p id="review-notice-help" class="ad-muted">保存すると現在の案内を置き換えます。お客様が次に行う手続きや、確認中の対象を記載してください。メール・LINE・プッシュの送信操作ではありません。</p>
+  <label for="review-password">操作するスタッフの現在のパスワード</label><input id="review-password" name="password" type="password" autocomplete="current-password" maxlength="1024" required>
+  <button class="ad-button" type="submit">本人確認をして確認記録を保存する</button>
+</form>
+{% endif %}
+{% include 'account_deletion/plan.html' %}
+<details class="ad-card"><summary>直接参照の技術的な調査一覧（スタッフ向け）</summary>
+<section aria-labelledby="review-data-heading">
+  <h2 id="review-data-heading">関連データの調査一覧</h2>
+  <p class="ad-notice">顧客ID等で直接照合できる行の件数です。間接的な関連・写真ファイル・委託先・バックアップを網羅した一覧ではありません。「0件」も「削除済み」や「保持不要」を意味しません。保持方針・処理期間・問い合わせ窓口は未確定です。</p>
+  <div class="ad-scroll" tabindex="0" role="region" aria-label="関連データ一覧。小さい画面では横にスクロールできます">
+    <table><thead><tr><th scope="col">データの区分</th><th scope="col">直接照合できた件数</th><th scope="col">保持・削除の分類</th></tr></thead><tbody>
+    {% for item in inventory %}<tr><th scope="row"><code>{{ item.table }}</code></th><td>{% if item.direct_records is none %}未集計（直接照合する列なし）{% else %}{{ item.direct_records }}件{% endif %}</td><td>未確認</td></tr>{% endfor %}
+    </tbody></table>
+  </div>
+</section>
+</details>
+{% endblock %}

@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}利用プランの確認 - 株式会社 開花{% endblock %}
+{% block content %}
+{% include "_feature_plan_styles.html" %}
+<div class="fp-page"><section class="fp-panel">
+<h1>この機能はご契約の対象外です</h1>
+<p>{{ feature_label }}を利用するには、対応するプランが有効になっている必要があります。</p>
+<div class="fp-actions"><a class="btn btn-primary" href="{{ url_for('feature_plans.plans') }}">利用プランを確認</a><a class="btn btn-secondary" href="{{ url_for('index') }}">商品一覧へ戻る</a></div>
+</section></div>
+{% endblock %}

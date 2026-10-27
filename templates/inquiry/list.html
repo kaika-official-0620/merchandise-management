@@ -1,0 +1,345 @@
+{% extends "base.html" %}
+{% block title %}お問い合わせ - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>お問い合わせ</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('inquiry_new') }}" class="btn btn-primary">新規問い合わせ</a>
+    </div>
+</div>
+
+{% set inquiry_has_filter = is_inquiry_filtered|default(false)
+    or request.args.get('q')
+    or request.args.get('date')
+    or request.args.get('date_from')
+    or request.args.get('date_to') %}
+
+<form method="GET" class="inquiry-search-form">
+    <input type="search" name="q" value="{{ search_filters.q if search_filters is defined else '' }}" placeholder="件名・本文・返信内容を検索">
+    <input type="date" name="date" value="{{ search_filters.date if search_filters is defined and search_filters.date else (search_filters.date_from if search_filters is defined and search_filters.date_from == search_filters.date_to else '') }}" aria-label="日付">
+    <button type="submit" class="btn btn-primary">検索</button>
+    {% if is_inquiry_filtered|default(false) or request.query_string %}
+    <a href="{{ url_for('inquiry_list') }}" class="btn btn-secondary">検索解除</a>
+    {% endif %}
+</form>
+
+<div class="inquiry-container">
+    {% if inquiries %}
+    <div class="inquiry-list">
+        {% for inquiry in inquiries %}
+        <div class="inquiry-card-wrapper status-row-{{ inquiry.status }}">
+            <a href="{{ url_for('inquiry_view', id=inquiry.id) }}" class="inquiry-card">
+                <div class="inquiry-status-cell">
+                    <span class="inquiry-category">{{ categories.get(inquiry.category, inquiry.category) }}</span>
+                    <span class="inquiry-status status-{{ inquiry.status }}">{{ statuses.get(inquiry.status, inquiry.status) }}</span>
+                </div>
+                <div class="inquiry-main-cell">
+                    <div class="inquiry-title-row">
+                        <div class="inquiry-title">
+                            {{ inquiry.title }}
+                            {% if inquiry.image_path %}
+                            <span class="attachment-icon" title="画像添付あり">画像あり</span>
+                            {% endif %}
+                        </div>
+                        <span class="inquiry-date">作成: {{ inquiry.created_at[:16].replace('-', '/').replace('T', ' ') if inquiry.created_at else '-' }}</span>
+                    </div>
+                </div>
+                <div class="inquiry-open-cell">
+                    詳細
+                </div>
+            </a>
+            <form action="{{ url_for('inquiry_delete', id=inquiry.id) }}" method="POST" class="inquiry-delete-form" onsubmit="return confirm('この問い合わせを削除しますか？');">
+                <button type="submit" class="btn-delete-inquiry" title="削除">🗑️</button>
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-message">
+        <p>お問い合わせはありません</p>
+        <a href="{{ url_for('inquiry_new') }}" class="btn btn-primary">新規問い合わせを作成</a>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.inquiry-search-form {
+    max-width: 1100px;
+    margin: 0 auto 1rem;
+    display: grid;
+    grid-template-columns: minmax(180px, 1fr) 150px auto auto;
+    gap: 0.5rem;
+    align-items: center;
+    min-width: 0;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 0.75rem;
+}
+
+.inquiry-search-form input {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    min-height: 38px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 0.5rem 0.65rem;
+    font: inherit;
+}
+
+.inquiry-search-form input[type="date"] {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.inquiry-container {
+    max-width: 1100px;
+    margin: 0 auto;
+}
+
+.inquiry-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.inquiry-card-wrapper {
+    position: relative;
+    display: flex;
+    align-items: stretch;
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(15,23,42,0.05);
+    border: 1px solid #e2e8f0;
+    transition: all 0.2s;
+}
+
+.inquiry-card-wrapper.status-row-new {
+    border-color: #fbbf24;
+    box-shadow: inset 3px 0 0 #f59e0b, 0 4px 12px rgba(15,23,42,0.05);
+}
+
+.inquiry-card-wrapper.status-row-resolved,
+.inquiry-card-wrapper.status-row-closed {
+    background: #f8fafc;
+}
+
+.inquiry-card-wrapper:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    border-color: #2563eb;
+}
+
+.inquiry-card {
+    display: grid;
+    grid-template-columns: 126px minmax(0, 1fr) 58px;
+    align-items: center;
+    gap: 0.65rem;
+    flex: 1;
+    padding: 0.58rem 0.7rem;
+    text-decoration: none;
+    color: inherit;
+    border-radius: 10px 0 0 10px;
+}
+
+.inquiry-delete-form {
+    display: flex;
+    align-items: center;
+    padding: 0 0.45rem;
+    border-left: 1px solid #e2e8f0;
+}
+
+.btn-delete-inquiry {
+    background: none;
+    border: none;
+    font-size: 0.95rem;
+    cursor: pointer;
+    padding: 0.35rem;
+    border-radius: 6px;
+    transition: all 0.2s;
+    opacity: 0.5;
+}
+
+.btn-delete-inquiry:hover {
+    background: #fee2e2;
+    opacity: 1;
+}
+
+.inquiry-status-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+}
+
+.inquiry-main-cell {
+    min-width: 0;
+}
+
+.inquiry-category {
+    font-size: 0.68rem;
+    line-height: 1.2;
+    padding: 0.14rem 0.36rem;
+    background: #f1f5f9;
+    border-radius: 4px;
+    color: #64748b;
+}
+
+.inquiry-status {
+    font-size: 0.68rem;
+    line-height: 1.2;
+    padding: 0.14rem 0.36rem;
+    border-radius: 4px;
+    font-weight: 500;
+}
+
+.inquiry-status.status-new {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.inquiry-status.status-in_progress {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.inquiry-status.status-resolved {
+    background: #d1fae5;
+    color: #059669;
+}
+
+.inquiry-status.status-closed {
+    background: #e2e8f0;
+    color: #64748b;
+}
+
+.inquiry-title-row {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    min-width: 0;
+}
+
+.inquiry-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 0.95rem;
+    font-weight: 800;
+    color: #1e293b;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.unread-badge {
+    font-size: 0.75rem;
+    padding: 0.2rem 0.5rem;
+    background: #ef4444;
+    color: white;
+    border-radius: 10px;
+    font-weight: 500;
+}
+
+.attachment-icon {
+    flex: 0 0 auto;
+    padding: 0.1rem 0.35rem;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 0.66rem;
+    font-weight: 800;
+}
+
+.inquiry-date {
+    flex: 0 0 auto;
+    font-size: 0.75rem;
+    color: #94a3b8;
+    white-space: nowrap;
+}
+
+.inquiry-open-cell {
+    justify-self: end;
+    padding: 0.22rem 0.48rem;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 0.72rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.empty-message {
+    text-align: center;
+    padding: 4rem 2rem;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.empty-message p {
+    color: #94a3b8;
+    margin-bottom: 1.5rem;
+    font-size: 1.1rem;
+}
+
+@media (max-width: 760px) {
+    .inquiry-search-form {
+        grid-template-columns: minmax(0, 1fr);
+        max-width: none;
+        margin-left: 0;
+        margin-right: 0;
+    }
+    .inquiry-search-form input[type="search"],
+    .inquiry-search-form input[type="date"],
+    .inquiry-search-form .btn {
+        grid-column: 1 / -1;
+        width: 100%;
+        max-width: 100%;
+    }
+
+    .inquiry-card-wrapper {
+        border-radius: 8px;
+    }
+
+    .inquiry-card {
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 0.45rem 0.5rem;
+        padding: 0.55rem 0.6rem;
+    }
+
+    .inquiry-status-cell {
+        grid-column: 1 / -1;
+        justify-content: flex-start;
+    }
+
+    .inquiry-title-row {
+        align-items: flex-start;
+        gap: 0.35rem;
+        flex-direction: column;
+    }
+
+    .inquiry-date {
+        font-size: 0.68rem;
+    }
+
+    .inquiry-open-cell {
+        justify-self: end;
+        align-self: center;
+    }
+
+    .inquiry-delete-form {
+        padding: 0 0.35rem;
+    }
+}
+</style>
+{% endblock %}

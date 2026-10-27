@@ -1,0 +1,12 @@
+{% extends "inventory_registry/frame.html" %}
+{% block title %}利益・請求下書き - 株式会社開花{% endblock %}
+{% macro tokens(purpose, target) -%}
+<input type="hidden" name="registry_csrf" value="{{ finance_csrf() }}"><input type="hidden" name="operation_token" value="{{ finance_operation(purpose, target) }}">
+{%- endmacro %}
+{% macro money(value) -%}{% if value is none or value is undefined %}未確認{% else %}{{ '{:,}'.format(value) }}円{% endif %}{%- endmacro %}
+{% macro when() -%}<label>記録の対象日時（日本時間）<input type="datetime-local" step="0.000001" name="occurred_at" value="{{ finance_now }}" required></label>{%- endmacro %}
+{% block registry_content %}
+{% if not customer_navigation_available|default(false) %}<nav><a href="{{ url_for('finance_review.index') }}">利益・請求下書き</a>{% if current_user.role == 'user' %}<a href="{{ url_for('finance_review.customer', customer_id=current_user.id) }}">自分の請求・資金記録</a>{% endif %}</nav>{% endif %}
+<p class="notice">検証用の下書きです。請求の確定・カード決済・実入金・返金は行いません。料金案や入力記録を、確定した請求額・銀行残高として扱わないでください。</p>
+{% block finance_content %}{% endblock %}
+{% endblock %}

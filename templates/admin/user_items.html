@@ -1,0 +1,842 @@
+{% extends "base.html" %}
+{% block title %}{{ user.display_name or user.username }}の商品一覧 - 株式会社 開花{% endblock %}
+
+{% block content %}
+{% set current_back_url = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path %}
+<style>
+    /* モバイル用カード表示 */
+    .mobile-cards {
+        display: none;
+    }
+
+    .item-card {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        margin-bottom: 12px;
+        overflow: hidden;
+    }
+
+    .item-card.card-sold {
+        opacity: 0.7;
+        background: #f8f8f8;
+    }
+
+    .card-header {
+        display: flex;
+        padding: 12px;
+        gap: 12px;
+        border-bottom: 1px solid #f1f5f9;
+        position: relative;
+    }
+
+    .card-photo {
+        width: 60px;
+        height: 60px;
+        flex-shrink: 0;
+    }
+
+    .card-photo img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: 6px;
+    }
+
+    .card-photo .no-photo {
+        width: 100%;
+        height: 100%;
+        background: #f1f5f9;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #94a3b8;
+        border-radius: 6px;
+        font-size: 0.8rem;
+    }
+
+    .card-title {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .card-id {
+        font-size: 0.7rem;
+        color: #64748b;
+    }
+
+    .card-title h3 {
+        margin: 4px 0;
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: #1e293b;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .card-store {
+        font-size: 0.75rem;
+        color: #64748b;
+    }
+
+    .card-body {
+        padding: 12px;
+    }
+
+    .card-info-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+    }
+
+    .card-info-item {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .card-info-label {
+        font-size: 0.65rem;
+        color: #94a3b8;
+    }
+
+    .card-info-value {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #1e293b;
+    }
+
+    .card-info-value.profit-positive {
+        color: #10b981;
+    }
+
+    .card-info-value.profit-negative {
+        color: #ef4444;
+    }
+
+    .fee-breakdown {
+        display: inline-block;
+        text-align: left;
+    }
+
+    .fee-breakdown summary {
+        cursor: pointer;
+        list-style: none;
+        font-weight: 600;
+        color: inherit;
+    }
+
+    .fee-breakdown summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .fee-breakdown-body {
+        margin-top: 6px;
+        padding: 8px 10px;
+        border: 1px solid #dbeafe;
+        border-radius: 10px;
+        background: #f8fbff;
+        font-size: 0.72rem;
+        line-height: 1.6;
+        color: #475569;
+        white-space: nowrap;
+    }
+
+    .fee-breakdown-note {
+        color: #94a3b8;
+        font-size: 0.68rem;
+    }
+
+    .admin-table th.fee-col,
+    .admin-table td.fee-col {
+        min-width: 220px;
+        width: 220px;
+    }
+
+    .admin-table th.shipping-col,
+    .admin-table td.shipping-col {
+        min-width: 130px;
+        width: 130px;
+    }
+
+    .card-footer {
+        padding: 8px 12px;
+        background: #f8fafc;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .card-actions {
+        display: flex;
+        gap: 6px;
+    }
+
+    .card-actions .btn {
+        padding: 4px 10px;
+        font-size: 0.75rem;
+    }
+
+    .action-cell {
+        white-space: nowrap;
+    }
+
+    .action-cell .btn {
+        padding: 4px 8px;
+        font-size: 0.75rem;
+        margin-right: 4px;
+    }
+
+    .btn-edit {
+        background: #3b82f6;
+        color: white;
+    }
+
+    .btn-edit:hover {
+        background: #2563eb;
+    }
+
+    .btn-danger {
+        background: #ef4444;
+        color: white;
+    }
+
+    .btn-danger:hover {
+        background: #dc2626;
+    }
+
+    /* モーダル */
+    .modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    }
+
+    .modal-content {
+        background: white;
+        width: 90%;
+        max-width: 400px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        border-radius: 12px;
+    }
+
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .modal-header h2 {
+        margin: 0;
+        font-size: 1.125rem;
+    }
+
+    .modal-close {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        cursor: pointer;
+        color: #64748b;
+    }
+
+    .modal-close:hover {
+        color: #1e293b;
+    }
+
+    .modal-body {
+        padding: 1rem;
+    }
+
+    .modal-footer {
+        padding: 1rem;
+        border-top: 1px solid #e2e8f0;
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.5rem;
+    }
+
+    .badge {
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.7rem;
+        font-weight: 600;
+    }
+
+    .badge-sold {
+        background: #ef4444;
+        color: white;
+    }
+
+    .badge-listed {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    .badge-pending {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    .badge-appraisal {
+        background: #fef3c7;
+        color: #b45309;
+    }
+
+    .user-items-description {
+        margin: 0.35rem 0 0;
+        color: #64748b;
+        font-size: 0.94rem;
+    }
+
+    .user-items-toolbar {
+        display: grid;
+        gap: 1rem;
+        margin-bottom: 1.15rem;
+    }
+
+    .period-chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.55rem;
+    }
+
+    .period-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.5rem 0.85rem;
+        border-radius: 999px;
+        border: 1px solid #cbd5e1;
+        background: #fff;
+        color: #475569;
+        text-decoration: none;
+        font-size: 0.88rem;
+        font-weight: 600;
+    }
+
+    .period-chip.active {
+        border-color: #2563eb;
+        background: #eff6ff;
+        color: #1d4ed8;
+    }
+
+    .user-items-filter-form {
+        display: grid;
+        grid-template-columns: 160px 160px 160px 190px auto auto;
+        gap: 0.75rem;
+        align-items: end;
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 1rem;
+    }
+
+    .user-items-filter-group {
+        display: grid;
+        gap: 0.35rem;
+    }
+
+    .user-items-filter-group label {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #475569;
+    }
+
+    .user-items-filter-group input,
+    .user-items-filter-group select {
+        width: 100%;
+        padding: 0.65rem 0.75rem;
+        border: 1px solid #cbd5e1;
+        border-radius: 10px;
+        font-size: 0.92rem;
+    }
+
+    .user-summary-grid {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 0.9rem;
+        margin-bottom: 1.1rem;
+    }
+
+    .user-summary-card {
+        display: block;
+        text-decoration: none;
+        color: inherit;
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 1rem;
+        box-shadow: 0 4px 16px rgba(15, 23, 42, 0.05);
+    }
+
+    .user-summary-card:hover {
+        border-color: #93c5fd;
+        transform: translateY(-1px);
+    }
+
+    .user-summary-label {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #64748b;
+        margin-bottom: 0.35rem;
+    }
+
+    .user-summary-value {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #0f172a;
+    }
+
+    .user-summary-sub {
+        margin-top: 0.35rem;
+        font-size: 0.74rem;
+        color: #94a3b8;
+    }
+
+    .user-monthly-card {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .user-monthly-card h2 {
+        margin: 0 0 0.85rem;
+        font-size: 1rem;
+    }
+
+    .user-monthly-table-wrap {
+        overflow-x: auto;
+    }
+
+    .user-monthly-table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 560px;
+    }
+
+    .user-monthly-table th,
+    .user-monthly-table td {
+        padding: 0.75rem 0.8rem;
+        border-bottom: 1px solid #e2e8f0;
+        text-align: left;
+        white-space: nowrap;
+    }
+
+    .user-monthly-table th {
+        background: #f8fafc;
+        color: #475569;
+        font-size: 0.8rem;
+    }
+
+    .status-filter-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        padding: 0.3rem 0.7rem;
+        border-radius: 999px;
+        background: #eff6ff;
+        color: #1d4ed8;
+        font-size: 0.78rem;
+        font-weight: 700;
+    }
+
+    /* カードステータス（デフォルトは非表示） */
+    .card-status {
+        display: none;
+    }
+
+    /* スマホ（768px以下）*/
+    @media (max-width: 768px) {
+        .user-items-filter-form {
+            grid-template-columns: 1fr;
+        }
+
+        .user-summary-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .admin-table-container {
+            display: none;
+        }
+
+        .mobile-cards {
+            display: block;
+        }
+
+        .card-header {
+            padding-right: 70px;
+        }
+
+        /* Status Badge Overlay */
+        .card-status {
+            display: block;
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            z-index: 10;
+        }
+
+        .card-status .badge {
+            font-size: 0.75rem;
+            padding: 4px 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+        }
+    }
+</style>
+
+<div class="page-header">
+    <div>
+        <h1>{{ user.display_name or user.username }}の商品一覧</h1>
+        <p class="user-items-description">対象期間 {{ period_label }} の売上と、現在保有している在庫状況を確認できます。</p>
+    </div>
+    <a href="{{ back_url or url_for('admin_users') }}" class="btn btn-secondary">← 1つ前の画面に戻る</a>
+</div>
+
+<div class="user-items-toolbar">
+    <div class="period-chip-row">
+        <a class="period-chip {% if period_preset == 'month' %}active{% endif %}" href="{{ url_for('admin_user_items', id=user.id, period_preset='month', status=status_filter, sort=sort_mode, back_url=back_url) }}">当月</a>
+        <a class="period-chip {% if period_preset == 'year' %}active{% endif %}" href="{{ url_for('admin_user_items', id=user.id, period_preset='year', status=status_filter, sort=sort_mode, back_url=back_url) }}">今年</a>
+        <a class="period-chip {% if period_preset == 'all' %}active{% endif %}" href="{{ url_for('admin_user_items', id=user.id, period_preset='all', status=status_filter, sort=sort_mode, back_url=back_url) }}">全期間</a>
+        <span class="period-chip active">表示期間: {{ period_label }}</span>
+        {% if status_filter == 'sold' %}
+        <span class="status-filter-badge">販売済みのみ表示中</span>
+        {% elif status_filter == 'unsold' %}
+        <span class="status-filter-badge">在庫のみ表示中</span>
+        {% endif %}
+    </div>
+
+    <form method="GET" action="{{ url_for('admin_user_items', id=user.id) }}" class="user-items-filter-form">
+        <input type="hidden" name="back_url" value="{{ back_url or '' }}">
+        <input type="hidden" name="period_preset" value="custom">
+        <div class="user-items-filter-group">
+            <label for="start_month">開始月</label>
+            <input id="start_month" type="month" name="start_month" value="{{ start_month }}">
+        </div>
+        <div class="user-items-filter-group">
+            <label for="end_month">終了月</label>
+            <input id="end_month" type="month" name="end_month" value="{{ end_month }}">
+        </div>
+        <div class="user-items-filter-group">
+            <label for="status">表示対象</label>
+            <select id="status" name="status">
+                <option value="all" {% if status_filter == 'all' %}selected{% endif %}>すべて</option>
+                <option value="sold" {% if status_filter == 'sold' %}selected{% endif %}>売却済みのみ</option>
+                <option value="transaction" {% if status_filter == 'transaction' %}selected{% endif %}>取引中のみ</option>
+                <option value="listed" {% if status_filter == 'listed' %}selected{% endif %}>出品中のみ</option>
+                <option value="agency" {% if status_filter == 'agency' %}selected{% endif %}>業者依頼中のみ</option>
+                <option value="unsold" {% if status_filter == 'unsold' %}selected{% endif %}>未売却のみ</option>
+                <option value="unlisted" {% if status_filter == 'unlisted' %}selected{% endif %}>未出品のみ</option>
+            </select>
+        </div>
+        <div class="user-items-filter-group">
+            <label for="sort">並び替え</label>
+            <select id="sort" name="sort">
+                <option value="sold_bottom" {% if sort_mode == 'sold_bottom' %}selected{% endif %}>売却済みを下に回す</option>
+                <option value="registered" {% if sort_mode == 'registered' %}selected{% endif %}>登録順（新しい順）</option>
+                <option value="updated" {% if sort_mode == 'updated' %}selected{% endif %}>更新順（新しい順）</option>
+                <option value="timeline" {% if sort_mode == 'timeline' %}selected{% endif %}>時系列順</option>
+                <option value="sale_newest" {% if sort_mode == 'sale_newest' %}selected{% endif %}>売却日が新しい順</option>
+                <option value="purchase_high" {% if sort_mode == 'purchase_high' %}selected{% endif %}>仕入額が高い順</option>
+                <option value="sale_high" {% if sort_mode == 'sale_high' %}selected{% endif %}>売上が高い順</option>
+                <option value="profit_high" {% if sort_mode == 'profit_high' %}selected{% endif %}>利益が高い順</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary">適用</button>
+        <a href="{{ url_for('admin_user_items', id=user.id, period_preset='month', back_url=back_url) }}" class="btn btn-secondary">リセット</a>
+    </form>
+</div>
+
+<div class="user-summary-grid">
+    <a class="user-summary-card" href="{{ analytics_links.all }}#client-items-table">
+        <div class="user-summary-label">商品登録数</div>
+        <div class="user-summary-value">{{ summary.total_items or 0 }}件</div>
+        <div class="user-summary-sub">登録されている全商品</div>
+    </a>
+    <a class="user-summary-card" href="{{ analytics_links.sold }}#client-items-table">
+        <div class="user-summary-label">対象期間の販売済み</div>
+        <div class="user-summary-value">{{ summary.sold_count or 0 }}件</div>
+        <div class="user-summary-sub">対象期間 {{ period_label }}</div>
+    </a>
+    <a class="user-summary-card" href="{{ analytics_links.unsold }}#client-items-table">
+        <div class="user-summary-label">現在庫数</div>
+        <div class="user-summary-value">{{ summary.inventory_count or 0 }}件</div>
+        <div class="user-summary-sub">現在保有している在庫</div>
+    </a>
+    <a class="user-summary-card" href="{{ analytics_links.unsold }}#client-items-table">
+        <div class="user-summary-label">在庫金額</div>
+        <div class="user-summary-value">¥{{ "{:,}".format((summary.inventory_value or 0)|int) }}</div>
+        <div class="user-summary-sub">現在庫の仕入れ評価額</div>
+    </a>
+    <a class="user-summary-card" href="{{ analytics_links.sold }}#client-items-table">
+        <div class="user-summary-label">対象期間売上</div>
+        <div class="user-summary-value">¥{{ "{:,}".format((summary.period_sales or 0)|int) }}</div>
+        <div class="user-summary-sub">対象期間 {{ period_label }}</div>
+    </a>
+    <a class="user-summary-card" href="{{ analytics_links.sold }}#client-items-table">
+        <div class="user-summary-label">対象期間手数料 / 利益</div>
+        <div class="user-summary-value">¥{{ "{:,}".format((summary.period_fees or 0)|int) }}</div>
+        <div class="user-summary-sub {% if summary.period_profit and summary.period_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
+            利益 ¥{{ "{:,}".format((summary.period_profit or 0)|int) }}
+        </div>
+    </a>
+</div>
+
+{% if monthly_summary %}
+<div class="user-monthly-card">
+    <h2>月次サマリー</h2>
+    <div class="user-monthly-table-wrap">
+        <table class="user-monthly-table">
+            <thead>
+                <tr>
+                    <th>月</th>
+                    <th>販売済み</th>
+                    <th>売上</th>
+                    <th>手数料</th>
+                    <th>利益</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in monthly_summary %}
+                <tr>
+                    <td>{{ row.month }}</td>
+                    <td>{{ row.sold_count }}件</td>
+                    <td>¥{{ "{:,}".format((row.sales or 0)|int) }}</td>
+                    <td>¥{{ "{:,}".format((row.fees or 0)|int) }}</td>
+                    <td class="{% if row.profit and row.profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">¥{{ "{:,}".format((row.profit or 0)|int) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- PC用テーブル表示 -->
+<div class="admin-table-container" id="client-items-table">
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>写真</th>
+                <th>商品名</th>
+                <th>店舗名</th>
+                <th>仕入日</th>
+                <th>仕入れ額</th>
+                <th class="fee-col">手数料</th>
+                <th class="shipping-col">送料</th>
+                <th>売上</th>
+                <th>最終利益</th>
+                <th>状態</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr class="{% if item.is_sold or item.sale_date %}row-sold{% endif %}" data-detail-url="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}">
+                <td>{{ item.id }}</td>
+                <td>
+                    {% if item.photo_path %}
+                    <img src="{{ url_for('static', filename=item.photo_path) }}" class="table-thumbnail" alt="">
+                    {% else %}
+                    <span class="no-thumb">-</span>
+                    {% endif %}
+                </td>
+                <td><strong>{{ item.product_name or '-' }}</strong></td>
+                <td>{{ item.store_name or '-' }}</td>
+                <td>{{ item.purchase_date or '-' }}</td>
+                <td>¥{{ "{:,}".format(item.display_purchase_price or 0) }}</td>
+                <td class="fee-col">
+                    {% if item.is_sold or item.sale_date or item.display_fee_total or item.kaika_fee %}
+                    <details class="fee-breakdown">
+                        <summary>¥{{ "{:,}".format(item.display_fee_total or 0) }}</summary>
+                        <div class="fee-breakdown-body">
+                            {% for fee_detail in item.fee_breakdown_details or [] %}
+                            {% if not fee_detail.startswith('送料:') %}
+                            <div>{{ fee_detail }}</div>
+                            {% endif %}
+                            {% endfor %}
+                            {% if item.kaika_fee %}
+                            <div class="fee-breakdown-note">開花手数料は仕入れ額に含めて計算しています。</div>
+                            {% endif %}
+                        </div>
+                    </details>
+                    {% else %}-{% endif %}
+                </td>
+                <td class="shipping-col">{% if item.is_sold or item.sale_date or item.display_shipping_cost %}¥{{ "{:,}".format(item.display_shipping_cost or 0) }}{% else %}-{% endif %}</td>
+                <td>{% if item.is_sold or item.sale_date %}¥{{ "{:,}".format(item.display_sale_price or 0) }}{% else %}-{% endif %}</td>
+                <td>
+                    {% if item.is_sold or item.sale_date %}
+                    <span class="{% if item.profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
+                        ¥{{ "{:,}".format(item.profit) }}
+                    </span>
+                    {% else %}
+                    -
+                    {% endif %}
+                </td>
+                <td>
+                    {% if item.is_sold or item.sale_date %}
+                    <span class="badge badge-sold">売却済</span>
+                    {% elif item.appraisal_status == 'waiting' %}
+                    <span class="badge badge-appraisal">査定待ち</span>
+                    {% elif item.is_listed %}
+                    <span class="badge badge-listed">出品中</span>
+                    {% else %}
+                    <span class="badge badge-pending">未出品</span>
+                    {% endif %}
+                </td>
+                <td class="action-cell">
+                    <a href="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}" class="btn btn-sm">詳細</a>
+                    <a href="{{ url_for('edit_item', id=item.id, back_url=current_back_url) }}" class="btn btn-sm btn-edit">編集</a>
+                    {% if item.can_delete %}
+                    <button class="btn btn-sm btn-danger"
+                        onclick="openDeleteModal({{ item.id }}, '{{ item.product_name | e }}')">削除</button>
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="12" class="empty-cell">商品がありません</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- スマホ用カード表示 -->
+<div class="mobile-cards">
+    {% for item in items %}
+    <div class="item-card {% if item.is_sold or item.sale_date %}card-sold{% endif %}" data-detail-url="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}">
+        <div class="card-header">
+            <div class="card-photo">
+                {% if item.photo_path %}
+                <img src="{{ url_for('static', filename=item.photo_path) }}" alt="">
+                {% else %}
+                <div class="no-photo">-</div>
+                {% endif %}
+            </div>
+            <div class="card-title">
+                <span class="card-id">#{{ item.id }}</span>
+                <h3>{{ item.product_name or '-' }}</h3>
+                <span class="card-store">{{ item.store_name or '-' }}</span>
+            </div>
+            <div class="card-status">
+                {% if item.is_sold or item.sale_date %}
+                <span class="badge badge-sold">売却済</span>
+                {% elif item.appraisal_status == 'waiting' %}
+                <span class="badge badge-appraisal">査定待ち</span>
+                {% elif item.is_listed %}
+                <span class="badge badge-listed">出品中</span>
+                {% else %}
+                <span class="badge badge-pending">未出品</span>
+                {% endif %}
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="card-info-grid">
+                <div class="card-info-item">
+                    <span class="card-info-label">仕入日</span>
+                    <span class="card-info-value">{{ item.purchase_date or '-' }}</span>
+                </div>
+                <div class="card-info-item">
+                    <span class="card-info-label">仕入れ額</span>
+                    <span class="card-info-value">¥{{ "{:,}".format(item.display_purchase_price or 0) }}</span>
+                </div>
+                <div class="card-info-item">
+                    <span class="card-info-label">手数料</span>
+                    <span class="card-info-value">
+                        {% if item.is_sold or item.sale_date or item.display_fee_total or item.kaika_fee %}
+                        ¥{{ "{:,}".format(item.display_fee_total or 0) }}
+                        {% else %}-{% endif %}
+                    </span>
+                </div>
+                <div class="card-info-item">
+                    <span class="card-info-label">送料</span>
+                    <span class="card-info-value">{% if item.is_sold or item.sale_date or item.display_shipping_cost %}¥{{ "{:,}".format(item.display_shipping_cost or 0) }}{% else %}-{% endif %}</span>
+                </div>
+                <div class="card-info-item">
+                    <span class="card-info-label">売上</span>
+                    <span class="card-info-value">{% if item.is_sold or item.sale_date %}¥{{ "{:,}".format(item.display_sale_price or 0) }}{%
+                        else %}-{% endif %}</span>
+                </div>
+                <div class="card-info-item">
+                    <span class="card-info-label">最終利益</span>
+                    <span class="card-info-value {% if item.is_sold or item.sale_date %}{% if item.profit > 0 %}profit-positive{% else %}profit-negative{% endif %}{% endif %}">
+                        {% if item.is_sold or item.sale_date %}¥{{ "{:,}".format(item.profit or 0) }}{% else %}-{% endif %}
+                    </span>
+                </div>
+            </div>
+        </div>
+        <div class="card-footer">
+            <div class="card-actions">
+                <a href="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}" class="btn btn-sm">詳細</a>
+                <a href="{{ url_for('edit_item', id=item.id, back_url=current_back_url) }}" class="btn btn-sm btn-edit">編集</a>
+                {% if item.can_delete %}
+                <button class="btn btn-sm btn-danger"
+                    onclick="openDeleteModal({{ item.id }}, '{{ item.product_name | e }}')">削除</button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="item-card">
+        <div class="card-body" style="text-align: center; padding: 2rem;">
+            商品がありません
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- 削除確認モーダル -->
+<div id="delete-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>商品削除の確認</h2>
+            <button type="button" class="modal-close" onclick="closeDeleteModal()">&times;</button>
+        </div>
+        <form id="delete-form" method="POST">
+            <div class="modal-body">
+                <p style="color: #ef4444; margin-bottom: 1rem;">⚠️ この操作は取り消せません</p>
+                <p id="delete-item-name" style="font-weight: 500;"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeDeleteModal()">キャンセル</button>
+                <button type="submit" class="btn btn-danger">削除する</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    function openDeleteModal(itemId, itemName) {
+        const modal = document.getElementById('delete-modal');
+        const form = document.getElementById('delete-form');
+        const nameEl = document.getElementById('delete-item-name');
+
+        form.action = '/admin/items/' + itemId + '/delete';
+        nameEl.textContent = '商品: ' + itemName;
+        modal.style.display = 'flex';
+    }
+
+    function closeDeleteModal() {
+        document.getElementById('delete-modal').style.display = 'none';
+    }
+
+    // モーダル外クリックで閉じる
+    document.getElementById('delete-modal')?.addEventListener('click', function (e) {
+        if (e.target === this) {
+            closeDeleteModal();
+        }
+    });
+</script>
+{% endblock %}

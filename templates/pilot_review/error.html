@@ -1,0 +1,2 @@
+{% extends 'pilot_review/base.html' %}
+{% block pilot_content %}<h1>内容を確認してください</h1><p>{{ message }}</p><p class="muted">確認番号：{{ code }}</p><a href="{{ url_for('pilot_review.index') }}">実証計画へ戻る</a>{% endblock %}

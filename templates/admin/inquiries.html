@@ -1,0 +1,436 @@
+{% extends "base.html" %}
+{% block title %}問い合わせ管理 - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>問い合わせ管理
+        {% if new_count > 0 %}
+        <span class="new-badge">{{ new_count }}件の新着</span>
+        {% endif %}
+    </h1>
+    <p class="page-description">新着順に確認できます。新着の詳細を開くと、ステータスは自動で「対応中」に切り替わります。</p>
+</div>
+
+<div class="inquiry-admin-container">
+    <!-- フィルター -->
+    <div class="filter-section">
+        <div class="filter-buttons">
+            <a href="{{ url_for('admin_inquiries') }}"
+               class="filter-btn {% if not status_filter %}active{% endif %}">問い合わせ一覧</a>
+            {% for key, value in statuses.items() %}
+            <a href="{{ url_for('admin_inquiries', status=key) }}"
+               class="filter-btn {% if status_filter == key %}active{% endif %}">{{ value }}</a>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- 問い合わせ一覧 -->
+    {% set inquiry_has_filter = is_inquiry_filtered|default(false)
+        or status_filter
+        or request.args.get('q')
+        or request.args.get('date')
+        or request.args.get('date_from')
+        or request.args.get('date_to') %}
+
+    <form method="GET" class="admin-inquiry-search-form">
+        {% if status_filter %}
+        <input type="hidden" name="status" value="{{ status_filter }}">
+        {% endif %}
+        <input type="search" name="q" value="{{ search_filters.q if search_filters is defined else '' }}" placeholder="顧客名・件名・本文・ステータスを検索">
+        <input type="date" name="date" value="{{ search_filters.date if search_filters is defined and search_filters.date else (search_filters.date_from if search_filters is defined and search_filters.date_from == search_filters.date_to else '') }}" aria-label="日付">
+        <button type="submit" class="btn btn-primary">検索</button>
+        {% if is_inquiry_filtered|default(false) or request.query_string %}
+        <a href="{{ url_for('admin_inquiries') }}" class="btn btn-secondary">検索解除</a>
+        {% endif %}
+    </form>
+
+    {% if inquiries %}
+    <div class="inquiry-table-container">
+        <table class="inquiry-table">
+            <thead>
+                <tr>
+                    <th>ステータス</th>
+                    <th>カテゴリ</th>
+                    <th>タイトル</th>
+                    <th>送信者</th>
+                    <th>返信数</th>
+                    <th>作成日</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for inquiry in inquiries %}
+                <tr class="inquiry-row status-row-{{ inquiry.status }} {% if inquiry.status == 'new' %}unread{% endif %}"
+                    data-detail-url="{{ url_for('admin_inquiry_view', id=inquiry.id) }}">
+                    <td data-label="ステータス">
+                        <span class="inquiry-status status-{{ inquiry.status }}">
+                            {{ statuses.get(inquiry.status, inquiry.status) }}
+                        </span>
+                    </td>
+                    <td data-label="カテゴリ"><span class="inquiry-category">{{ categories.get(inquiry.category, inquiry.category) }}</span></td>
+                    <td data-label="タイトル">
+                        <a href="{{ url_for('admin_inquiry_view', id=inquiry.id) }}" class="inquiry-link">
+                            {{ inquiry.title }}
+                            {% if inquiry.image_path %}
+                            <span class="attachment-icon" title="画像添付あり">📷</span>
+                            {% endif %}
+                        </a>
+                    </td>
+                    <td data-label="送信者">{{ inquiry.display_name or inquiry.username }}</td>
+                    <td data-label="返信" class="text-center">{{ inquiry.reply_count or 0 }}</td>
+                    <td data-label="作成日">{{ inquiry.created_at[:16].replace('-', '/').replace('T', ' ') if inquiry.created_at else '-' }}</td>
+                    <td data-label="操作">
+                        <a href="{{ url_for('admin_inquiry_view', id=inquiry.id) }}" class="btn btn-sm">詳細</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-message">
+        <p>問い合わせはありません</p>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.page-header h1 {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.35rem;
+}
+
+.page-description {
+    margin: 0;
+    color: #64748b;
+    line-height: 1.7;
+}
+
+.new-badge {
+    font-size: 0.85rem;
+    padding: 0.25rem 0.75rem;
+    background: #ef4444;
+    color: white;
+    border-radius: 20px;
+    font-weight: 500;
+}
+
+.inquiry-admin-container {
+    max-width: 1200px;
+}
+
+.filter-section {
+    margin-bottom: 1rem;
+}
+
+.admin-inquiry-search-form {
+    display: grid;
+    grid-template-columns: minmax(190px, 1fr) 150px auto auto;
+    gap: 0.5rem;
+    align-items: center;
+    min-width: 0;
+    margin-bottom: 1rem;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 0.75rem;
+}
+
+.admin-inquiry-search-form input {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    min-height: 38px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 0.5rem 0.65rem;
+    font: inherit;
+}
+
+.admin-inquiry-search-form input[type="date"] {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.filter-buttons {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.filter-btn {
+    padding: 0.42rem 0.75rem;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 999px;
+    text-decoration: none;
+    color: #64748b;
+    font-size: 0.82rem;
+    font-weight: 700;
+    transition: all 0.2s;
+}
+
+.filter-btn:hover {
+    background: #f8fafc;
+    border-color: #2563eb;
+    color: #2563eb;
+}
+
+.filter-btn.active {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: white;
+}
+
+.inquiry-table-container {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+    overflow-x: auto;
+}
+
+.inquiry-table {
+    width: 100%;
+    min-width: 900px;
+    border-collapse: collapse;
+}
+
+.inquiry-table th,
+.inquiry-table td {
+    padding: 0.54rem 0.68rem;
+    text-align: left;
+    border-bottom: 1px solid #e2e8f0;
+    vertical-align: middle;
+    font-size: 0.84rem;
+}
+
+.inquiry-table th {
+    background: #f8fafc;
+    font-weight: 600;
+    color: #64748b;
+    font-size: 0.85rem;
+}
+
+.inquiry-table tr.unread {
+    background: #fffaf0;
+    box-shadow: inset 4px 0 0 #f59e0b;
+}
+
+.inquiry-table tr.status-row-in_progress {
+    background: #f8fbff;
+}
+
+.inquiry-table tr.status-row-resolved,
+.inquiry-table tr.status-row-closed {
+    background: #f8fafc;
+    color: #64748b;
+}
+
+.inquiry-table tr:hover {
+    background: #f8fafc;
+}
+
+.inquiry-status {
+    font-size: 0.68rem;
+    line-height: 1.2;
+    padding: 0.14rem 0.36rem;
+    border-radius: 4px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.inquiry-category {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    padding: 0.14rem 0.36rem;
+    border-radius: 4px;
+    background: #f1f5f9;
+    color: #64748b;
+    font-size: 0.68rem;
+    line-height: 1.2;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.inquiry-status.status-new { background: #fef3c7; color: #b45309; }
+.inquiry-status.status-in_progress { background: #dbeafe; color: #1d4ed8; }
+.inquiry-status.status-resolved { background: #d1fae5; color: #059669; }
+.inquiry-status.status-closed { background: #e2e8f0; color: #64748b; }
+
+.inquiry-link {
+    color: #1e293b;
+    text-decoration: none;
+    font-weight: 800;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    max-width: 100%;
+}
+
+.inquiry-link:hover {
+    color: #2563eb;
+    text-decoration: underline;
+}
+
+.text-center {
+    text-align: center;
+}
+
+.btn-sm {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 28px;
+    padding: 0.24rem 0.58rem;
+    font-size: 0.74rem;
+    background: #eff6ff;
+    color: #1d4ed8;
+    border-radius: 999px;
+    text-decoration: none;
+    font-weight: 800;
+}
+
+.btn-sm:hover {
+    background: #e2e8f0;
+}
+
+.empty-message {
+    text-align: center;
+    padding: 4rem 2rem;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.empty-message p {
+    color: #94a3b8;
+    font-size: 1.1rem;
+}
+
+@media (max-width: 768px) {
+    .admin-inquiry-search-form {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .admin-inquiry-search-form input[type="search"],
+    .admin-inquiry-search-form input[type="date"],
+    .admin-inquiry-search-form .btn {
+        grid-column: 1 / -1;
+        width: 100%;
+        max-width: 100%;
+    }
+
+    .inquiry-table-container {
+        overflow-x: visible;
+        background: transparent;
+        border: 0;
+        box-shadow: none;
+    }
+
+    .inquiry-table {
+        display: block;
+        min-width: 0;
+    }
+
+    .inquiry-table thead {
+        display: none;
+    }
+
+    .inquiry-table tbody {
+        display: grid;
+        gap: 0.5rem;
+    }
+
+    .inquiry-table tr {
+        display: grid;
+        grid-template-columns: auto auto minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 0.32rem 0.45rem;
+        padding: 0.55rem 0.6rem;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 9px;
+        box-shadow: 0 4px 12px rgba(15,23,42,0.05);
+    }
+
+    .inquiry-table tr.unread {
+        box-shadow: inset 3px 0 0 #f59e0b, 0 4px 12px rgba(15,23,42,0.05);
+    }
+
+    .inquiry-table td {
+        display: flex;
+        align-items: center;
+        gap: 0.32rem;
+        min-width: 0;
+        padding: 0;
+        border: 0;
+        font-size: 0.76rem;
+        line-height: 1.35;
+    }
+
+    .inquiry-table td[data-label="タイトル"] {
+        grid-column: 1 / -1;
+        order: 1;
+        font-size: 0.9rem;
+    }
+
+    .inquiry-table td[data-label="ステータス"] { order: 2; }
+    .inquiry-table td[data-label="カテゴリ"] { order: 3; }
+    .inquiry-table td[data-label="作成日"] {
+        order: 4;
+        color: #94a3b8;
+        justify-content: flex-end;
+        white-space: nowrap;
+    }
+    .inquiry-table td[data-label="操作"] {
+        order: 5;
+        justify-content: flex-end;
+    }
+    .inquiry-table td[data-label="送信者"] {
+        grid-column: 1 / 3;
+        order: 6;
+        color: #64748b;
+    }
+    .inquiry-table td[data-label="返信"] {
+        order: 7;
+        color: #64748b;
+        justify-content: flex-end;
+    }
+
+    .inquiry-table td[data-label="送信者"]::before,
+    .inquiry-table td[data-label="返信"]::before {
+        content: attr(data-label) ":";
+        color: #94a3b8;
+        font-size: 0.68rem;
+        font-weight: 700;
+    }
+
+    .inquiry-link {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+}
+</style>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.inquiry-row[data-detail-url]').forEach(function (row) {
+        row.addEventListener('click', function (event) {
+            if (event.target.closest('a, button, input, select, textarea, label, form')) {
+                return;
+            }
+            window.location.href = row.dataset.detailUrl;
+        });
+    });
+});
+</script>
+{% endblock %}

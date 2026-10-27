@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}{{ 'クライアント編集' if user else 'クライアント追加' }} - 株式会社開花{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>{{ 'クライアント編集' if user else 'クライアント追加' }}</h1>
+    <a href="{{ url_for('admin_users') }}" class="btn btn-secondary">一覧へ戻る</a>
+</div>
+
+<div class="form-container">
+    <form method="POST" class="user-form">
+        <div class="form-section">
+            <h2>基本情報</h2>
+
+            {% if not user %}
+            <div class="form-group">
+                <label for="username">ユーザー名 *</label>
+                <input type="text" id="username" name="username" required>
+            </div>
+            {% else %}
+            <div class="form-group">
+                <label>ユーザー名</label>
+                <div class="form-static">{{ user.username }}</div>
+            </div>
+            {% endif %}
+
+            <div class="form-group">
+                <label for="display_name">表示名</label>
+                <input type="text" id="display_name" name="display_name" value="{{ user.display_name if user else '' }}">
+            </div>
+
+            <div class="form-group">
+                <label for="email">メールアドレス *</label>
+                <input type="email" id="email" name="email" required value="{{ user.email if user else '' }}">
+            </div>
+
+            <div class="form-group">
+                <label for="phone">電話番号</label>
+                <input type="text" id="phone" name="phone" value="{{ user.phone if user else '' }}" placeholder="未登録">
+            </div>
+
+            <div class="form-group">
+                <label for="postal_code">郵便番号</label>
+                <input type="text" id="postal_code" name="postal_code" value="{{ user.postal_code if user else '' }}" placeholder="未登録">
+            </div>
+
+            <div class="form-group">
+                <label for="address">住所・発送先</label>
+                <textarea id="address" name="address" rows="3" placeholder="未登録">{{ user.address if user else '' }}</textarea>
+            </div>
+        </div>
+
+        <div class="form-section">
+            <h2>月額プラン設定</h2>
+
+            <div class="form-group">
+                <label for="requested_monthly_plan">月額プラン変更希望</label>
+                <select id="requested_monthly_plan" name="requested_monthly_plan">
+                    <option value="">変更希望なし</option>
+                    {% for plan in plan_options %}
+                    <option value="{{ plan.key }}" {% if user and user.requested_monthly_plan == plan.key %}selected{% endif %}>
+                        {{ plan.label }}{% if plan.fee > 0 %}（¥{{ "{:,}".format(plan.fee) }}）{% else %}（個別相談）{% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+                <small>10日までの変更は当月扱い、10日以降は翌月変更として記録します。空にすると変更希望を解除します。</small>
+                {% if user and user.requested_monthly_plan %}
+                <small>現在の反映予定: {{ user.plan_change_effective_month or '-' }}</small>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="form-section">
+            <h2>運用設定</h2>
+
+            <div class="form-group">
+                <label for="proxy_service_budget">代行仕入れ入金残高</label>
+                <input type="number" id="proxy_service_budget" name="proxy_service_budget" min="0" step="1000" value="{{ user.proxy_service_budget if user else 0 }}">
+            </div>
+
+            <div class="form-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" name="tuition_exempt" value="1" {% if user and user.tuition_exempt %}checked{% endif %}>
+                    <span>月額利用料を免除する</span>
+                </label>
+            </div>
+        </div>
+
+        <div class="form-section">
+            <h2>パスワード</h2>
+            {% if not user %}
+            <div class="form-group">
+                <label for="password">パスワード *</label>
+                <input type="password" id="password" name="password" required minlength="6">
+                <small>6文字以上で設定してください</small>
+            </div>
+            {% else %}
+            <div class="form-group">
+                <label for="new_password">新しいパスワード</label>
+                <input type="password" id="new_password" name="new_password" minlength="6">
+                <small>変更する場合だけ入力してください</small>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="form-actions">
+            <a href="{{ url_for('admin_users') }}" class="btn btn-secondary">キャンセル</a>
+            <button type="submit" class="btn btn-primary">{{ '更新する' if user else '追加する' }}</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

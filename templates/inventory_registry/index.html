@@ -1,0 +1,11 @@
+{% extends "inventory_registry/frame.html" %}
+{% block registry_content %}
+<h1>個品一覧</h1>
+<p>現物ごとに、所有・保管・受領・実作業の記録を確認できます。ラベルの作成・変更は行いません。</p>
+<p class="notice">照合前の既存在庫は、これまでの在庫一覧に残っています。記録を取り込んだだけでは、新しい作業や料金を発生させません。</p>
+{% if not staff %}<a href="/inventory/self/new" class="btn btn-primary">自分の商品を登録する</a>{% endif %}
+<div class="card scroll"><table><thead><tr><th>商品・個品ID</th><th>保管先</th><th>現物・販売の状態</th><th>保管期限</th><th>料金</th></tr></thead><tbody>
+{% for item in items %}<tr><td><a href="{{ url_for('inventory_registry.detail', item_id=item.physical_item_id) }}">{{ item.title }}</a><br><small><code>{{ item.physical_item_id }}</code></small></td><td>{{ {'customer':'お客様','kaika':'開花','unknown':'要確認'}.get(item.custodian,'要確認') }}</td><td>{{ registry_state_labels.get(item.physical_state,'未確認') }} / {{ registry_state_labels.get(item.sales_state,'未確認') }}{% if item.held %}<br><strong>保留中</strong>{% endif %}</td><td>{{ item.deadline_at or '契約・期限を要確認' }}</td><td>対象・金額は別途確認</td></tr>
+{% else %}<tr><td colspan="5">照合済みの個品はまだありません。既存商品が削除されたわけではありません。</td></tr>{% endfor %}
+</tbody></table></div>
+{% endblock %}

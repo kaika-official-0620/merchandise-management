@@ -1,0 +1,301 @@
+<style>
+    .pdf-screen-toolbar {
+        position: sticky;
+        top: 0;
+        z-index: 1000;
+        display: flex;
+        justify-content: center;
+        padding: calc(env(safe-area-inset-top, 0px) + 10px) 12px 10px;
+        background: rgba(248, 250, 252, 0.96);
+        border-bottom: 1px solid #dbe3ef;
+        box-shadow: 0 2px 10px rgba(15, 23, 42, 0.08);
+        font-family: 'Noto Sans JP', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', Meiryo, sans-serif;
+    }
+
+    .pdf-screen-toolbar-inner {
+        width: min(210mm, 100%);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+    }
+
+    .pdf-screen-toolbar-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+    }
+
+    .pdf-screen-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 34px;
+        padding: 0 13px;
+        border: 1px solid #cbd5e1;
+        border-radius: 999px;
+        background: #fff;
+        color: #1f2937;
+        font-size: 13px;
+        font-weight: 700;
+        line-height: 1;
+        text-decoration: none;
+        cursor: pointer;
+        white-space: nowrap;
+        writing-mode: horizontal-tb;
+        word-break: keep-all;
+        overflow-wrap: normal;
+    }
+
+    .pdf-screen-btn-primary {
+        border-color: #dc2626;
+        background: #dc2626;
+        color: #fff;
+    }
+
+    .pdf-screen-btn-csv {
+        border-color: #059669;
+        background: #059669;
+        color: #fff;
+    }
+
+    .pdf-screen-btn-back {
+        border-color: #cbd5e1;
+        background: #fff;
+        color: #1f2937;
+    }
+
+    .pdf-screen-btn-print {
+        border-color: #0891b2;
+        background: #0891b2;
+        color: #fff;
+    }
+
+    .pdf-screen-note {
+        color: #64748b;
+        font-size: 12px;
+        line-height: 1.5;
+        text-align: right;
+    }
+
+    body,
+    .container,
+    .sheet,
+    .container *,
+    .sheet * {
+        writing-mode: horizontal-tb !important;
+        text-orientation: mixed !important;
+    }
+
+    th,
+    td {
+        writing-mode: horizontal-tb !important;
+        text-orientation: mixed !important;
+        word-break: keep-all !important;
+        overflow-wrap: normal !important;
+        white-space: normal;
+        line-break: strict;
+    }
+
+    th,
+    .text-center,
+    .text-right,
+    .request-label,
+    .request-amount,
+    .summary-table .label,
+    .summary-table .value,
+    .summary-table .text-right,
+    .total-row,
+    .total-row span,
+    .total-row strong,
+    .amount-label,
+    .amount-value,
+    .meta-label,
+    .meta-value,
+    .col-no,
+    .col-date,
+    .col-code,
+    .col-qty,
+    .col-price,
+    .col-amount,
+    .col-note,
+    .form-label,
+    .id-label {
+        white-space: nowrap !important;
+        word-break: keep-all !important;
+        overflow-wrap: normal !important;
+    }
+
+    .col-name,
+    td:nth-child(2),
+    .notes-section,
+    .notes-section *,
+    .notes,
+    .notes *,
+    .company-address,
+    .footer-left,
+    .form-value,
+    .form-value-half,
+    .id-value {
+        white-space: normal;
+        word-break: normal !important;
+        overflow-wrap: break-word !important;
+    }
+
+    .meta-value {
+        min-width: 0 !important;
+        white-space: normal !important;
+        word-break: normal !important;
+        overflow-wrap: break-word !important;
+    }
+
+    td.text-center,
+    td.text-right,
+    .summary-table td.text-right,
+    .total-row td,
+    .total-row td.text-right {
+        white-space: nowrap !important;
+        word-break: keep-all !important;
+        overflow-wrap: normal !important;
+    }
+
+    .document-title,
+    .title,
+    .status-badge {
+        word-break: keep-all !important;
+        overflow-wrap: normal !important;
+        white-space: nowrap;
+        line-break: strict;
+    }
+
+    @media (max-width: 640px) {
+        html,
+        body {
+            max-width: 100%;
+            overflow-x: hidden;
+        }
+
+        .container,
+        .sheet {
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            min-height: 0 !important;
+            padding-left: 10px !important;
+            padding-right: 10px !important;
+            overflow-wrap: normal;
+        }
+
+        .document-title {
+            letter-spacing: 0.08em !important;
+        }
+
+        .header-section,
+        .amount-company-row {
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        table {
+            width: 100% !important;
+            max-width: 100% !important;
+            table-layout: auto;
+        }
+
+        th,
+        td {
+            writing-mode: horizontal-tb;
+            word-break: keep-all;
+            overflow-wrap: normal;
+            line-break: strict;
+        }
+
+        th {
+            white-space: normal;
+        }
+
+        .summary-table {
+            width: 100% !important;
+            max-width: 100% !important;
+        }
+
+        .pdf-screen-toolbar {
+            padding: calc(env(safe-area-inset-top, 0px) + 8px) 8px 8px;
+        }
+
+        .pdf-screen-toolbar-inner {
+            align-items: stretch;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .pdf-screen-toolbar-actions {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(74px, 1fr));
+            gap: 6px;
+        }
+
+        .pdf-screen-btn {
+            min-width: 0;
+            min-height: 32px;
+            padding: 0 8px;
+            font-size: 12px;
+        }
+
+        .pdf-screen-note {
+            text-align: center;
+            font-size: 11px;
+        }
+    }
+
+    @media print {
+        @page {
+            size: A4 portrait;
+            margin: 7mm 8mm;
+        }
+
+        .pdf-screen-toolbar {
+            display: none !important;
+        }
+
+        th,
+        td {
+            writing-mode: horizontal-tb;
+            word-break: keep-all;
+            overflow-wrap: normal;
+        }
+    }
+</style>
+<div class="pdf-screen-toolbar no-print">
+    <div class="pdf-screen-toolbar-inner">
+        <div class="pdf-screen-toolbar-actions">
+            <button type="button" class="pdf-screen-btn pdf-screen-btn-back" onclick="goBackFromPdf()">戻る</button>
+            <button type="button" class="pdf-screen-btn pdf-screen-btn-primary" onclick="window.print()">PDF保存</button>
+            <button type="button" class="pdf-screen-btn pdf-screen-btn-print" onclick="window.print()">印刷</button>
+        </div>
+        <div class="pdf-screen-note">ブラウザの印刷画面でPDF保存できます。</div>
+    </div>
+</div>
+<script>
+    document.addEventListener('gesturechange', function(event) {
+        if (event.scale && event.scale < 1) {
+            event.preventDefault();
+        }
+    }, { passive: false });
+
+    function goBackFromPdf() {
+        try {
+            if (document.referrer) {
+                const referrer = new URL(document.referrer);
+                if (referrer.origin === window.location.origin && referrer.href !== window.location.href) {
+                    window.history.back();
+                    return;
+                }
+            }
+        } catch (error) {
+            // URL解析に失敗した場合はフォールバックへ進む
+        }
+        window.location.href = "{{ url_for('admin_documents_history') if current_user.is_admin() else url_for('documents') }}";
+    }
+</script>

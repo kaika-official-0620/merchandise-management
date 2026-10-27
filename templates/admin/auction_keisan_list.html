@@ -1,0 +1,366 @@
+{% extends "base.html" %}
+{% block title %}クライアント別計算書 - 株式会社開花{% endblock %}
+
+{% block content %}
+<style>
+.keisan-page {
+    max-width: 1280px;
+    margin: 0 auto;
+}
+
+.keisan-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.keisan-header h1 {
+    margin: 0;
+}
+
+.keisan-header p {
+    margin: 0.45rem 0 0;
+    color: #64748b;
+    line-height: 1.7;
+}
+
+.header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.filter-card {
+    margin-bottom: 1.25rem;
+    padding: 1rem 1.1rem;
+    border-radius: 16px;
+    border: 1px solid #bfdbfe;
+    background: linear-gradient(135deg, #eff6ff 0%, #f8fbff 100%);
+}
+
+.filter-card h2 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.filter-card p {
+    margin: 0.35rem 0 0;
+    color: #475569;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.stat-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 1rem 1.1rem;
+    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05);
+}
+
+.stat-label {
+    display: block;
+    color: #64748b;
+    font-size: 0.82rem;
+    margin-bottom: 0.35rem;
+}
+
+.stat-value {
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: #0f172a;
+}
+
+.toolbar {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: center;
+    margin-bottom: 0.9rem;
+}
+
+.toolbar-note {
+    color: #64748b;
+    font-size: 0.92rem;
+}
+
+.table-wrap {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
+    box-shadow: 0 10px 26px rgba(15, 23, 42, 0.05);
+    overflow-x: auto;
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 1120px;
+}
+
+.data-table th,
+.data-table td {
+    padding: 0.9rem 1rem;
+    border-bottom: 1px solid #e2e8f0;
+    vertical-align: top;
+}
+
+.data-table th {
+    background: #f8fafc;
+    color: #334155;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.data-table tbody tr:hover {
+    background: #f8fafc;
+}
+
+.checkbox-col {
+    width: 44px;
+    text-align: center;
+}
+
+.client-cell strong,
+.doc-no {
+    color: #0f172a;
+    font-weight: 800;
+}
+
+.doc-no {
+    font-family: Consolas, monospace;
+    color: #1d4ed8;
+}
+
+.client-cell a,
+.action-group a {
+    text-decoration: none;
+}
+
+.subtext {
+    display: block;
+    margin-top: 0.25rem;
+    color: #64748b;
+    font-size: 0.82rem;
+    line-height: 1.55;
+}
+
+.item-summary {
+    color: #334155;
+    line-height: 1.65;
+    min-width: 260px;
+}
+
+.status-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.34rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.status-draft {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.status-ready {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.status-sent {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.amount {
+    font-weight: 800;
+    color: #047857;
+    white-space: nowrap;
+}
+
+.action-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: #64748b;
+}
+
+@media (max-width: 768px) {
+    .keisan-header,
+    .toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}
+</style>
+
+<div class="keisan-page">
+    <div class="keisan-header">
+        <div>
+            <h1>クライアント別計算書</h1>
+            <p>終了した代行仕入れの結果をクライアント単位でまとめています。商品一覧への反映内容を確認しながら、一人ずつ送付できます。</p>
+        </div>
+        <div class="header-actions">
+            {% if auction_filter %}
+            <a href="{{ url_for('admin_proxy_service_history') }}" class="btn btn-secondary">履歴へ戻る</a>
+            <a href="{{ url_for('admin_proxy_service_detail', auction_id=auction_filter.id) }}" class="btn btn-secondary">終了結果へ</a>
+            {% endif %}
+            {% if auction_filter %}
+            <a href="{{ url_for('admin_proxy_service_document_history', auction_id=auction_filter.id) }}" class="btn btn-secondary">書類履歴</a>
+            {% else %}
+            <a href="{{ url_for('admin_proxy_service_document_history') }}" class="btn btn-secondary">書類履歴</a>
+            {% endif %}
+            <a href="{{ url_for('admin_proxy_service') }}" class="btn btn-secondary">代行仕入れ管理へ</a>
+        </div>
+    </div>
+
+    {% if auction_filter %}
+        <div class="filter-card">
+            <h2>{{ auction_filter.auction_name or ('オークション #' ~ auction_filter.id) }}</h2>
+        <p>{{ auction_filter.sale_mode_label }} / 終了日時 {{ auction_filter.end_display }} の計算書だけを表示しています。ここから各クライアントの書類を確認して送付できます。</p>
+    </div>
+    {% endif %}
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <span class="stat-label">計算書数</span>
+            <div class="stat-value">{{ stats.total_docs }}</div>
+        </div>
+        <div class="stat-card">
+            <span class="stat-label">下書き</span>
+            <div class="stat-value">{{ stats.draft_count }}</div>
+        </div>
+        <div class="stat-card">
+            <span class="stat-label">送付準備完了</span>
+            <div class="stat-value">{{ stats.completed_count }}</div>
+        </div>
+        <div class="stat-card">
+            <span class="stat-label">送付済み</span>
+            <div class="stat-value">{{ stats.submitted_count }}</div>
+        </div>
+    </div>
+
+    <div class="toolbar">
+        <span class="toolbar-note">総計 {{ "{:,}".format(stats.total_amount or 0) }}円 / 一括送付は確認済みの書類のみです</span>
+        {% if stats.completed_count > 0 %}
+        <form action="{{ url_for('admin_auction_keisan_send_bulk') }}" method="POST">
+            {% if auction_id %}
+            <input type="hidden" name="auction_id" value="{{ auction_id }}">
+            {% endif %}
+            <input type="hidden" name="send_scope" value="all">
+            <button type="submit" class="btn btn-client-send" onclick="return confirm('送付準備完了の計算書をまとめて送付しますか？')">送付準備完了を一括送付</button>
+        </form>
+        {% endif %}
+    </div>
+
+    <form action="{{ url_for('admin_auction_keisan_send_bulk') }}" method="POST">
+        {% if auction_id %}
+        <input type="hidden" name="auction_id" value="{{ auction_id }}">
+        {% endif %}
+        <div class="table-wrap js-edge-hover-scroll">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th class="checkbox-col"><input type="checkbox" id="check-all-docs"></th>
+                        <th>計算書No.</th>
+                        <th>クライアント</th>
+                        <th>対象オークション</th>
+                        <th>商品</th>
+                        <th>合計金額</th>
+                        <th>状態</th>
+                        <th>発行日</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for doc in keisan_list %}
+                    <tr>
+                        <td class="checkbox-col">
+                            {% if doc.status == 'completed' %}
+                            <input type="checkbox" name="document_ids" value="{{ doc.id }}" class="doc-checkbox">
+                            {% endif %}
+                        </td>
+                        <td class="doc-no">{{ doc.document_no }}</td>
+                        <td class="client-cell">
+                            <strong>{{ doc.user_name or doc.username or '-' }}</strong>
+                            <span class="subtext">
+                                <a href="{{ url_for('admin_user_products', owner_id=doc.user_id) }}">商品反映先を確認</a>
+                            </span>
+                        </td>
+                        <td>
+                            {% set clean_auction_name = (doc.auction_name_display or '')|replace('【プレビュー確認用】', '')|trim %}
+                            <strong>{{ (clean_auction_name or doc.auction_name_display)|clean_display('オークション名未登録') }}</strong>
+                            <span class="subtext">終了 {{ doc.end_display }}</span>
+                        </td>
+                        <td class="item-summary">
+                            {% set clean_item_summary = (doc.item_summary or '')|replace('【プレビュー確認用】', '')|trim %}
+                            {{ (clean_item_summary or doc.item_summary)|clean_display('商品名未登録') }}
+                            <span class="subtext">{{ doc.item_count }}件</span>
+                        </td>
+                        <td class="amount">¥{{ "{:,}".format(doc.total_amount or 0) }}</td>
+                        <td>
+                            <span class="status-chip status-{{ doc.status_class }}">{{ doc.status_label }}</span>
+                        </td>
+                        <td>{{ doc.issue_date_display }}</td>
+                        <td>
+                            <div class="action-group">
+                                <a href="{{ url_for('admin_auction_keisan_view', id=doc.id) }}" class="btn btn-primary btn-sm">詳細</a>
+                                {% if can_edit_final_documents() %}
+                                <a href="{{ url_for('admin_auction_keisan_edit', id=doc.id) }}" class="btn btn-secondary btn-sm">{{ '確認' if doc.status == 'completed' else '編集' }}</a>
+                                {% endif %}
+                                {% if doc.status == 'completed' %}
+                                <form action="{{ url_for('admin_auction_keisan_submit', id=doc.id) }}" method="POST" style="display:inline;">
+                                    {% if auction_id %}
+                                    <input type="hidden" name="auction_id" value="{{ auction_id }}">
+                                    {% endif %}
+                                    <button type="submit" class="btn btn-client-send btn-sm" onclick="return confirm('宛先・商品・金額・PDF内容を確認済みですか？この計算書をクライアントへ送付し、商品反映を進めます。')">このクライアントに送付</button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="9" class="empty-state">計算書はまだありません。</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if stats.completed_count > 0 %}
+        <div class="toolbar" style="margin-top: 1rem;">
+            <span class="toolbar-note">チェックした計算書だけを一括送付できます。</span>
+            <button type="submit" class="btn btn-client-send" onclick="return confirm('選択した計算書を送付しますか？')">選択した計算書を送付</button>
+        </div>
+        {% endif %}
+    </form>
+</div>
+
+<script>
+const checkAllDocs = document.getElementById('check-all-docs');
+if (checkAllDocs) {
+    checkAllDocs.addEventListener('change', function () {
+        document.querySelectorAll('.doc-checkbox').forEach((checkbox) => {
+            checkbox.checked = this.checked;
+        });
+    });
+}
+</script>
+{% endblock %}

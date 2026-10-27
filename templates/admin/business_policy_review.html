@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}業務・料金の確認 - 株式会社開花{% endblock %}
+{% block content %}
+<style>
+.policy-review{max-width:1040px;margin:1.5rem auto;padding:0 1rem;line-height:1.7}
+.policy-card{background:#fff;border:1px solid #dbe3eb;border-radius:12px;padding:1.3rem;margin:1rem 0}
+.policy-notice{background:#fff8e6;border-left:4px solid #b7791f;padding:1rem}
+.policy-review table{border-collapse:collapse;width:100%;font-size:.95rem}
+.policy-review th,.policy-review td{padding:.7rem;border-bottom:1px solid #e2e8f0;text-align:left}
+.policy-scroll{overflow-x:auto}.policy-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.policy-review label{display:block;font-weight:600}.policy-review input,.policy-review select{width:100%;padding:.65rem;border:1px solid #94a3b8;border-radius:6px}
+.policy-actions{display:flex;gap:.7rem;flex-wrap:wrap;margin-top:1rem}
+@media(max-width:650px){.policy-grid{grid-template-columns:1fr}.policy-card{padding:1rem}}
+</style>
+<main class="policy-review">
+<h1>業務・料金の確認</h1>
+<p>開発中の料金案と、請求前に必要な条件を確認できます。</p>
+<div class="policy-notice"><strong>すべて下書き・本番課金は無効です。</strong><br>
+この画面の金額を顧客へ適用したり、契約を変更したりすることはありません。作業記録・請求下書きと、請求の確定を分けて進めます。</div>
+<section class="policy-card">
+<h2>無料で続けられる基本管理の案</h2>
+<p>管理中の商品は<strong>{{ catalog.free.active_individual_items }}個品</strong>まで。月間の新規登録制限は設けず、売却済みは上限から外して履歴を残す案です。写真の枚数・容量・保存期間、有料プランの自己管理上限は未決定です。</p>
+<p>無料の記録閲覧やコンサル相談の権利を、有料分析の購入条件へ置き換えません。</p>
+</section>
+<section class="policy-card">
+<h2>月額と開花への登録枠の案</h2>
+<div class="policy-scroll"><table><thead><tr><th>プラン</th><th>月額（税別）</th><th>税込例・10%</th><th>開花の当月新規登録</th></tr></thead><tbody>
+{% for plan in catalog.paid_plans %}<tr><td>{{ plan.label }}</td>
+<td>{{ '¥{:,}'.format(plan.monthly_net_yen) if plan.monthly_net_yen is not none else '未定' }}</td>
+<td>{{ '¥{:,}'.format(plan.monthly_gross_example_yen) if plan.monthly_gross_example_yen is not none else '未定' }}</td>
+<td>{{ (plan.kaika_monthly_registration_limit|string + '点') if plan.kaika_monthly_registration_limit is not none else '個別協議' }}</td></tr>{% endfor %}
+</tbody></table></div>
+<p>自己管理の在庫上限とは別の枠です。枠内でも現物の一式作業料・販売料・実費は別途検討します。上限超過による自動的な上位プランへの変更は行いません。</p>
+</section>
+<section class="policy-card">
+<h2>架空の商品で、未確認の条件を確認</h2>
+<p>実顧客・実在庫は使いません。下書きJSONは確認用にダウンロードできます。正式な請求書ではありません。</p>
+<form action="{{ url_for('business_review.preview') }}" method="post">
+<input type="hidden" name="business_review_csrf" value="{{ business_review_csrf }}">
+<div class="policy-grid">
+<div><label for="case">作業の例</label><select id="case" name="case">{% for key, label in cases.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select></div>
+<div><label for="channel">販売方法</label><select id="channel" name="channel">{% for key, label in channels.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select></div>
+<div><label for="sale_price">税込販売価格（円）</label><input id="sale_price" name="sale_price" type="number" min="1" max="999999999999" step="1" value="30000" required></div>
+</div>
+<div class="policy-actions"><button type="submit" class="btn btn-primary">条件を確認する</button><button type="submit" name="download" value="json" class="btn btn-secondary">下書きJSONを保存</button></div>
+</form>
+{% if quote %}
+<hr><h3>料金表の参照結果（未承認）</h3>
+<p>一式作業料案：税別 {{ quote.work_bundle_net_yen }}円 ／ 税10%の税込例 {{ quote.work_bundle_gross_example_yen }}円</p>
+<p>販売料案：税別 {{ (quote.sales_fee_net_yen|string + '円') if quote.sales_fee_net_yen is not none else '要個別合意' }} ／ 税10%の税込例 {{ (quote.sales_fee_gross_example_yen|string + '円') if quote.sales_fee_gross_example_yen is not none else '未定' }}</p>
+<p><strong>請求合計は未確定です。</strong> 未確認の料金を0円として合計せず、販路の利用許可も別に確認します。</p>
+{% endif %}
+{% if result %}
+<h3>請求確定は保留です</h3><ul>{% for message in result.messages %}<li>{{ message }}</li>{% endfor %}</ul>
+<p>作業記録：可能 ／ 下書き作成：可能 ／ 実課金：無効</p>
+{% endif %}
+</section>
+<section class="policy-card"><h2>これから決める条件</h2>
+<p>2026年10月22日の事業方針：販売料は税別。開始前後をまたぐ一式は、開始後の作業分だけを対象にします。配分額は未定で、顧客ごとの契約・同意の確認も必要です。</p>
+<ul><li>顧客ごとの署名契約・料金同意・開始日・例外</li><li>開始後の作業分の配分額、返品理由別の料金・実費</li><li>端数処理、月末の締め時刻</li><li>自己管理から開花へ移した商品、写真再利用、再入庫の件数</li><li>購入用残高の制度・決済契約の確認と売上精算方法</li></ul>
+<p>以前の代理仕入れ用予算を、実際の購入用残高へ自動変換しません。</p></section>
+</main>{% endblock %}
+

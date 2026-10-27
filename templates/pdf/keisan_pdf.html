@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, viewport-fit=cover">
+    <title>計算書 - {{ keisan.document_no if keisan else '' }}</title>
+    <style>
+        @page {
+            size: A4 portrait;
+            margin: 10mm 12mm;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #fff;
+            color: #1f2937;
+            font-family: "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
+            font-size: 14px;
+            line-height: 1.55;
+        }
+
+        .sheet {
+            width: 210mm;
+            min-height: 297mm;
+            margin: 0 auto;
+            padding: 22mm 13mm 18mm;
+        }
+
+        .title {
+            margin-bottom: 38px;
+            text-align: center;
+            color: #111827;
+            font-size: 30px;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+        }
+
+        .meta-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            column-gap: 34px;
+            row-gap: 20px;
+            margin-bottom: 26px;
+            font-size: 14px;
+        }
+
+        .meta-grid > div {
+            min-width: 0;
+            white-space: nowrap;
+        }
+
+        .meta-label {
+            margin-right: 6px;
+            color: #111827;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+
+        .meta-value {
+            color: #374151;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        .items {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 6px;
+            font-size: 14px;
+        }
+
+        .items th,
+        .items td {
+            border: 1.5px solid #475569;
+            padding: 8px 9px;
+            vertical-align: middle;
+            writing-mode: horizontal-tb;
+            word-break: keep-all;
+            overflow-wrap: normal;
+            line-break: strict;
+        }
+
+        .items th {
+            background: #f8fafc;
+            color: #111827;
+            font-weight: 800;
+            text-align: center;
+        }
+
+        .col-no {
+            width: 54px;
+        }
+
+        .col-qty {
+            width: 112px;
+        }
+
+        .col-amount {
+            width: 150px;
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        .text-right {
+            text-align: right;
+        }
+
+        .empty-row td {
+            height: 33px;
+        }
+
+        .total-row {
+            display: flex;
+            justify-content: flex-end;
+            align-items: baseline;
+            gap: 18px;
+            margin: 24px 0 12px;
+            color: #111827;
+        }
+
+        .total-row span {
+            font-size: 18px;
+            font-weight: 800;
+        }
+
+        .total-row strong {
+            font-size: 34px;
+            font-weight: 900;
+        }
+
+        .divider {
+            border-top: 1px solid #d1d5db;
+            margin-bottom: 20px;
+        }
+
+        .notes h2 {
+            margin-bottom: 18px;
+            font-size: 18px;
+            font-weight: 800;
+        }
+
+        .notes p {
+            color: #374151;
+            font-size: 14px;
+            line-height: 1.8;
+            white-space: pre-wrap;
+        }
+
+        .document-footer {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 34px;
+            color: #64748b;
+            font-size: 11px;
+        }
+
+        @media screen and (max-width: 640px) {
+            body {
+                font-size: 12px;
+            }
+
+            .sheet {
+                width: 100%;
+                min-width: 0;
+                min-height: 0;
+                padding: 14px 10px;
+                overflow: hidden;
+            }
+
+            .title {
+                margin-bottom: 26px;
+                font-size: 22px;
+                letter-spacing: 0.08em;
+            }
+
+            .meta-grid {
+                grid-template-columns: 1fr 1fr;
+                column-gap: 10px;
+                row-gap: 12px;
+                margin-bottom: 18px;
+                font-size: 11px;
+            }
+
+            .items {
+                table-layout: fixed;
+                font-size: 11px;
+            }
+
+            .items th,
+            .items td {
+                padding: 6px 5px;
+            }
+
+            .col-no {
+                width: 34px;
+            }
+
+            .col-qty {
+                width: 48px;
+            }
+
+            .col-amount {
+                width: 86px;
+            }
+
+            .items td:nth-child(2) {
+                word-break: normal;
+                overflow-wrap: break-word;
+            }
+
+            .empty-row td {
+                height: 24px;
+            }
+
+            .total-row {
+                margin: 18px 0 10px;
+                gap: 10px;
+            }
+
+            .total-row span {
+                font-size: 14px;
+            }
+
+            .total-row strong {
+                font-size: 24px;
+            }
+
+            .notes h2 {
+                margin-bottom: 8px;
+                font-size: 15px;
+            }
+
+            .notes p {
+                font-size: 12px;
+                line-height: 1.65;
+            }
+
+            .document-footer {
+                display: grid;
+                gap: 4px;
+                margin-top: 18px;
+                font-size: 10px;
+            }
+        }
+
+        @media print {
+            body {
+                print-color-adjust: exact;
+                -webkit-print-color-adjust: exact;
+                font-size: 11px;
+                line-height: 1.35;
+            }
+
+            .sheet {
+                width: 100%;
+                min-height: 0;
+                margin: 0;
+                padding: 0;
+            }
+
+            .title {
+                margin-bottom: 26px;
+                font-size: 24px;
+            }
+
+            .meta-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                column-gap: 18px;
+                row-gap: 15px;
+                margin-bottom: 21px;
+                font-size: 11px;
+            }
+
+            .meta-grid > div {
+                display: flex;
+                align-items: baseline;
+                gap: 0 6px;
+                white-space: normal;
+            }
+
+            .meta-value {
+                min-width: 0;
+                white-space: normal;
+                word-break: normal;
+                overflow-wrap: break-word;
+            }
+
+            .items {
+                font-size: 11px;
+            }
+
+            .items th,
+            .items td {
+                padding: 5px 6px;
+                line-height: 1.25;
+            }
+
+            .empty-row td {
+                height: 24px;
+            }
+
+            .total-row {
+                margin: 16px 0 8px;
+            }
+
+            .total-row span {
+                font-size: 14px;
+            }
+
+            .total-row strong {
+                font-size: 24px;
+            }
+
+            .notes h2 {
+                margin-bottom: 8px;
+                font-size: 14px;
+            }
+
+            .notes p {
+                font-size: 11px;
+                line-height: 1.5;
+            }
+
+            .document-footer {
+                margin-top: 18px;
+                font-size: 9.5px;
+            }
+
+            .items,
+            .meta-grid,
+            .notes {
+                page-break-inside: avoid;
+            }
+        }
+
+        @media print and (max-width: 640px) {
+            .sheet {
+                width: 100%;
+                min-width: 0;
+                padding: 0 10px;
+                overflow: hidden;
+            }
+
+            .meta-grid {
+                grid-template-columns: 1fr 1fr;
+                column-gap: 10px;
+                row-gap: 12px;
+                font-size: 10px;
+            }
+
+            .items {
+                table-layout: fixed;
+                font-size: 10px;
+            }
+
+            .items th,
+            .items td {
+                padding: 5px 4px;
+            }
+
+            .col-no {
+                width: 34px;
+            }
+
+            .col-qty {
+                width: 48px;
+            }
+
+            .col-amount {
+                width: 72px;
+            }
+
+            .items td:nth-child(2) {
+                word-break: normal;
+                overflow-wrap: break-word;
+            }
+        }
+    </style>
+</head>
+<body>
+    {% include "pdf/_pdf_toolbar.html" %}
+    <main class="sheet">
+        <h1 class="title">計算書</h1>
+
+        <section class="meta-grid">
+            <div>
+                <span class="meta-label">対象月</span>
+                <span class="meta-value">{{ (keisan.issue_date|string)[:7] if keisan.issue_date else '-' }}</span>
+            </div>
+            <div>
+                <span class="meta-label">宛先</span>
+                <span class="meta-value">{{ keisan.recipient_name or keisan.user_name or current_user.display_name or current_user.username or '宛先未設定' }} 様</span>
+            </div>
+            <div>
+                <span class="meta-label">発行者</span>
+                <span class="meta-value">株式会社開花</span>
+            </div>
+            <div>
+                <span class="meta-label">クライアント番号</span>
+                <span class="meta-value">C-{{ "%03d"|format(keisan.user_id or current_user.id or 0) }}</span>
+            </div>
+            <div>
+                <span class="meta-label">書類区分</span>
+                <span class="meta-value">{{ keisan.subject or '計算書' }}</span>
+            </div>
+            <div>
+                <span class="meta-label">支払方法</span>
+                <span class="meta-value">指定口座振込</span>
+            </div>
+        </section>
+
+        <table class="items">
+            <thead>
+                <tr>
+                    <th class="col-no">No.</th>
+                    <th>項目</th>
+                    <th class="col-qty">数量</th>
+                    <th class="col-amount">金額</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    <td class="text-center">{{ item.item_no or loop.index }}</td>
+                    <td>{{ item.item_name }}</td>
+                    <td class="text-center">{{ item.quantity or 1 }}</td>
+                    <td class="text-right">¥{{ "{:,}".format(item.amount or 0) }}</td>
+                </tr>
+                {% endfor %}
+                {% for i in range(items|length, 2) %}
+                <tr class="empty-row">
+                    <td>&nbsp;</td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="total-row">
+            <span>合計金額</span>
+            <strong>¥{{ "{:,}".format(keisan.total_amount or 0) }}</strong>
+        </div>
+
+        <div class="divider"></div>
+
+        <section class="notes">
+            <h2>備考</h2>
+            {% if keisan.notes %}
+            <p>{{ keisan.notes }}</p>
+            {% else %}
+            <p>代行仕入れサービスの終了結果に基づき作成しています。</p>
+            {% endif %}
+        </section>
+
+        <footer class="document-footer">
+            <span>計算書番号 {{ keisan.document_no }}</span>
+            <span>株式会社開花</span>
+        </footer>
+    </main>
+
+    <script>
+        window.onload = function() {
+            window.print();
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+{% for tax_row in step4_tax.rows %}
+<tr>
+    <td class="label">{{ tax_row.label }}</td>
+    <td class="text-right">{% if tax_row.amount is not none %}¥{{ "{:,}".format(tax_row.amount) }}{% else %}未確認{% endif %}</td>
+</tr>
+{% endfor %}

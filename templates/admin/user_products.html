@@ -1,0 +1,2805 @@
+{% extends "base.html" %}
+{% block title %}{{ '長期保存商品' if long_term_only else 'ユーザーの商品一覧' }} - 株式会社 開花{% endblock %}
+
+{% block content %}
+<style>
+    /* 検索ボタン */
+    .search-toggle-container {
+        margin-bottom: 1rem;
+        flex: 1;
+    }
+
+    .search-text-short {
+        display: none;
+    }
+
+    .search-toggle-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.6rem 1rem;
+        background: white;
+        border: 1px solid #d1d5db;
+        cursor: pointer;
+        font-size: 0.9rem;
+        color: #1e293b;
+        font-weight: 500;
+        transition: all 0.2s;
+    }
+
+    .search-toggle-btn:hover {
+        background: #f8fafc;
+        border-color: #2563eb;
+    }
+
+    .search-toggle-btn.active {
+        background: #2563eb;
+        color: white;
+        border-color: #2563eb;
+    }
+
+    .filter-count {
+        background: #ef4444;
+        color: white;
+        font-size: 0.7rem;
+        padding: 0.1rem 0.4rem;
+        border-radius: 10px;
+        margin-left: 0.25rem;
+    }
+
+    /* フィルターパネル */
+    .filter-panel {
+        display: none;
+        background: white;
+        border: 1px solid #d1d5db;
+        margin-bottom: 1rem;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .filter-panel.open {
+        display: block;
+    }
+
+    .filter-tabs-header {
+        display: flex;
+        border-bottom: 1px solid #d1d5db;
+        background: #f8fafc;
+    }
+
+    .filter-tab-btn {
+        padding: 0.75rem 1.25rem;
+        background: transparent;
+        border: none;
+        border-right: 1px solid #e2e8f0;
+        cursor: pointer;
+        font-size: 0.85rem;
+        color: #64748b;
+        font-weight: 500;
+        transition: all 0.2s;
+    }
+
+    .filter-tab-btn:last-child {
+        border-right: none;
+    }
+
+    .filter-tab-btn:hover {
+        background: #e2e8f0;
+    }
+
+    .filter-tab-btn.active {
+        background: white;
+        color: #1e293b;
+        border-bottom: 2px solid #2563eb;
+        margin-bottom: -1px;
+    }
+
+    .filter-tab-content {
+        display: none;
+        padding: 1rem;
+    }
+
+    .filter-tab-content.active {
+        display: block;
+    }
+
+    .filter-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        align-items: center;
+    }
+
+    .filter-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .filter-item label {
+        font-size: 0.8rem;
+        color: #64748b;
+        white-space: nowrap;
+    }
+
+    .filter-item input,
+    .filter-item select {
+        padding: 0.4rem 0.6rem;
+        border: 1px solid #d1d5db;
+        font-size: 0.85rem;
+        min-width: 100px;
+    }
+
+    .filter-item input[type="number"] {
+        width: 80px;
+    }
+
+    .filter-item input[type="date"] {
+        width: 140px;
+    }
+
+    .filter-panel-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.5rem;
+        padding: 0.75rem 1rem;
+        border-top: 1px solid #e2e8f0;
+        background: #f8fafc;
+    }
+
+    .filter-apply-btn {
+        padding: 0.5rem 1.25rem;
+        background: #2563eb;
+        color: white;
+        border: none;
+        cursor: pointer;
+        font-size: 0.85rem;
+        font-weight: 500;
+    }
+
+    .filter-apply-btn:hover {
+        background: #1d4ed8;
+    }
+
+    .filter-reset-btn {
+        padding: 0.5rem 1rem;
+        background: white;
+        color: #64748b;
+        border: 1px solid #d1d5db;
+        cursor: pointer;
+        font-size: 0.85rem;
+    }
+
+    .filter-reset-btn:hover {
+        background: #f1f5f9;
+    }
+
+    /* 検索＆アクションバー */
+    .search-action-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .action-buttons-group {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+    }
+
+    .page-description {
+        margin-top: 0.5rem;
+        color: #64748b;
+        font-size: 0.95rem;
+    }
+
+    .proxy-source-chip {
+        display: inline-flex;
+        align-items: center;
+        margin-top: 0.35rem;
+        padding: 0.22rem 0.55rem;
+        border-radius: 999px;
+        background: #eff6ff;
+        color: #1d4ed8;
+        font-size: 0.72rem;
+        font-weight: 700;
+    }
+
+    .sort-control {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        padding: 0.55rem 0.8rem;
+        background: white;
+        border: 1px solid #d1d5db;
+        border-radius: 10px;
+    }
+
+    .sort-control label {
+        color: #475569;
+        font-size: 0.85rem;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    .sort-control select {
+        min-width: 220px;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        padding: 0.45rem 0.7rem;
+        font-size: 0.85rem;
+        color: #1e293b;
+        background: white;
+    }
+
+    .long-term-scope-note {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.45rem 0.75rem;
+        background: #fff7ed;
+        border: 1px solid #fed7aa;
+        border-radius: 999px;
+        color: #c2410c;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+
+    .long-term-overview {
+        background: linear-gradient(135deg, #fff7ed 0%, #ffffff 100%);
+        border: 1px solid #fed7aa;
+        border-radius: 16px;
+        padding: 1.25rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 10px 30px rgba(249, 115, 22, 0.08);
+    }
+
+    .long-term-overview-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .long-term-overview-header h2 {
+        margin: 0;
+        color: #9a3412;
+        font-size: 1.1rem;
+    }
+
+    .long-term-overview-header p {
+        margin: 0.35rem 0 0;
+        color: #9a3412;
+        font-size: 0.9rem;
+    }
+
+    .long-term-overview-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        justify-content: flex-end;
+    }
+
+    .summary-filter-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.55rem 0.9rem;
+        border-radius: 999px;
+        border: 1px solid #fdba74;
+        background: white;
+        color: #c2410c;
+        text-decoration: none;
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+
+    .summary-filter-link:hover,
+    .summary-filter-link.active {
+        background: #ea580c;
+        border-color: #ea580c;
+        color: white;
+    }
+
+    .long-term-client-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.7rem;
+    }
+
+    .long-term-client-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        background: white;
+        border: 1px solid #fed7aa;
+        border-radius: 14px;
+        padding: 0.85rem 1rem;
+        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+        transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .long-term-client-row.active {
+        border-color: #f97316;
+        box-shadow: 0 12px 24px rgba(249, 115, 22, 0.16);
+    }
+
+    .long-term-client-summary {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 0.65rem;
+        min-width: 0;
+    }
+
+    .long-term-client-name {
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: #1e293b;
+    }
+
+    .long-term-client-chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.35rem 0.65rem;
+        border-radius: 999px;
+        background: #fff7ed;
+        color: #9a3412;
+        font-size: 0.8rem;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    .long-term-client-actions {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+        flex-shrink: 0;
+    }
+
+    .notify-form {
+        margin: 0;
+    }
+
+    .client-open-btn,
+    .notify-client-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid #fdba74;
+        border-radius: 10px;
+        padding: 0.55rem 0.85rem;
+        font-size: 0.82rem;
+        font-weight: 700;
+        cursor: pointer;
+        text-decoration: none;
+        white-space: nowrap;
+    }
+
+    .client-open-btn {
+        background: #f97316;
+        border-color: #f97316;
+        color: white;
+    }
+
+    .client-open-btn:hover,
+    .client-open-btn.active {
+        background: #ea580c;
+        border-color: #ea580c;
+        color: white;
+    }
+
+    .notify-client-btn {
+        background: #fff7ed;
+        color: #c2410c;
+    }
+
+    .notify-client-btn:hover {
+        background: #ffedd5;
+    }
+
+    .long-term-current-filter {
+        margin-top: 1rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        padding-top: 1rem;
+        border-top: 1px dashed #fdba74;
+        color: #9a3412;
+        font-size: 0.9rem;
+    }
+
+    .long-term-current-filter a {
+        color: #c2410c;
+        font-weight: 600;
+        text-decoration: none;
+    }
+
+    .long-term-current-filter-actions {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+    }
+
+    .long-term-empty-state {
+        background: white;
+        border: 1px dashed #fdba74;
+        border-radius: 12px;
+        padding: 1rem;
+        color: #9a3412;
+        text-align: center;
+    }
+
+    .long-term-detail-placeholder {
+        margin: 1rem 0 0;
+        background: white;
+        border: 1px dashed #fdba74;
+        border-radius: 12px;
+        padding: 1rem 1.1rem;
+        color: #9a3412;
+        font-size: 0.9rem;
+    }
+
+    .long-term-mobile-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-top: 0.6rem;
+    }
+
+    .long-term-mobile-chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.3rem 0.55rem;
+        border-radius: 999px;
+        background: #fff7ed;
+        color: #9a3412;
+        font-size: 0.74rem;
+        font-weight: 600;
+    }
+
+    /* テーブルスタイル */
+    .table-container {
+        background: white;
+        border-radius: 10px;
+        overflow-x: auto;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+        margin-top: 1rem;
+    }
+
+    .data-table {
+        width: 100%;
+        min-width: 1400px;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+        border: 1px solid #d1d5db;
+    }
+
+    .data-table th {
+        background: #f8fafc;
+        padding: 12px 10px;
+        text-align: left;
+        font-weight: 600;
+        color: #475569;
+        border: 1px solid #d1d5db;
+        white-space: nowrap;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+
+    .data-table th.sortable {
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .data-table th.sortable:hover {
+        background: #f1f5f9;
+    }
+
+    .data-table td {
+        padding: 10px;
+        border: 1px solid #d1d5db;
+        vertical-align: middle;
+    }
+
+    .data-table th.product-name-col,
+    .data-table td.product-name-col {
+        min-width: 300px;
+        width: 300px;
+    }
+
+    .data-table th.store-col,
+    .data-table td.store-col {
+        min-width: 150px;
+    }
+
+    .data-table th.owner-col,
+    .data-table td.owner-col,
+    .data-table th.updater-col,
+    .data-table td.updater-col {
+        min-width: 120px;
+    }
+
+    .data-table td.product-name-col {
+        white-space: nowrap;
+    }
+
+    .data-table td.store-col,
+    .data-table td.owner-col,
+    .data-table td.updater-col {
+        white-space: nowrap;
+        word-break: keep-all;
+        overflow-wrap: normal;
+    }
+
+    .data-table td.owner-col .badge-admin,
+    .data-table td.owner-col .badge-user {
+        display: inline-flex;
+        align-items: center;
+        white-space: nowrap;
+        max-width: none;
+    }
+
+    .data-table tbody tr:hover {
+        background: #f8fafc;
+    }
+
+    .data-table tbody tr.row-sold {
+        background: #f8f8f8;
+        color: #94a3b8;
+    }
+
+    .data-table tbody tr.row-sold .table-thumb,
+    .data-table tbody tr.row-sold .no-thumb {
+        opacity: 0.45;
+    }
+
+    .data-table tbody tr.row-sold:hover {
+        background: #f1f1f1;
+    }
+
+    /* サムネイル */
+    .table-thumb {
+        width: 50px;
+        height: 50px;
+        object-fit: cover;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: transform 0.2s;
+    }
+
+    .table-thumb:hover {
+        transform: scale(1.1);
+    }
+
+    .no-thumb {
+        width: 50px;
+        height: 50px;
+        background: #f1f5f9;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #94a3b8;
+    }
+
+    /* 複数画像バッジ */
+    .photo-cell {
+        position: relative;
+    }
+
+    .photo-count-badge {
+        position: absolute;
+        bottom: 2px;
+        right: 2px;
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        font-size: 0.6rem;
+        padding: 1px 4px;
+        border-radius: 3px;
+    }
+
+    /* ライトボックス */
+    .lightbox-gallery {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.95);
+        z-index: 9999;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+    }
+
+    .lightbox-gallery.active {
+        display: flex;
+    }
+
+    .lightbox-gallery-scroll-container {
+        width: 100%;
+        height: 80vh;
+        display: flex;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scroll-snap-type: x mandatory;
+        scroll-behavior: smooth;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        overscroll-behavior-x: contain;
+        touch-action: pan-x pan-y;
+        cursor: grab;
+    }
+
+    .lightbox-gallery-scroll-container:active {
+        cursor: grabbing;
+    }
+
+    .lightbox-gallery-scroll-container::-webkit-scrollbar {
+        display: none;
+    }
+
+    .lightbox-gallery-slide {
+        flex: 0 0 100%;
+        width: 100%;
+        height: 100%;
+        min-width: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        scroll-snap-align: start;
+        scroll-snap-stop: normal;
+        touch-action: pan-x;
+    }
+
+    .lightbox-gallery-slide img {
+        max-width: 90%;
+        max-height: 100%;
+        border-radius: 8px;
+        object-fit: contain;
+        pointer-events: auto;
+        user-select: none;
+        -webkit-user-drag: none;
+        touch-action: pan-x;
+    }
+
+    .lightbox-gallery-content {
+        max-width: 90vw;
+        max-height: 85vh;
+    }
+
+    .lightbox-gallery-img {
+        max-width: 100%;
+        max-height: 85vh;
+        object-fit: contain;
+    }
+
+    .lightbox-gallery-close {
+        position: absolute;
+        top: 15px;
+        right: 20px;
+        background: none;
+        border: none;
+        color: white;
+        font-size: 2.5rem;
+        cursor: pointer;
+        z-index: 10001;
+    }
+
+    .lightbox-gallery-nav {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        color: white;
+        font-size: 2rem;
+        padding: 20px 15px;
+        cursor: pointer;
+        z-index: 10001;
+    }
+
+    .lightbox-gallery-nav:hover {
+        background: rgba(255, 255, 255, 0.3);
+    }
+
+    .lightbox-gallery-prev {
+        left: 10px;
+    }
+
+    .lightbox-gallery-next {
+        right: 10px;
+    }
+
+    .lightbox-gallery-counter {
+        position: absolute;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        color: white;
+        font-size: 1rem;
+        font-weight: bold;
+        background: rgba(0, 0, 0, 0.5);
+        padding: 6px 15px;
+        border-radius: 20px;
+    }
+
+    /* ステータスバッジ */
+    .status-badge {
+        display: inline-block;
+        padding: 3px 8px;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .status-badge.sold {
+        background: #ef4444;
+        color: white;
+    }
+
+    .status-badge.listed {
+        background: #dbeafe;
+        color: #1e40af;
+    }
+
+    .status-badge.pending-sale {
+        background: #fef3c7;
+        color: #b45309;
+    }
+
+    .status-badge.unlisted {
+        background: #f1f5f9;
+        color: #64748b;
+    }
+
+    /* 金額表示 */
+    .amount {
+        text-align: right;
+        font-family: 'Consolas', monospace;
+    }
+
+    .amount.positive {
+        color: #10b981;
+    }
+
+    .amount.negative {
+        color: #ef4444;
+    }
+
+    /* コンディションバッジ */
+    .condition-badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-align: center;
+        min-width: 28px;
+    }
+
+    .condition-N {
+        background: #dbeafe;
+        color: #1d4ed8;
+    }
+
+    .condition-S {
+        background: #d1fae5;
+        color: #059669;
+    }
+
+    .condition-A {
+        background: #fef3c7;
+        color: #d97706;
+    }
+
+    .condition-AB {
+        background: #fed7aa;
+        color: #c2410c;
+    }
+
+    .condition-B {
+        background: #fecaca;
+        color: #dc2626;
+    }
+
+    /* アクションボタン */
+    .action-cell {
+        white-space: nowrap;
+    }
+
+    .action-cell .btn {
+        padding: 4px 8px;
+        font-size: 0.75rem;
+        margin-right: 3px;
+    }
+
+    .long-term-request-cell {
+        min-width: 260px;
+        white-space: normal;
+    }
+
+    .long-term-request-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 0.45rem;
+        align-items: flex-start;
+    }
+
+    .long-term-request-badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+    }
+
+    .long-term-request-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.25rem 0.55rem;
+        border-radius: 999px;
+        font-size: 0.74rem;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .long-term-request-type.auction {
+        background: #e0e7ff;
+        color: #3730a3;
+    }
+
+    .long-term-request-type.liquidation {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    .long-term-request-type.shipping {
+        background: #d1fae5;
+        color: #065f46;
+    }
+
+    .long-term-request-type.none {
+        background: #e2e8f0;
+        color: #475569;
+    }
+
+    .long-term-request-status.pending {
+        background: #fff7ed;
+        color: #c2410c;
+    }
+
+    .long-term-request-status.processing {
+        background: #dbeafe;
+        color: #1d4ed8;
+    }
+
+    .long-term-request-status.completed {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    .long-term-request-status.rejected {
+        background: #fee2e2;
+        color: #b91c1c;
+    }
+
+    .long-term-request-status.none {
+        background: #f1f5f9;
+        color: #64748b;
+    }
+
+    .long-term-request-meta,
+    .long-term-request-note {
+        font-size: 0.76rem;
+        line-height: 1.5;
+        color: #475569;
+    }
+
+    .long-term-request-note {
+        width: 100%;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 0.45rem 0.6rem;
+    }
+
+    .long-term-request-links {
+        display: flex;
+        gap: 0.4rem;
+        flex-wrap: wrap;
+    }
+
+    .long-term-request-links form {
+        margin: 0;
+    }
+
+    .long-term-request-links .btn {
+        margin-right: 0;
+    }
+
+    .btn-secondary-link {
+        background: #fff7ed;
+        color: #c2410c;
+        border: 1px solid #fdba74;
+    }
+
+    .mobile-long-term-request {
+        margin-top: 0.8rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.45rem;
+    }
+
+    /* 所有者バッジ */
+    .badge-user {
+        background: #059669;
+        color: white;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 0.75rem;
+    }
+
+    /* 一括操作エリア */
+    .bulk-actions {
+        background: #f8fafc;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+    }
+
+    /* モーダル */
+    .modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    }
+
+    .modal-content {
+        background: white;
+        width: 90%;
+        max-width: 400px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        border-radius: 12px;
+    }
+
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .modal-header h2 {
+        margin: 0;
+        font-size: 1.125rem;
+    }
+
+    .modal-close {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        cursor: pointer;
+        color: #64748b;
+    }
+
+    .modal-close:hover {
+        color: #1e293b;
+    }
+
+    .modal-body {
+        padding: 1rem;
+    }
+
+    .modal-footer {
+        padding: 1rem;
+        border-top: 1px solid #e2e8f0;
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.5rem;
+    }
+
+    /* 件数表示 */
+    .table-info {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 15px;
+        background: #f8fafc;
+        border-top: 1px solid #e2e8f0;
+        font-size: 0.85rem;
+        color: #64748b;
+    }
+
+    @media (max-width: 768px) {
+        .long-term-overview-header,
+        .long-term-current-filter {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .long-term-overview-actions {
+            justify-content: flex-start;
+        }
+
+        .long-term-client-row {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .long-term-client-actions {
+            width: 100%;
+            flex-wrap: wrap;
+        }
+
+        .client-open-btn,
+        .notify-client-btn {
+            flex: 1;
+        }
+
+        .sort-control {
+            width: 100%;
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .sort-control select {
+            min-width: 0;
+            width: 100%;
+        }
+
+        .search-action-bar {
+            flex-direction: row;
+            gap: 0.5rem;
+        }
+
+        .search-text-full {
+            display: none;
+        }
+
+        .search-text-short {
+            display: inline;
+        }
+
+        .search-toggle-btn {
+            padding: 0.5rem 0.75rem;
+            font-size: 0.85rem;
+        }
+
+        .filter-panel {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 1000;
+            overflow-y: auto;
+            margin: 0;
+        }
+
+        .filter-tabs-header {
+            flex-wrap: wrap;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .filter-tab-btn {
+            flex: 1;
+            padding: 0.75rem 0.5rem;
+            font-size: 0.8rem;
+            text-align: center;
+        }
+
+        .filter-group {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .filter-item {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .filter-item input,
+        .filter-item select {
+            width: 100%;
+        }
+
+        .filter-panel-footer {
+            position: sticky;
+            bottom: 0;
+        }
+
+        /* スマホ用ライトボックス調整 */
+        .lightbox-gallery-nav {
+            width: 36px;
+            height: 36px;
+            font-size: 1rem;
+            opacity: 0.3;
+            pointer-events: none;
+        }
+
+        .lightbox-gallery-prev {
+            left: 10px;
+        }
+
+        .lightbox-gallery-next {
+            right: 10px;
+        }
+
+        .lightbox-gallery-close {
+            top: 10px;
+            right: 10px;
+            position: fixed;
+        }
+
+        .lightbox-gallery-scroll-container {
+            cursor: default;
+        }
+    }
+
+    /* モバイル用カード表示 - 3列グリッド */
+    .mobile-cards-wrapper {
+        display: none;
+    }
+
+    /* スマホ（768px以下）でカード表示に切り替え */
+    @media (max-width: 768px) {
+        .table-container {
+            display: none;
+        }
+
+        .mobile-cards-wrapper {
+            display: block;
+        }
+
+        .swipe-indicator {
+            display: none;
+        }
+
+        /* 3列グリッドで表示 */
+        .mobile-cards {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2px;
+            padding: 2px;
+            background: #f1f5f9;
+        }
+
+        /* コンパクトなカード */
+        .user-item-card {
+            background: white;
+            border: none;
+            border-radius: 0;
+            margin-bottom: 0;
+            overflow: hidden;
+            box-shadow: none;
+            cursor: pointer;
+        }
+
+        /* 情報エリア（タップで詳細へ） */
+        .user-item-card .user-card-title,
+        .user-item-card .user-card-body {
+            cursor: pointer;
+        }
+
+        .user-item-card.card-sold {
+            opacity: 1;
+            background: #f8f8f8;
+        }
+
+        .user-card-header {
+            display: flex;
+            flex-direction: column;
+            padding: 0;
+            gap: 0;
+            border-bottom: none;
+            position: relative;
+        }
+
+        /* ステータスバッジオーバーレイ */
+        .user-card-status {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            z-index: 10;
+        }
+
+        .user-card-status .status-badge {
+            font-size: 0.75rem;
+            padding: 4px 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+        }
+
+        /* 正方形の画像 */
+        .user-card-photo {
+            position: relative;
+            width: 100%;
+            height: auto;
+            aspect-ratio: 1 / 1;
+            background: #f8f8f8;
+            overflow: hidden;
+        }
+
+        .user-card-photo img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 0;
+            cursor: pointer;
+        }
+
+        .user-item-card.card-sold .user-card-photo img,
+        .user-item-card.card-sold .card-photo-scroll img,
+        .user-item-card.card-sold .user-card-photo .no-photo {
+            opacity: 0.45;
+        }
+
+        .card-price-overlay {
+            position: absolute;
+            left: 4px;
+            bottom: 4px;
+            display: inline-flex;
+            max-width: calc(100% - 8px);
+            padding: 2px 5px;
+            border-radius: 5px;
+            color: #fff;
+            background: rgba(15, 23, 42, 0.82);
+            font-size: 0.68rem;
+            font-weight: 700;
+            line-height: 1.3;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            z-index: 6;
+        }
+
+        .user-card-photo .no-photo {
+            width: 100%;
+            height: 100%;
+            background: #f1f5f9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #94a3b8;
+            font-size: 1.5rem;
+        }
+
+        /* 複数画像は横スクロール */
+        .card-photo-scroll {
+            display: flex;
+            overflow-x: auto;
+            scroll-snap-type: x mandatory;
+            -webkit-overflow-scrolling: touch;
+            gap: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .card-photo-scroll::-webkit-scrollbar {
+            display: none;
+        }
+
+        .card-photo-scroll img {
+            flex: 0 0 100%;
+            width: 100%;
+            height: 100%;
+            min-width: 100%;
+            object-fit: cover;
+            border-radius: 0;
+            scroll-snap-align: start;
+            cursor: pointer;
+        }
+
+        .user-card-header.has-multi-photos .user-card-photo {
+            width: 100%;
+        }
+
+        /* チェックボックスを非表示（グリッドでは操作しにくい） */
+        .user-card-checkbox {
+            display: none;
+        }
+
+        /* 商品情報 - コンパクト */
+        .user-card-title {
+            padding: 6px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .user-card-id {
+            display: block;
+            font-size: 0.6rem;
+            color: #94a3b8;
+            margin-bottom: 2px;
+        }
+
+        .user-card-title h3 {
+            margin: 0;
+            font-size: 0.7rem;
+            font-weight: 500;
+            color: #1e293b;
+            line-height: 1.3;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .user-card-owner {
+            display: none;
+        }
+
+        .user-card-body {
+            padding: 0 6px 6px;
+        }
+
+        .user-card-body.compact-mobile-hidden {
+            display: none;
+        }
+
+        /* 価格のみコンパクト表示 */
+        .user-card-info-grid {
+            display: block;
+        }
+
+        .user-card-info-item {
+            display: none;
+        }
+
+        /* 仕入価格のみ表示 */
+        .user-card-info-item:first-child {
+            display: block;
+        }
+
+        .user-card-info-label {
+            display: none;
+        }
+
+        .user-card-info-value {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #1e293b;
+        }
+
+        .user-card-info-value.positive {
+            color: #10b981;
+        }
+
+        .user-card-info-value.negative {
+            color: #ef4444;
+        }
+
+        /* フッターを非表示 */
+        .user-card-footer {
+            display: none;
+        }
+
+        .user-card-footer.admin-mobile-actions {
+            display: block;
+            margin-top: auto;
+            padding: 4px;
+            background: #fff;
+        }
+
+        .user-card-footer.admin-mobile-actions .user-card-actions {
+            display: flex;
+            gap: 4px;
+        }
+
+        .user-card-footer.admin-mobile-actions .user-card-actions a[href*="/view/"] {
+            display: none !important;
+        }
+
+        .user-card-footer.admin-mobile-actions .btn {
+            flex: 1;
+            min-height: 30px;
+            padding: 6px 4px;
+            border-radius: 5px;
+            font-size: 0.66rem;
+            font-weight: 800;
+            line-height: 1.2;
+            white-space: nowrap;
+        }
+
+        .user-card-footer.long-term-mobile-actions {
+            display: block;
+            margin-top: auto;
+            padding: 4px;
+            background: #fff;
+        }
+
+        .user-card-footer.long-term-mobile-actions .user-card-actions {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr);
+            gap: 4px;
+        }
+
+        .user-card-footer.long-term-mobile-actions form,
+        .user-card-footer.long-term-mobile-actions .btn {
+            width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
+        }
+
+        .user-card-footer.long-term-mobile-actions .btn {
+            min-height: 30px;
+            padding: 6px 3px;
+            border-radius: 5px;
+            font-size: 0.64rem;
+            font-weight: 800;
+            line-height: 1.2;
+            white-space: normal;
+        }
+
+        .btn-edit {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .btn-edit:hover {
+            background: #2563eb;
+        }
+
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+    }
+</style>
+
+<div class="page-header">
+    <div>
+        <h1>{{ '長期保存商品' if long_term_only else 'ユーザーの商品一覧' }}</h1>
+        <p class="page-description">
+            {% if long_term_only %}
+            一般ユーザーの商品は、保管開始日から60日経過後（61日目以降）に長期保存商品へ自動反映されます。クライアント別の確認や並び替えにも対応しています。
+            {% else %}
+            クライアントごとの商品一覧です。代行仕入れで反映した商品もこの一覧で確認できます。
+            {% endif %}
+        </p>
+    </div>
+    <div class="header-actions">
+        {% if long_term_only %}
+        <a href="{{ url_for('admin_user_products') }}" class="btn btn-secondary">通常の商品一覧へ戻る</a>
+        {% else %}
+        <a href="{{ url_for('admin_user_products', long_term_only=1) }}" class="btn btn-secondary">長期保存一覧</a>
+        {% endif %}
+    </div>
+</div>
+
+{% if show_long_term_overview and (long_term_summary or long_term_only) %}
+<section class="long-term-overview">
+    <div class="long-term-overview-header">
+        <div>
+            <h2>クライアント別長期保存商品</h2>
+            <p>未売却かつ保管開始日から61日目以降の商品が合計 {{ total_long_term_count }} 件あります。</p>
+        </div>
+    </div>
+
+    {% if long_term_summary %}
+    <div class="long-term-client-list">
+        {% for client in long_term_summary %}
+        <div class="long-term-client-row {% if selected_owner_id == client.user_id and long_term_only %}active{% endif %}">
+            <div class="long-term-client-summary">
+                <span class="long-term-client-name">{{ client.client_name }}</span>
+                <span class="long-term-client-chip">長期保存 {{ client.item_count }}件</span>
+                <span class="long-term-client-chip">最長保管 {{ client.oldest_days_in_storage }}日</span>
+            </div>
+            <div class="long-term-client-actions">
+                <a href="{{ url_for('admin_user_products', long_term_only=1, owner_id=client.user_id) }}"
+                    class="client-open-btn {% if selected_owner_id == client.user_id and long_term_only %}active{% endif %}">表示</a>
+                <form method="POST" action="{{ url_for('admin_notify_long_term_user', user_id=client.user_id) }}" class="notify-form">
+                    <button type="submit" class="notify-client-btn">お客様へ通知</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="long-term-empty-state">現在、長期保存として該当する商品はありません。</div>
+    {% endif %}
+
+    {% if long_term_only and selected_owner_name %}
+    <div class="long-term-current-filter">
+        <span>{{ selected_owner_name }} の長期保存商品と申請内容を表示中です。内容は「商品処分申請」にも反映されます。</span>
+        <div class="long-term-current-filter-actions">
+            <form method="POST" action="{{ url_for('admin_notify_long_term_user', user_id=selected_owner_id) }}" class="notify-form">
+                <button type="submit" class="notify-client-btn">このお客様へ通知</button>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+</section>
+{% endif %}
+
+{% if long_term_only and not show_long_term_details %}
+<div class="long-term-detail-placeholder">
+    クライアントの「表示」を押すと、そのお客様の長期保存商品の詳細、検索フィルター、並び替えが下に表示されます。
+</div>
+{% endif %}
+
+{% if show_long_term_details %}
+<!-- 検索ボタン＆アクションボタン -->
+<div class="search-action-bar">
+    <div class="search-toggle-container">
+        <button class="search-toggle-btn" id="searchToggleBtn" onclick="toggleFilterPanel()">
+            <span class="search-icon">🔍</span>
+            <span class="search-text-full">検索・フィルター</span>
+            <span class="search-text-short">検索</span>
+            <span class="filter-count" id="filterCount" style="display: none;">0</span>
+        </button>
+    </div>
+    <div class="action-buttons-group">
+        <div class="sort-control">
+            <label for="sortControl">並び替え</label>
+            <select id="sortControl" onchange="applySortSelection()">
+                {% if long_term_only %}
+                <option value="storage_desc">保管期間が長い順</option>
+                <option value="storage_asc">保管期間が短い順</option>
+                <option value="purchase_oldest">保管開始日が古い順</option>
+                <option value="purchase_newest">保管開始日が新しい順</option>
+                <option value="product_asc">商品名順</option>
+                {% else %}
+                <option value="status_priority">未売却・対応待ち優先</option>
+                <option value="sold_bottom">売却済みを下に回す</option>
+                <option value="created_newest">登録順（新しい順）</option>
+                <option value="updated_newest">更新順（新しい順）</option>
+                <option value="timeline_newest">時系列順（仕入日が新しい順）</option>
+                <option value="purchase_newest">仕入日が新しい順</option>
+                <option value="purchase_oldest">仕入日が古い順</option>
+                <option value="purchase_high">仕入額が高い順</option>
+                <option value="purchase_low">仕入額が低い順</option>
+                <option value="sale_high">売上が高い順</option>
+                <option value="profit_high">利益が高い順</option>
+                <option value="owner_asc">クライアント名順</option>
+                {% endif %}
+            </select>
+        </div>
+        {% if long_term_only %}
+        <span class="long-term-scope-note">一般ユーザー商品を保管開始日から61日目以降で自動表示</span>
+        {% else %}
+        <a href="{{ url_for('admin_add_item', mode='user') }}" class="btn btn-primary">+ ユーザー商品登録</a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- フィルターパネル -->
+<div class="filter-panel" id="filterPanel">
+    <div class="filter-tabs-header">
+        <button class="filter-tab-btn active" onclick="showFilterTab('text', event)">テキスト検索</button>
+        <button class="filter-tab-btn" onclick="showFilterTab('status', event)">状態</button>
+        <button class="filter-tab-btn" onclick="showFilterTab('price', event)">金額</button>
+    </div>
+
+    <!-- テキスト検索 -->
+    <div class="filter-tab-content active" id="filter-text">
+        <div class="filter-group">
+            <div class="filter-item">
+                <label>No</label>
+                <input type="text" id="tab-filter-id" placeholder="No">
+            </div>
+            <div class="filter-item">
+                <label>商品名</label>
+                <input type="text" id="tab-filter-name" placeholder="商品名">
+            </div>
+            <div class="filter-item">
+                <label>ブランド</label>
+                <input type="text" id="tab-filter-brand" placeholder="ブランド">
+            </div>
+            <div class="filter-item">
+                <label>型番</label>
+                <input type="text" id="tab-filter-model" placeholder="型番">
+            </div>
+            {% if not long_term_only %}
+            <div class="filter-item">
+                <label>{{ 'クライアント' if long_term_only else '所有者' }}</label>
+                <select id="tab-filter-owner-select">
+                    <option value="">{{ 'すべてのクライアント' if long_term_only else 'すべての所有者' }}</option>
+                    {% if long_term_only %}
+                    {% for client in long_term_summary %}
+                    <option value="{{ client.user_id }}">{{ client.client_name }}（{{ client.item_count }}件）</option>
+                    {% endfor %}
+                    {% else %}
+                    {% for user in users %}
+                    <option value="{{ user.id }}">{{ user.display_name or user.username }}</option>
+                    {% endfor %}
+                    {% endif %}
+                </select>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- 状態フィルター -->
+    <div class="filter-tab-content" id="filter-status-tab">
+        <div class="filter-group">
+            <div class="filter-item">
+                <label>状態</label>
+                <select id="tab-filter-condition">
+                    <option value="">全て</option>
+                    <option value="N">N</option>
+                    <option value="S">S</option>
+                    <option value="A">A</option>
+                    <option value="AB">AB</option>
+                    <option value="B">B</option>
+                </select>
+            </div>
+            <div class="filter-item">
+                <label>販売状況</label>
+                <select id="tab-filter-status">
+                    <option value="">すべて</option>
+                    <option value="listed">出品中のみ</option>
+                    <option value="transaction">取引中のみ</option>
+                    <option value="agency">業者依頼中のみ</option>
+                    <option value="appraisal_pending">査定中のみ</option>
+                    <option value="certified">認証済みのみ</option>
+                    <option value="sold">売却済みのみ</option>
+                    <option value="unlisted">未出品</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- 金額フィルター -->
+    <div class="filter-tab-content" id="filter-price">
+        <div class="filter-group">
+            <div class="filter-item">
+                <label>仕入価格</label>
+                <input type="number" id="tab-filter-purchase-min" placeholder="以上">
+                <span>〜</span>
+                <input type="number" id="tab-filter-purchase-max" placeholder="以下">
+            </div>
+            <div class="filter-item">
+                <label>売上</label>
+                <input type="number" id="tab-filter-sale-min" placeholder="以上">
+                <span>〜</span>
+                <input type="number" id="tab-filter-sale-max" placeholder="以下">
+            </div>
+            <div class="filter-item">
+                <label>利益</label>
+                <input type="number" id="tab-filter-profit-min" placeholder="以上">
+                <span>〜</span>
+                <input type="number" id="tab-filter-profit-max" placeholder="以下">
+            </div>
+        </div>
+    </div>
+
+    <!-- フッターボタン -->
+    <div class="filter-panel-footer">
+        <button class="filter-reset-btn" onclick="resetAllFilters()">リセット</button>
+        <button class="filter-apply-btn" onclick="applyFilters()">検索</button>
+    </div>
+</div>
+
+{% if items and not long_term_only %}
+<div class="bulk-actions">
+    <form id="bulk-transfer-form" action="{{ url_for('admin_transfer_items_bulk') }}" method="POST"
+        style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+        <label style="display: flex; align-items: center; gap: 6px;">
+            <input type="checkbox" id="select-all" onclick="toggleSelectAll()">
+            <span>すべて選択</span>
+        </label>
+        <select name="target_user_id" required style="min-width: 200px;">
+            <option value="">転送先ユーザーを選択</option>
+            {% for user in users %}
+            <option value="{{ user.id }}">{{ user.display_name or user.username }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-primary" onclick="return confirmBulkTransfer()">一括転送</button>
+    </form>
+</div>
+{% endif %}
+
+<!-- 商品テーブル -->
+<div class="table-container">
+    <div class="table-scroll">
+        <table class="data-table" id="itemsTable">
+            <thead>
+                <tr>
+                    {% if not long_term_only %}
+                    <th style="width: 40px;"></th>
+                    {% endif %}
+                    <th style="width: 60px;">写真</th>
+                    <th class="sortable" data-sort="kaika_product_code">開花管理番号</th>
+                    <th class="sortable product-name-col" data-sort="product_name">商品名</th>
+                    <th class="sortable" data-sort="brand_name">ブランド</th>
+                    <th>型番</th>
+                    <th>状態</th>
+                    <th class="sortable store-col" data-sort="store_name">仕入先</th>
+                    <th class="sortable owner-col" data-sort="owner_name">{{ 'クライアント' if long_term_only else '登録者' }}</th>
+                    <th class="updater-col">最終更新者</th>
+                    <th class="sortable" data-sort="purchase_date">{{ '保管開始日' if long_term_only else '仕入日' }}</th>
+                    <th class="sortable" data-sort="days_since_purchase">保管日数</th>
+                    <th class="sortable" data-sort="purchase_price">価格</th>
+                    <th class="sortable" data-sort="profit">利益</th>
+                    <th>販売状況</th>
+                    <th style="width: {{ '260px' if long_term_only else '100px' }};">{{ '長期保存対応' if long_term_only else '操作' }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr class="{% if item.is_sold or item.sale_date %}row-sold{% endif %}" data-id="{{ item.id }}"
+                    data-kaika-product-code="{{ item.kaika_product_code or '' }}"
+                    data-name="{{ item.product_name or '' }}" data-brand="{{ item.brand_name or '' }}"
+                    data-model="{{ item.model_number or '' }}" data-condition="{{ item.item_condition or '' }}"
+                    data-store="{{ item.store_name or '' }}"
+                    data-sales-destination="{{ item.sales_destination or '' }}"
+                    data-owner="{{ item.owner_display_name or item.owner_username or '' }}"
+                    data-owner-id="{{ item.user_id or '' }}"
+                    data-date="{{ item.storage_started_at_display if long_term_only else item.purchase_date or '' }}" data-purchase-price="{{ item.display_purchase_price or item.wholesale_price or item.purchase_price or 0 }}"
+                    data-listing-price="{{ item.listing_price or 0 }}" data-sale-price="{{ item.sale_price or 0 }}"
+                    data-profit="{{ item.profit or 0 }}"
+                    data-days-since-purchase="{{ item.days_since_purchase or 0 }}"
+                    data-sale-type="{{ item.sale_type or '' }}"
+                    data-sale-date="{{ item.sale_date or '' }}"
+                    data-created-at="{{ item.created_at or '' }}"
+                    data-updated-at="{{ item.updated_at or '' }}"
+                    data-status-rank="{% if item.is_sold or item.sale_date %}90{% elif item.is_shipped %}20{% elif item.appraisal_status in ['waiting', 'inspecting'] %}25{% elif item.is_listed %}30{% else %}10{% endif %}"
+                    data-status="{% if item.is_sold or item.sale_date %}sold{% elif item.is_shipped %}transaction{% elif item.appraisal_status in ['waiting', 'inspecting'] %}appraisal_pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
+                    data-status-tags="{{ (item.status_tags or [])|join(' ') }}"
+                    data-detail-url="{{ url_for('view_item', id=item.id) }}">
+                    {% if not long_term_only %}
+                    <td>
+                        <input type="checkbox" name="item_ids" value="{{ item.id }}" form="bulk-transfer-form"
+                            class="item-checkbox">
+                    </td>
+                    {% endif %}
+                    <td class="photo-cell">
+                        {% if item.all_photos and item.all_photos|length > 0 %}
+                        <img src="{{ url_for('static', filename=item.all_photos[0]) }}" class="table-thumb" alt="" loading="lazy" decoding="async"
+                            data-photos='{{ item.all_photos | tojson }}' onclick="openLightboxFromData(this, 0)">
+                        {% if item.all_photos|length > 1 %}
+                        <span class="photo-count-badge">{{ item.all_photos|length }}</span>
+                        {% endif %}
+                        {% else %}
+                        <div class="no-thumb">-</div>
+                        {% endif %}
+                    </td>
+                    <td>{{ item.kaika_product_code or '-' }}</td>
+                    <td class="product-name-col">
+                        <strong>{{ item.product_name or '-' }}</strong>
+                        {% if item.is_proxy_service_reflection %}
+                        <div class="proxy-source-chip">{{ item.proxy_service_source_label }}</div>
+                        {% endif %}
+                        {% if item.notes %}
+                        <div style="margin-top: 4px; font-size: 0.75rem; color: #64748b; line-height: 1.4;" title="{{ item.notes }}">メモ: {{ item.notes|truncate(36) }}</div>
+                        {% endif %}
+                    </td>
+                    <td>{{ item.brand_name or '-' }}</td>
+                    <td>{{ item.model_number or '-' }}</td>
+                    <td>
+                        {% if item.item_condition %}
+                        <span class="condition-badge condition-{{ item.item_condition }}">{{ item.item_condition
+                            }}</span>
+                        {% else %}-{% endif %}
+                    </td>
+                    <td class="store-col" title="{{ item.store_name or '-' }}">{{ item.store_name or '-' }}</td>
+                    <td class="owner-col"><span class="badge-user">{{ item.owner_display_name or item.owner_username or '-' }}</span></td>
+                    <td class="updater-col" title="{{ item.updated_by_name or '-' }}">{{ item.updated_by_name or '-' }}</td>
+                    <td>{{ item.storage_started_at_display if long_term_only else item.purchase_date or '-' }}</td>
+                    <td class="amount">{{ item.days_since_purchase or 0 }}日</td>
+                    <td class="amount">
+                        {% if item.is_sold or item.sale_date %}
+                        売却 ¥{{ "{:,}".format(item.display_sale_price or item.sale_price or 0) }}
+                        {% else %}
+                        仕入 ¥{{ "{:,}".format(item.display_purchase_price or item.wholesale_price or item.purchase_price or 0) }}
+                        {% endif %}
+                    </td>
+                    <td
+                        class="amount {% if item.is_sold or item.sale_date %}{% if (item.profit or 0) > 0 %}positive{% else %}negative{% endif %}{% endif %}">
+                        {% if item.is_sold or item.sale_date %}
+                        ¥{{ "{:,}".format(item.profit or 0) }}
+                        {% if item.profit_rate %}<small>({{ item.profit_rate }}%)</small>{% endif %}
+                        {% else %}-{% endif %}
+                    </td>
+                    <td>
+                        {% if item.is_sold or item.sale_date %}
+                        <span class="status-badge sold">売却済み</span>
+                        {% elif item.long_term_result_label %}
+                        <span class="status-badge listed">{{ item.long_term_result_label }}</span>
+                        {% elif item.long_term_status_label %}
+                        <span class="status-badge pending-sale">{{ item.long_term_status_label }}</span>
+                        {% elif item.pending_sales_agency %}
+                        <span class="status-badge pending-sale">{{ item.mobile_status_label or (item.sales_agency_request.status_label if item.sales_agency_request and item.sales_agency_request.status_label else '業者依頼中') }}</span>
+                        {% elif item.completion_resend_requested %}
+                        <span class="status-badge pending-sale">再送依頼</span>
+                        {% elif item.pending_completion_request %}
+                        <span class="status-badge pending-sale">確認待ち</span>
+                        {% elif item.pending_shipping_request %}
+                        <span class="status-badge pending-sale">発送依頼中</span>
+                        {% elif item.can_send_completion_report or item.approved_shipping_request or item.shipment_marked or item.is_shipped %}
+                        <span class="status-badge listed">{{ '取引完了報告を送る' if item.can_send_completion_report else '発送依頼送付済み' }}</span>
+                        {% elif item.appraisal_status in ['waiting', 'inspecting'] %}
+                        <span class="status-badge listed">査定中</span>
+                        {% elif item.is_listed %}
+                        <span class="status-badge listed">出品中</span>
+                        {% else %}
+                        <span class="status-badge unlisted">未出品</span>
+                        {% endif %}
+                    </td>
+                    <td class="action-cell {% if long_term_only %}long-term-request-cell{% endif %}">
+                        {% if long_term_only %}
+                        <div class="long-term-request-stack">
+                            <div class="long-term-request-badges">
+                                <span class="long-term-request-badge long-term-request-type {{ item.disposal_type or 'none' }}">
+                                    {{ item.disposal_type_label }}
+                                </span>
+                                <span class="long-term-request-badge long-term-request-status {{ item.disposal_status_stage or 'none' }}">
+                                    {{ item.disposal_status_label }}
+                                </span>
+                            </div>
+                            <div class="long-term-request-meta">
+                                申請日: {{ item.disposal_requested_at_display }}
+                                {% if item.disposal_processed_at_display %}
+                                <br>更新日: {{ item.disposal_processed_at_display }}
+                                {% endif %}
+                                {% if item.disposal_request_id %}
+                                <br>次の対応: {{ item.disposal_next_action_label }}
+                                {% endif %}
+                            </div>
+                            <div class="long-term-request-links">
+                                <form method="POST" action="{{ url_for('admin_notify_long_term_item', item_id=item.id) }}" class="notify-form long-term-item-notify-form">
+                                    <input type="hidden" name="notification_request_key" value="{{ item.notification_request_key }}">
+                                    <button type="submit" class="btn btn-sm btn-secondary-link">この商品を通知</button>
+                                </form>
+                                <a href="{{ url_for('view_item', id=item.id) }}" class="btn btn-sm">商品詳細</a>
+                                {% if item.show_sale_entry %}
+                                <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">{{ item.sale_entry_label }}</a>
+                                {% endif %}
+                                {% if item.finish_action and item.disposal_request_id %}
+                                <form method="POST" action="{{ url_for('process_disposal_request', request_id=item.disposal_request_id) }}" class="notify-form">
+                                    <input type="hidden" name="action" value="{{ item.finish_action }}">
+                                    <button type="submit" class="btn btn-sm btn-secondary-link" onclick='return confirm({{ item.finish_confirm_message|default("", true)|tojson }})'>{{ item.finish_action_label }}</button>
+                                </form>
+                                {% endif %}
+                                {% if item.other_action and item.disposal_request_id %}
+                                <form method="POST" action="{{ url_for('process_disposal_request', request_id=item.disposal_request_id) }}" class="notify-form">
+                                    <input type="hidden" name="action" value="{{ item.other_action }}">
+                                    <button type="submit" class="btn btn-sm btn-secondary-link" onclick='return confirm({{ item.other_confirm_message|default("", true)|tojson }})'>{{ item.other_action_label }}</button>
+                                </form>
+                                {% endif %}
+                                <a href="{{ url_for('admin_disposal_requests', reason='long_term', user_id=item.user_id, merchandise_id=item.id) }}" class="btn btn-sm btn-secondary-link">申請一覧</a>
+                            </div>
+                        </div>
+                        {% else %}
+                        <a href="{{ url_for('view_item', id=item.id) }}" class="btn btn-sm">詳細</a>
+                        <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">編集</a>
+                        <button class="btn btn-sm btn-primary"
+                            onclick="openTransferModal({{ item.id }}, '{{ item.product_name | e }}')">転送</button>
+                        {% if item.can_delete %}
+                        <button class="btn btn-sm btn-danger"
+                            onclick="openDeleteModal({{ item.id }}, '{{ item.product_name | e }}')">削除</button>
+                        {% endif %}
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="{{ '16' if not long_term_only else '15' }}" style="text-align: center; padding: 40px; color: #94a3b8;">
+                        {% if long_term_only %}
+                        {{ selected_owner_name ~ ' の長期保存商品はありません' if selected_owner_name else '長期保存商品はありません' }}
+                        {% else %}
+                        ユーザーの商品がありません
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="table-info">
+        <span id="filtered-count">{{ items|length }}件表示</span>
+        <span>全{{ items|length }}件中</span>
+    </div>
+</div>
+
+<!-- スマホ用カード表示（横スワイプカルーセル） -->
+<div class="mobile-cards-wrapper">
+    <div class="swipe-indicator">
+        <span class="current-index">1</span> / <span class="total-count">{{ items|length }}</span>
+        <span class="swipe-hint">← スワイプで移動 →</span>
+    </div>
+    <div class="mobile-cards" id="mobileCards">
+        {% for item in items %}
+        {% set mobile_price = item.display_sale_price if (item.is_sold or item.sale_date) else (item.display_purchase_price or item.wholesale_price or item.purchase_price or 0) %}
+        {% set mobile_price_label = '売却' if (item.is_sold or item.sale_date) else '仕入' %}
+        <div class="user-item-card {% if item.is_sold or item.sale_date %}card-sold{% endif %}" data-id="{{ item.id }}"
+            data-name="{{ item.product_name or '' }}" data-brand="{{ item.brand_name or '' }}"
+            data-model="{{ item.model_number or '' }}" data-condition="{{ item.item_condition or '' }}"
+            data-owner="{{ item.owner_display_name or item.owner_username or '' }}" data-owner-id="{{ item.user_id or '' }}"
+            data-status-rank="{% if item.is_sold or item.sale_date %}90{% elif item.is_shipped %}20{% elif item.appraisal_status in ['waiting', 'inspecting'] %}25{% elif item.is_listed %}30{% else %}10{% endif %}"
+            data-status="{% if item.is_sold or item.sale_date %}sold{% elif item.is_shipped %}transaction{% elif item.appraisal_status in ['waiting', 'inspecting'] %}appraisal_pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
+            data-status-tags="{{ (item.status_tags or [])|join(' ') }}"
+            data-purchase-price="{{ item.display_purchase_price or item.wholesale_price or item.purchase_price or 0 }}" data-sale-price="{{ item.sale_price or 0 }}"
+            data-profit="{{ item.profit or 0 }}" data-date="{{ item.storage_started_at_display if long_term_only else item.purchase_date or '' }}"
+            data-days-since-purchase="{{ item.days_since_purchase or 0 }}"
+            data-created-at="{{ item.created_at or '' }}"
+            data-updated-at="{{ item.updated_at or '' }}"
+            data-detail-url="{{ url_for('view_item', id=item.id) }}">
+            <div
+                class="user-card-header {% if item.all_photos and item.all_photos|length > 1 %}has-multi-photos{% endif %}">
+                {% if not long_term_only %}
+                <div class="user-card-checkbox">
+                    <input type="checkbox" name="item_ids" value="{{ item.id }}" form="bulk-transfer-form"
+                        class="item-checkbox">
+                </div>
+                {% endif %}
+                <div class="user-card-photo">
+                    {% if item.all_photos and item.all_photos|length > 1 %}
+                    <div class="card-photo-scroll" data-photos='{{ item.all_photos | tojson }}'>
+                        {% for photo in item.all_photos %}
+                        <img src="{{ url_for('static', filename=photo) }}" alt="" loading="lazy" decoding="async"
+                            onclick="openLightboxFromParent(this, {{ loop.index0 }})">
+                        {% endfor %}
+                    </div>
+                    {% elif item.all_photos and item.all_photos|length == 1 %}
+                    <img src="{{ url_for('static', filename=item.all_photos[0]) }}" alt="" loading="lazy" decoding="async"
+                        data-photos='{{ item.all_photos | tojson }}' onclick="openLightboxFromData(this, 0)">
+                    {% else %}
+                    <div class="no-photo">-</div>
+                    {% endif %}
+                    <div class="card-price-overlay">{{ mobile_price_label }} ¥{{ "{:,}".format(mobile_price|int) }}</div>
+                </div>
+                <div class="user-card-title">
+                    <span class="user-card-id">{{ item.kaika_product_code or '-' }}</span>
+                    <h3>{{ item.product_name or '-' }}</h3>
+                    {% if item.is_proxy_service_reflection %}
+                    <div class="proxy-source-chip">{{ item.proxy_service_source_label }}</div>
+                    {% endif %}
+                    {% if item.notes %}
+                    <div style="margin-top: 4px; font-size: 0.75rem; color: #64748b; line-height: 1.4;">メモ: {{ item.notes|truncate(48) }}</div>
+                    {% endif %}
+                    <span class="user-card-owner">{{ item.owner_display_name or item.owner_username or '-' }}</span>
+                </div>
+                <div class="user-card-status">
+                    {% if item.is_sold or item.sale_date %}
+                    <span class="status-badge sold">売却済み</span>
+                    {% elif item.long_term_result_label %}
+                    <span class="status-badge listed">{{ item.long_term_result_label }}</span>
+                    {% elif item.long_term_status_label %}
+                    <span class="status-badge pending-sale">{{ item.long_term_status_label }}</span>
+                    {% endif %}
+                </div>
+            </div>
+                <div class="user-card-body {% if not long_term_only %}compact-mobile-hidden{% endif %}">
+                {% if long_term_only %}
+                <div class="long-term-mobile-meta">
+                    <span class="long-term-mobile-chip">{{ item.owner_display_name or item.owner_username or '-' }}</span>
+                    <span class="long-term-mobile-chip">保管 {{ item.days_since_purchase or 0 }}日</span>
+                </div>
+                {% endif %}
+                <div class="user-card-info-grid">
+                    <div class="user-card-info-item">
+                        <span class="user-card-info-label">価格</span>
+                        <span class="user-card-info-value">
+                            {% if item.is_sold or item.sale_date %}
+                            売却 ¥{{ "{:,}".format(item.display_sale_price or item.sale_price or 0) }}
+                            {% else %}
+                            仕入 ¥{{ "{:,}".format(item.display_purchase_price or item.wholesale_price or item.purchase_price or 0) }}
+                            {% endif %}
+                        </span>
+                    </div>
+                </div>
+                {% if long_term_only %}
+                <div class="mobile-long-term-request">
+                    <div class="long-term-request-badges">
+                        <span class="long-term-request-badge long-term-request-type {{ item.disposal_type or 'none' }}">
+                            {{ item.disposal_type_label }}
+                        </span>
+                        <span class="long-term-request-badge long-term-request-status {{ item.disposal_status_stage or 'none' }}">
+                            {{ item.disposal_status_label }}
+                        </span>
+                    </div>
+                    <div class="long-term-request-meta">申請日: {{ item.disposal_requested_at_display }}</div>
+                    {% if item.disposal_processed_at_display %}
+                    <div class="long-term-request-meta">更新日: {{ item.disposal_processed_at_display }}</div>
+                    {% endif %}
+                    {% if item.disposal_request_id %}
+                    <div class="long-term-request-meta">次の対応: {{ item.disposal_next_action_label }}</div>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+            <div class="user-card-footer {{ 'long-term-mobile-actions' if long_term_only else 'admin-mobile-actions' }}">
+                <div class="user-card-actions">
+                    {% if long_term_only %}
+                    <form method="POST" action="{{ url_for('admin_notify_long_term_item', item_id=item.id) }}" class="notify-form long-term-item-notify-form">
+                        <input type="hidden" name="notification_request_key" value="{{ item.notification_request_key }}">
+                        <button type="submit" class="btn btn-sm btn-secondary-link">通知</button>
+                    </form>
+                    <a href="{{ url_for('view_item', id=item.id) }}" class="btn btn-sm">商品詳細</a>
+                    {% if item.show_sale_entry %}
+                    <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">{{ item.sale_entry_label }}</a>
+                    {% endif %}
+                    {% if item.finish_action and item.disposal_request_id %}
+                    <form method="POST" action="{{ url_for('process_disposal_request', request_id=item.disposal_request_id) }}" class="notify-form">
+                        <input type="hidden" name="action" value="{{ item.finish_action }}">
+                        <button type="submit" class="btn btn-sm btn-secondary-link" onclick='return confirm({{ item.finish_confirm_message|default("", true)|tojson }})'>{{ item.finish_action_label }}</button>
+                    </form>
+                    {% endif %}
+                    {% if item.other_action and item.disposal_request_id %}
+                    <form method="POST" action="{{ url_for('process_disposal_request', request_id=item.disposal_request_id) }}" class="notify-form">
+                        <input type="hidden" name="action" value="{{ item.other_action }}">
+                        <button type="submit" class="btn btn-sm btn-secondary-link" onclick='return confirm({{ item.other_confirm_message|default("", true)|tojson }})'>{{ item.other_action_label }}</button>
+                    </form>
+                    {% endif %}
+                    <a href="{{ url_for('admin_disposal_requests', reason='long_term', user_id=item.user_id, merchandise_id=item.id) }}" class="btn btn-sm btn-secondary-link">申請一覧</a>
+                    {% else %}
+                    <a href="{{ url_for('view_item', id=item.id) }}" class="btn btn-sm">詳細</a>
+                    <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">編集</a>
+                    {% if item.can_delete %}
+                    <button type="button" class="btn btn-sm btn-danger"
+                        onclick="openDeleteModal({{ item.id }}, '{{ item.product_name | e }}')">削除</button>
+                    {% endif %}
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="user-item-card">
+            <div class="user-card-body" style="text-align: center; padding: 2rem; color: #94a3b8;">
+                {% if long_term_only %}
+                {{ selected_owner_name ~ ' の長期保存商品はありません' if selected_owner_name else '長期保存商品はありません' }}
+                {% else %}
+                ユーザーの商品がありません
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- 削除確認モーダル -->
+<div id="delete-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>商品を削除</h2>
+            <button type="button" class="modal-close" onclick="closeDeleteModal()">&times;</button>
+        </div>
+        <form id="delete-form" method="POST">
+            <div class="modal-body">
+                <p style="color: #ef4444; margin-bottom: 1rem;">⚠️ この操作は取り消せません</p>
+                <p id="delete-item-name" style="font-weight: 500;"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeDeleteModal()">キャンセル</button>
+                <button type="submit" class="btn btn-danger">削除する</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 転送モーダル -->
+<div id="transfer-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>商品を転送</h2>
+            <button type="button" class="modal-close" onclick="closeTransferModal()">&times;</button>
+        </div>
+        <form id="transfer-form" method="POST">
+            <div class="modal-body">
+                <p id="transfer-item-name" style="margin-bottom: 1rem; font-weight: 500;"></p>
+                <div class="form-group">
+                    <label for="modal-target-user">転送先ユーザー</label>
+                    <select id="modal-target-user" name="target_user_id" required>
+                        <option value="">選択してください</option>
+                        {% for user in users %}
+                        <option value="{{ user.id }}">{{ user.display_name or user.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeTransferModal()">キャンセル</button>
+                <button type="submit" class="btn btn-primary">転送する</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    const isMobileListMode = () => window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
+
+    // フィルターパネル開閉
+    function toggleFilterPanel() {
+        const panel = document.getElementById('filterPanel');
+        const btn = document.getElementById('searchToggleBtn');
+        panel.classList.toggle('open');
+        btn.classList.toggle('active');
+    }
+
+    // フィルタータブ切り替え
+    function showFilterTab(tabName, e) {
+        document.querySelectorAll('.filter-tab-content').forEach(tab => {
+            tab.classList.remove('active');
+        });
+        document.querySelectorAll('.filter-tab-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+
+        let contentId;
+        switch (tabName) {
+            case 'text': contentId = 'filter-text'; break;
+            case 'status': contentId = 'filter-status-tab'; break;
+            case 'price': contentId = 'filter-price'; break;
+        }
+
+        document.getElementById(contentId).classList.add('active');
+        if (e && e.target) {
+            e.target.classList.add('active');
+        }
+    }
+
+    // 全フィルターをリセット
+    function resetAllFilters() {
+        document.getElementById('tab-filter-id').value = '';
+        document.getElementById('tab-filter-name').value = '';
+        document.getElementById('tab-filter-brand').value = '';
+        document.getElementById('tab-filter-model').value = '';
+        document.getElementById('tab-filter-owner-select').value = '';
+        document.getElementById('tab-filter-condition').value = '';
+        document.getElementById('tab-filter-status').value = '';
+        document.getElementById('tab-filter-purchase-min').value = '';
+        document.getElementById('tab-filter-purchase-max').value = '';
+        document.getElementById('tab-filter-sale-min').value = '';
+        document.getElementById('tab-filter-sale-max').value = '';
+        document.getElementById('tab-filter-profit-min').value = '';
+        document.getElementById('tab-filter-profit-max').value = '';
+
+        filterTable();
+        updateFilterCount();
+    }
+
+    // フィルター適用
+    function applyFilters() {
+        filterTable();
+        updateFilterCount();
+        document.getElementById('filterPanel').classList.remove('open');
+        document.getElementById('searchToggleBtn').classList.remove('active');
+    }
+
+    function bindFilterControls() {
+        const filterIds = [
+            'tab-filter-id',
+            'tab-filter-name',
+            'tab-filter-brand',
+            'tab-filter-model',
+            'tab-filter-owner-select',
+            'tab-filter-condition',
+            'tab-filter-status',
+            'tab-filter-purchase-min',
+            'tab-filter-purchase-max',
+            'tab-filter-sale-min',
+            'tab-filter-sale-max',
+            'tab-filter-profit-min',
+            'tab-filter-profit-max'
+        ];
+
+        filterIds.forEach(function (id) {
+            const control = document.getElementById(id);
+            if (!control) return;
+            const refresh = function () {
+                filterTable();
+                updateFilterCount();
+            };
+            control.addEventListener('input', refresh);
+            control.addEventListener('change', refresh);
+        });
+    }
+
+    // フィルター数をカウント
+    function updateFilterCount() {
+        let count = 0;
+
+        if (document.getElementById('tab-filter-id')?.value) count++;
+        if (document.getElementById('tab-filter-name')?.value) count++;
+        if (document.getElementById('tab-filter-brand')?.value) count++;
+        if (document.getElementById('tab-filter-model')?.value) count++;
+        if (document.getElementById('tab-filter-owner-select')?.value) count++;
+        if (document.getElementById('tab-filter-condition')?.value) count++;
+        if (document.getElementById('tab-filter-status')?.value) count++;
+        if (document.getElementById('tab-filter-purchase-min')?.value) count++;
+        if (document.getElementById('tab-filter-purchase-max')?.value) count++;
+        if (document.getElementById('tab-filter-sale-min')?.value) count++;
+        if (document.getElementById('tab-filter-sale-max')?.value) count++;
+        if (document.getElementById('tab-filter-profit-min')?.value) count++;
+        if (document.getElementById('tab-filter-profit-max')?.value) count++;
+
+        const countEl = document.getElementById('filterCount');
+        if (count > 0) {
+            countEl.textContent = count;
+            countEl.style.display = 'inline';
+        } else {
+            countEl.style.display = 'none';
+        }
+    }
+
+    // テーブルフィルター機能
+    function filterTable() {
+        const filterId = (document.getElementById('tab-filter-id')?.value || '').toLowerCase();
+        const filterName = (document.getElementById('tab-filter-name')?.value || '').toLowerCase();
+        const filterBrand = (document.getElementById('tab-filter-brand')?.value || '').toLowerCase();
+        const filterModel = (document.getElementById('tab-filter-model')?.value || '').toLowerCase();
+        const filterOwnerId = document.getElementById('tab-filter-owner-select')?.value || '';
+        const filterCondition = document.getElementById('tab-filter-condition')?.value || '';
+        const filterStatus = document.getElementById('tab-filter-status')?.value || '';
+        const query = new URLSearchParams(window.location.search);
+        const querySaleType = (query.get('sale_type') || '').toLowerCase();
+        const querySaleTypeNot = (query.get('sale_type_not') || '').toLowerCase();
+        const queryStatus = (query.get('status') || '').toLowerCase();
+        const queryBrand = (query.get('brand') || '').toLowerCase();
+        const queryDestination = (query.get('destination') || '').toLowerCase();
+        const queryDateFrom = query.get('date_from') || '';
+        const queryDateTo = query.get('date_to') || '';
+
+        const filterPurchaseMin = document.getElementById('tab-filter-purchase-min')?.value || '';
+        const filterPurchaseMax = document.getElementById('tab-filter-purchase-max')?.value || '';
+        const filterSaleMin = document.getElementById('tab-filter-sale-min')?.value || '';
+        const filterSaleMax = document.getElementById('tab-filter-sale-max')?.value || '';
+        const filterProfitMin = document.getElementById('tab-filter-profit-min')?.value || '';
+        const filterProfitMax = document.getElementById('tab-filter-profit-max')?.value || '';
+
+        let visibleCount = 0;
+
+        function checkPriceRange(value, min, max) {
+            const numValue = parseInt(value) || 0;
+            if (min !== '' && numValue < parseInt(min)) return false;
+            if (max !== '' && numValue > parseInt(max)) return false;
+            return true;
+        }
+
+        function matchesElement(element) {
+            const dataset = element.dataset;
+            const id = (dataset.id || '').toLowerCase();
+            const name = (dataset.name || '').toLowerCase();
+            const brand = (dataset.brand || '').toLowerCase();
+            const model = (dataset.model || '').toLowerCase();
+            const ownerId = dataset.ownerId || '';
+            const condition = dataset.condition || '';
+            const status = dataset.status || '';
+            const statusTags = (dataset.statusTags || status).split(/\s+/).filter(Boolean);
+            const saleType = (dataset.saleType || '').toLowerCase();
+            const saleTypes = saleType ? saleType.split(',').map(v => v.trim()) : [];
+            const saleDate = dataset.saleDate || '';
+            const salesDestination = (dataset.salesDestination || '').toLowerCase();
+            const purchasePrice = dataset.purchasePrice || '0';
+            const salePrice = dataset.salePrice || '0';
+            const profit = dataset.profit || '0';
+
+            let show = true;
+
+            if (filterId && !id.includes(filterId)) show = false;
+            if (filterName && !name.includes(filterName)) show = false;
+            if (filterBrand && !brand.includes(filterBrand)) show = false;
+            if (filterModel && !model.includes(filterModel)) show = false;
+            if (filterOwnerId && ownerId !== filterOwnerId) show = false;
+            if (filterCondition && condition !== filterCondition) show = false;
+            if (filterStatus && !statusMatchesFilter(status, filterStatus, statusTags)) show = false;
+            if (queryStatus === 'unsold') {
+                if (status === 'sold') show = false;
+            } else if (queryStatus && !statusMatchesFilter(status, queryStatus, statusTags)) {
+                show = false;
+            }
+            if (querySaleType && !saleTypes.includes(querySaleType)) show = false;
+            if (querySaleTypeNot && saleTypes.includes(querySaleTypeNot)) show = false;
+            if (queryBrand && !brand.includes(queryBrand)) show = false;
+            if (queryDestination && !salesDestination.includes(queryDestination)) show = false;
+            if (queryDateFrom && (!saleDate || saleDate < queryDateFrom)) show = false;
+            if (queryDateTo && (!saleDate || saleDate > queryDateTo)) show = false;
+
+            if (!checkPriceRange(purchasePrice, filterPurchaseMin, filterPurchaseMax)) show = false;
+            if (!checkPriceRange(salePrice, filterSaleMin, filterSaleMax)) show = false;
+            if (!checkPriceRange(profit, filterProfitMin, filterProfitMax)) show = false;
+
+            return show;
+        }
+
+        let visibleMobileCount = 0;
+        if (isMobileListMode()) {
+            const cards = document.querySelectorAll('#mobileCards .user-item-card');
+            cards.forEach(card => {
+                if (!card.dataset.id) return;
+                const show = matchesElement(card);
+                card.style.display = show ? '' : 'none';
+                if (show) visibleMobileCount++;
+            });
+            visibleCount = visibleMobileCount;
+        } else {
+            const rows = document.querySelectorAll('#itemsTable tbody tr');
+            rows.forEach(row => {
+                if (!row.dataset.id) return;
+                const show = matchesElement(row);
+
+                row.style.display = show ? '' : 'none';
+                if (show) visibleCount++;
+            });
+        }
+
+        const countEl = document.getElementById('filtered-count');
+        if (countEl) countEl.textContent = visibleCount + '件表示';
+
+        const totalCountEl = document.querySelector('.total-count');
+        if (totalCountEl && isMobileListMode()) totalCountEl.textContent = visibleMobileCount;
+    }
+
+    function openTransferModal(itemId, itemName) {
+        const modal = document.getElementById('transfer-modal');
+        const form = document.getElementById('transfer-form');
+        const nameEl = document.getElementById('transfer-item-name');
+
+        form.action = '/admin/items/' + itemId + '/transfer';
+        nameEl.textContent = '商品: ' + itemName;
+        modal.style.display = 'flex';
+    }
+
+    function closeTransferModal() {
+        document.getElementById('transfer-modal').style.display = 'none';
+    }
+
+    function openDeleteModal(itemId, itemName) {
+        const modal = document.getElementById('delete-modal');
+        const form = document.getElementById('delete-form');
+        const nameEl = document.getElementById('delete-item-name');
+
+        form.action = '/admin/items/' + itemId + '/delete';
+        nameEl.textContent = '商品: ' + itemName + ' を削除しますか？';
+        modal.style.display = 'flex';
+    }
+
+    function closeDeleteModal() {
+        document.getElementById('delete-modal').style.display = 'none';
+    }
+
+    // モーダル外クリックで閉じる（削除モーダル）
+    document.getElementById('delete-modal')?.addEventListener('click', function (e) {
+        if (e.target === this) closeDeleteModal();
+    });
+
+    function toggleSelectAll() {
+        const selectAll = document.getElementById('select-all');
+        const checkboxes = document.querySelectorAll('.item-checkbox');
+        checkboxes.forEach(cb => cb.checked = selectAll.checked);
+    }
+
+    function confirmBulkTransfer() {
+        const checked = document.querySelectorAll('.item-checkbox:checked');
+        const form = document.getElementById('bulk-transfer-form');
+        const targetUser = form.querySelector('select[name="target_user_id"]').value;
+
+        if (checked.length === 0) {
+            alert('転送する商品を選択してください');
+            return false;
+        }
+
+        if (!targetUser) {
+            alert('転送先ユーザーを選択してください');
+            return false;
+        }
+
+        return confirm(checked.length + '件の商品を転送しますか？');
+    }
+
+    // モーダル外クリックで閉じる
+    document.getElementById('transfer-modal').addEventListener('click', function (e) {
+        if (e.target === this) {
+            closeTransferModal();
+        }
+    });
+
+    // ソート機能
+    let sortDirection = {};
+    const sortKeyMap = {
+        kaika_product_code: 'kaikaProductCode',
+        product_name: 'name',
+        brand_name: 'brand',
+        owner_name: 'owner',
+        store_name: 'store',
+        purchase_date: 'date',
+        purchase_price: 'purchasePrice',
+        listing_price: 'listingPrice',
+        sale_price: 'salePrice',
+        profit: 'profit',
+        days_since_purchase: 'daysSincePurchase',
+        created_at: 'createdAt',
+        updated_at: 'updatedAt',
+        status_rank: 'statusRank'
+    };
+    const numericSortColumns = new Set(['purchase_price', 'listing_price', 'sale_price', 'profit', 'days_since_purchase', 'status_rank']);
+
+    document.querySelectorAll('.sortable').forEach(th => {
+        th.addEventListener('click', function () {
+            const column = this.dataset.sort;
+            sortDirection[column] = !sortDirection[column];
+            sortTable(column, sortDirection[column]);
+        });
+    });
+
+    function getSortValue(element, column) {
+        const datasetKey = sortKeyMap[column] || column;
+        const rawValue = element.dataset[datasetKey] || '';
+        if (numericSortColumns.has(column)) {
+            return parseInt(rawValue, 10) || 0;
+        }
+        return String(rawValue).toLowerCase();
+    }
+
+    function sortElements(containerSelector, itemSelector, column, ascending) {
+        const container = document.querySelector(containerSelector);
+        if (!container) return;
+
+        const items = Array.from(container.querySelectorAll(itemSelector));
+        const sortableItems = items.filter(item => item.dataset.id);
+        const fixedItems = items.filter(item => !item.dataset.id);
+
+        sortableItems.sort((a, b) => {
+            const aVal = getSortValue(a, column);
+            const bVal = getSortValue(b, column);
+
+            if (aVal === bVal) return 0;
+            if (ascending) {
+                return aVal > bVal ? 1 : -1;
+            }
+            return aVal < bVal ? 1 : -1;
+        });
+
+        sortableItems.concat(fixedItems).forEach(item => container.appendChild(item));
+    }
+
+    function sortTable(column, ascending) {
+        if (isMobileListMode()) {
+            sortElements('#mobileCards', '.user-item-card', column, ascending);
+        } else {
+            sortElements('#itemsTable tbody', 'tr', column, ascending);
+        }
+    }
+
+    function statusMatchesFilter(status, filterStatus, statusTags) {
+        const tags = Array.isArray(statusTags) && statusTags.length ? statusTags : [status];
+        if (!filterStatus) return true;
+        if (status === filterStatus) return true;
+        if (tags.includes(filterStatus)) return true;
+        if (filterStatus === 'certified') return status === 'listed';
+        if (filterStatus === 'agency') return status === 'agency' || status === 'appraisal_pending';
+        if (filterStatus === 'appraisal_pending') return status === 'appraisal_pending';
+        return false;
+    }
+
+    function applySortSelection() {
+        const sortControl = document.getElementById('sortControl');
+        if (!sortControl) return;
+
+        const sortMap = {
+            status_priority: ['status_rank', true],
+            sold_bottom: ['status_rank', true],
+            created_newest: ['created_at', false],
+            updated_newest: ['updated_at', false],
+            timeline_newest: ['purchase_date', false],
+            storage_desc: ['days_since_purchase', false],
+            storage_asc: ['days_since_purchase', true],
+            purchase_oldest: ['purchase_date', true],
+            purchase_newest: ['purchase_date', false],
+            purchase_high: ['purchase_price', false],
+            purchase_low: ['purchase_price', true],
+            sale_high: ['sale_price', false],
+            profit_high: ['profit', false],
+            owner_asc: ['owner_name', true],
+            product_asc: ['product_name', true]
+        };
+
+        const [column, ascending] = sortMap[sortControl.value] || ['days_since_purchase', false];
+        sortDirection[column] = ascending;
+        sortTable(column, ascending);
+    }
+
+    document.querySelectorAll('#itemsTable tbody tr[data-detail-url]').forEach(row => {
+        row.addEventListener('click', function (e) {
+            if (e.target.closest('a, button, input, select, textarea, label, form, .photo-cell, .action-buttons')) {
+                return;
+            }
+            const detailUrl = this.dataset.detailUrl;
+            if (detailUrl) {
+                window.location.href = detailUrl;
+            }
+        });
+    });
+
+    // ========== ライトボックス機能 ==========
+    let currentPhotos = [];
+    let currentIndex = 0;
+
+    // data属性から画像リストを取得して開く
+    function openLightboxFromData(element, index) {
+        try {
+            const photosData = element.getAttribute('data-photos');
+            if (photosData) {
+                const photos = JSON.parse(photosData);
+                openLightboxGallery(photos, index);
+            }
+        } catch (e) {
+            console.error('Failed to parse photos data:', e);
+        }
+    }
+
+    // 親要素のdata属性から画像リストを取得して開く
+    function openLightboxFromParent(element, index) {
+        try {
+            const parent = element.closest('[data-photos]');
+            if (parent) {
+                const photosData = parent.getAttribute('data-photos');
+                if (photosData) {
+                    const photos = JSON.parse(photosData);
+                    openLightboxGallery(photos, index);
+                }
+            }
+        } catch (e) {
+            console.error('Failed to parse photos data:', e);
+        }
+    }
+
+    function openLightboxGallery(photos, index) {
+        if (!photos || photos.length === 0) return;
+        currentPhotos = photos;
+        currentIndex = index;
+
+        // スクロールコンテナに画像を挿入
+        const container = document.getElementById('lightboxGalleryScrollContainer');
+        container.innerHTML = '';
+
+        photos.forEach((photo, i) => {
+            const slide = document.createElement('div');
+            slide.className = 'lightbox-gallery-slide';
+            slide.innerHTML = `<img src="/static/${photo}" alt="">`;
+            container.appendChild(slide);
+        });
+
+        document.getElementById('lightboxGallery').classList.add('active');
+        document.body.style.overflow = 'hidden';
+
+        // 指定したインデックスにスクロール（レイアウト確定後に実行）
+        requestAnimationFrame(() => {
+            const slideWidth = container.offsetWidth;
+            container.scrollTo({ left: slideWidth * index, behavior: 'instant' });
+            updateLightboxCounter();
+        });
+
+        // スクロールイベントでカウンター更新（パッシブリスナーでスムーズに）
+        let scrollTimeout;
+        const handleScroll = function () {
+            clearTimeout(scrollTimeout);
+            scrollTimeout = setTimeout(() => {
+                const slideWidth = container.offsetWidth;
+                const newIndex = Math.round(container.scrollLeft / slideWidth);
+                if (newIndex !== currentIndex && newIndex >= 0 && newIndex < currentPhotos.length) {
+                    currentIndex = newIndex;
+                    updateLightboxCounter();
+                }
+            }, 50);
+        };
+
+        // 既存のイベントリスナーを削除してから追加
+        container.onscroll = null;
+        container.addEventListener('scroll', handleScroll, { passive: true });
+
+        // タッチイベントでスワイプ操作を改善
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let isScrolling = false;
+
+        const handleTouchStart = function (e) {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+            isScrolling = false;
+        };
+
+        const handleTouchMove = function (e) {
+            const touchX = e.touches[0].clientX;
+            const touchY = e.touches[0].clientY;
+            const deltaX = Math.abs(touchX - touchStartX);
+            const deltaY = Math.abs(touchY - touchStartY);
+
+            // 横方向のスワイプが縦方向より大きい場合のみスクロール
+            if (deltaX > deltaY && deltaX > 10) {
+                isScrolling = true;
+            }
+        };
+
+        const handleTouchEnd = function (e) {
+            if (isScrolling) {
+                // スワイプ操作が完了したことを示す
+                const slideWidth = container.offsetWidth;
+                const newIndex = Math.round(container.scrollLeft / slideWidth);
+                if (newIndex !== currentIndex && newIndex >= 0 && newIndex < currentPhotos.length) {
+                    currentIndex = newIndex;
+                    updateLightboxCounter();
+                }
+            }
+            isScrolling = false;
+        };
+
+        // タッチイベントリスナーを追加
+        container.addEventListener('touchstart', handleTouchStart, { passive: true });
+        container.addEventListener('touchmove', handleTouchMove, { passive: true });
+        container.addEventListener('touchend', handleTouchEnd, { passive: true });
+    }
+
+    function closeLightboxGallery() {
+        document.getElementById('lightboxGallery').classList.remove('active');
+        document.body.style.overflow = '';
+    }
+
+    function lightboxGalleryPrev() {
+        const container = document.getElementById('lightboxGalleryScrollContainer');
+        currentIndex = (currentIndex - 1 + currentPhotos.length) % currentPhotos.length;
+        const slideWidth = container.offsetWidth;
+        container.scrollTo({
+            left: slideWidth * currentIndex,
+            behavior: 'smooth'
+        });
+        updateLightboxCounter();
+    }
+
+    function lightboxGalleryNext() {
+        const container = document.getElementById('lightboxGalleryScrollContainer');
+        currentIndex = (currentIndex + 1) % currentPhotos.length;
+        const slideWidth = container.offsetWidth;
+        container.scrollTo({
+            left: slideWidth * currentIndex,
+            behavior: 'smooth'
+        });
+        updateLightboxCounter();
+    }
+
+    function updateLightboxCounter() {
+        document.getElementById('lightboxGalleryCounter').textContent =
+            (currentIndex + 1) + ' / ' + currentPhotos.length;
+
+        // ナビゲーションボタンの表示制御
+        const prevBtn = document.querySelector('.lightbox-gallery-prev');
+        const nextBtn = document.querySelector('.lightbox-gallery-next');
+        if (currentPhotos.length <= 1) {
+            prevBtn.style.display = 'none';
+            nextBtn.style.display = 'none';
+        } else {
+            prevBtn.style.display = 'block';
+            nextBtn.style.display = 'block';
+        }
+    }
+
+    // キーボード操作
+    document.addEventListener('keydown', function (e) {
+        const lightbox = document.getElementById('lightboxGallery');
+        if (!lightbox || !lightbox.classList.contains('active')) return;
+        if (e.key === 'Escape') closeLightboxGallery();
+        if (e.key === 'ArrowLeft') lightboxGalleryPrev();
+        if (e.key === 'ArrowRight') lightboxGalleryNext();
+    });
+
+    // 背景クリックで閉じる（横スクロール形式ではスクロールコンテナ外をクリック）
+    document.getElementById('lightboxGallery')?.addEventListener('click', function (e) {
+        // ライトボックス本体または閉じるボタンをクリックした場合のみ閉じる
+        if (e.target === this || e.target.classList.contains('lightbox-gallery-close')) {
+            closeLightboxGallery();
+        }
+    });
+
+    // スワイプカルーセルのインジケーター更新
+    document.addEventListener('DOMContentLoaded', function () {
+        bindFilterControls();
+        document.querySelectorAll('.long-term-item-notify-form').forEach(function (form) {
+            form.addEventListener('submit', function (event) {
+                if (form.dataset.submitting === '1') {
+                    event.preventDefault();
+                    return;
+                }
+                form.dataset.submitting = '1';
+                const submitButton = form.querySelector('button[type="submit"]');
+                if (submitButton) {
+                    submitButton.disabled = true;
+                    submitButton.textContent = '通知中...';
+                }
+            });
+        });
+        const query = new URLSearchParams(window.location.search);
+        const queryStatus = query.get('status');
+        const queryBrand = query.get('brand');
+        const queryOwnerId = query.get('owner_id');
+        if (queryStatus) {
+            const statusInput = document.getElementById('tab-filter-status');
+            if (statusInput) statusInput.value = queryStatus;
+        }
+        if (queryBrand) {
+            const brandInput = document.getElementById('tab-filter-brand');
+            if (brandInput) brandInput.value = queryBrand;
+        }
+        if (queryOwnerId) {
+            const ownerSelect = document.getElementById('tab-filter-owner-select');
+            if (ownerSelect) ownerSelect.value = queryOwnerId;
+        }
+        if (query.get('status') || query.get('sale_type') || query.get('sale_type_not') || query.get('brand') || query.get('destination') || query.get('date_from') || query.get('date_to') || queryOwnerId) {
+            filterTable();
+            updateFilterCount();
+        }
+
+        applySortSelection();
+
+        const mobileCards = document.getElementById('mobileCards');
+        const currentIndex = document.querySelector('.current-index');
+        const totalCount = document.querySelector('.total-count');
+
+        if (mobileCards && currentIndex) {
+            mobileCards.addEventListener('scroll', function () {
+                const cardWidth = mobileCards.offsetWidth;
+                const scrollLeft = mobileCards.scrollLeft;
+                const index = Math.round(scrollLeft / cardWidth) + 1;
+                currentIndex.textContent = index;
+            });
+        }
+
+        // カードタップで詳細ページに移動（画像エリア以外）
+        document.querySelectorAll('.mobile-cards .user-item-card').forEach(function (card) {
+            // 画像エリア内のクリックは伝搬を止める
+            card.querySelectorAll('.user-card-photo, .card-photo-scroll').forEach(function (photoArea) {
+                photoArea.addEventListener('click', function (e) {
+                    if (window.matchMedia && window.matchMedia('(max-width: 768px)').matches) {
+                        const detailUrl = card.dataset.detailUrl || (card.querySelector('a[href*="/view/"]') || {}).href;
+                        if (detailUrl) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            window.location.href = detailUrl;
+                        }
+                        return;
+                    }
+                    e.stopPropagation();
+                }, true);
+            });
+
+            // カード全体のクリックで詳細ページへ
+            card.addEventListener('click', function (e) {
+                // 画像エリア、チェックボックス、ボタンからのクリックは処理しない
+                if (e.target.closest('.user-card-photo') || e.target.closest('.card-photo-scroll') ||
+                    e.target.closest('.user-card-checkbox') || e.target.closest('button') ||
+                    e.target.closest('a') || e.target.closest('input')) {
+                    return;
+                }
+
+                // カード内の詳細リンクを取得してそのURLに移動
+                const detailLink = card.querySelector('a[href*="/view/"]');
+                if (detailLink) {
+                    window.location.href = detailLink.href;
+                }
+            });
+        });
+    });
+</script>
+
+<!-- ライトボックス -->
+<div class="lightbox-gallery" id="lightboxGallery">
+    <button class="lightbox-gallery-close" onclick="closeLightboxGallery()">×</button>
+    <button class="lightbox-gallery-nav lightbox-gallery-prev" onclick="lightboxGalleryPrev()">‹</button>
+    <button class="lightbox-gallery-nav lightbox-gallery-next" onclick="lightboxGalleryNext()">›</button>
+    <div class="lightbox-gallery-scroll-container" id="lightboxGalleryScrollContainer">
+    </div>
+    <div class="lightbox-gallery-counter" id="lightboxGalleryCounter"></div>
+</div>
+
+{% endblock %}

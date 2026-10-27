@@ -1,0 +1,22 @@
+{% extends 'account_deletion/info.html' %}
+{% block deletion_title %}削除申請の確認一覧{% endblock %}
+{% block deletion_content %}
+<h1 id="deletion-heading">削除申請の確認一覧</h1>
+<p class="ad-notice">スタッフ向けの検証画面です。申請と確認記録を管理します。実顧客の削除を実行するボタンはありません。</p>
+<p><a href="{{ url_for('account_lifecycle.information') }}">お客様向けの削除案内を確認する</a></p>
+<div class="ad-card">
+{% if rows %}
+  <div class="ad-scroll" tabindex="0" role="region" aria-label="削除申請一覧。小さい画面では横にスクロールできます">
+    <table>
+      <caption>顧客ごとの最新の削除申請</caption>
+      <thead><tr><th scope="col">顧客ID</th><th scope="col">受付番号</th><th scope="col">状態</th><th scope="col">受付日時</th><th scope="col">確認</th></tr></thead>
+      <tbody>{% for row in rows %}<tr>
+        <th scope="row">{{ row.customer_id }}</th><td><code>{{ row.request_id }}</code></td>
+        <td>{{ labels.get(row.state, '要確認') }}</td><td>{{ row.requested_at }}</td>
+        <td><a class="ad-button ad-secondary" href="{{ url_for('account_lifecycle.admin_detail', customer_id=row.customer_id) }}" aria-label="顧客ID {{ row.customer_id }} の申請を確認">詳細</a></td>
+      </tr>{% endfor %}</tbody>
+    </table>
+  </div>
+{% else %}<p>削除申請はありません。</p>{% endif %}
+</div>
+{% endblock %}

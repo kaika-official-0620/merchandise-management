@@ -1,0 +1,14 @@
+{% extends 'payment_review/base.html' %}{% block payment_content %}
+<h1>現物料金のお支払い状況</h1><section class="card"><h2>{{ status(attempt.state) }}</h2><p>{{ money(attempt.amount_yen) }} ／ {{ '自動請求方式' if attempt.off_session else 'お客様が毎回操作する方式' }}</p><p><a href="{{ url_for('payment_review.bill',bill_id=attempt.bill_id) }}">請求対象の明細へ</a></p>{% if attempt.state == 'requires_action' %}<p class="notice">本人認証待ちを模擬しています。この画面だけで成功扱いにはしません。検証側の認証結果を照合して反映します。</p>{% endif %}{% if attempt.state == 'unknown' %}<p class="notice">支払いが済んでいる可能性があります。同じ料金をもう一度請求せず、結果を照合します。</p>{% endif %}
+{% if connected %}
+  {% if attempt.state == 'prepared' %}
+    {% if (staff and attempt.off_session) or (not staff and not attempt.off_session) %}
+    <form method="post" action="{{ url_for('payment_review.payment_action',attempt_id=attempt.attempt_id,action='dispatch') }}">{{ tokens('stage5_payment_dispatch',attempt.attempt_id) }}<button>模擬の決済処理へ進む</button></form>
+    {% else %}<p>{{ '毎回確認して支払う方式は、お客様本人が操作します。' if staff else '同意済みの自動請求は担当者が処理・照合します。' }}</p>{% endif %}
+  {% elif staff or not attempt.off_session %}
+    <form method="post" action="{{ url_for('payment_review.payment_action',attempt_id=attempt.attempt_id,action='reconcile') }}">{{ tokens('stage5_payment_reconcile',attempt.attempt_id) }}<button>既存の支払い結果を照合</button></form>
+  {% else %}<p>同意済みの自動請求は担当者が処理・照合します。</p>{% endif %}
+{% else %}<p>模擬決済は未接続です。実際のカードへ請求しません。</p>{% endif %}</section>
+<section class="card"><h2>返金の記録</h2><p>模擬の返金済み額：{{ money(attempt.refunded_yen) }} ／ 返金処理中：{{ money(attempt.refund_reserved_yen) }}</p>{% for refund in attempt.refunds %}<article class="card"><p>{{ money(refund.amount_yen) }} ／ {{ status(refund.state) }}</p><p>理由：{{ refund.reason }}</p>{% if staff and connected %}{% set action='dispatch' if refund.state=='prepared' else 'reconcile' %}<form method="post" action="{{ url_for('payment_review.refund_action',refund_id=refund.refund_id,action=action) }}">{{ tokens('stage5_refund_'+action,refund.refund_id) }}<button>{{ '模擬の返金処理へ進む' if action=='dispatch' else '返金結果を照合' }}</button></form>{% endif %}</article>{% else %}<p>返金の記録はありません。</p>{% endfor %}</section>
+{% if staff and attempt.state=='succeeded' %}<form class="card" method="post" action="{{ url_for('payment_review.refund',attempt_id=attempt.attempt_id) }}">{{ tokens('stage5_refund',attempt.attempt_id) }}<h2>返金を検証用に準備</h2><label>税込返金額（円）<input type="number" name="amount_yen" min="1" step="1" required></label><label>元の明細・返品・訂正に基づく理由<input name="reason" maxlength="1000" required></label><p>元の支払い額を上限として管理します。実際の返品料金・税の調整方法は、契約条件の確認が必要です。</p><button>模擬の返金を準備</button></form>{% endif %}
+{% endblock %}

@@ -1,0 +1,10 @@
+{% extends 'inventory_registry/frame.html' %}
+{% block title %}月額・現物料金のお支払い - 株式会社開花{% endblock %}
+{% macro tokens(purpose,target='') -%}<input type="hidden" name="registry_csrf" value="{{ stage5_csrf() }}"><input type="hidden" name="operation_token" value="{{ stage5_operation(purpose,target) }}">{%- endmacro %}
+{% macro money(value) -%}{% if value is none or value is undefined %}未確認{% else %}{{ '{:,}'.format(value) }}円{% endif %}{%- endmacro %}
+{% macro status(value) -%}{{ {'prepared':'準備済み','processing':'処理中','requires_action':'本人認証が必要','failed':'支払い失敗・確認が必要','unknown':'結果不明・照合が必要','succeeded':'成功確認済み（模擬）','canceled':'取消確認済み'}.get(value,'要確認') }}{%- endmacro %}
+{% block registry_content %}
+{% if not customer_navigation_available|default(false) %}<nav><a href="{{ url_for('payment_review.index') }}">月額・現物料金</a><a href="{{ url_for('finance_review.index') }}">利益・請求下書き</a><a href="{{ url_for('commerce.index') }}">商品販売</a><a href="{{ url_for('feature_plans.plans') }}">デジタル月額の契約確認</a></nav>{% endif %}
+<p class="notice"><strong>検証用</strong>：現物料金のお支払いは模擬処理です。実際のカード請求・返金・領収書の発行は行いません。</p>
+{% block payment_content %}{% endblock %}
+{% endblock %}

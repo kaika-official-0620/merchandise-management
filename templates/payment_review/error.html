@@ -1,0 +1,1 @@
+{% extends 'payment_review/base.html' %}{% block payment_content %}<section class="card"><h1>お支払いの操作を保留しました</h1><p>{{ message }}</p><a href="{{ url_for('payment_review.index') }}">明細・処理状況へ戻る</a></section>{% endblock %}

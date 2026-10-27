@@ -1,0 +1,11 @@
+{% extends 'pilot_review/base.html' %}
+{% block pilot_content %}
+<h1>小規模実証の準備</h1>
+<section class="card"><h2>開始前に確認すること</h2><ul><li>一次対応の担当者と、不在時の引継ぎ先：未設定</li><li>実証参加への同意、対象機能、実施日：実施前に確認</li><li>有料実証の場合：正式料金・請求開始日・同意・機能提供を先に確認</li><li>誤請求・他顧客の閲覧・二重引当・重複決済があれば対象の実証を停止し調査</li><li>保険加入済みとは案内しない。破損・紛失時の判断者を決める</li></ul><p>主要操作の完了率80％は試験的な目安です。長期保管や有料更新を、短期間で検証済みとは判定しません。</p></section>
+<section class="card"><h2>段階的な実証案</h2><ul>{% for proposal in campaigns.phase_proposals %}<li>{{ proposal.label }}：{% if proposal.target_min %}{{ proposal.target_min }}{% if proposal.target_max!=proposal.target_min %}〜{{ proposal.target_max }}{% endif %}人、{{ proposal.days_min }}{% if proposal.days_max!=proposal.days_min %}〜{{ proposal.days_max }}{% endif %}日{% else %}既存顧客と分けて操作を観察{% endif %}</li>{% endfor %}</ul></section>
+<form method="post" action="{{ url_for('pilot_review.create_campaign') }}" class="card"><h2>実証計画を下書きする</h2>{{ tokens('stage7_campaign') }}
+<label>計画名<input name="title" maxlength="120" required></label><label>対象<select name="phase">{% for proposal in campaigns.phase_proposals %}<option value="{{ proposal.phase }}">{{ proposal.label }}</option>{% endfor %}</select></label>
+<div class="grid"><label>開始予定（日本時間）<input type="datetime-local" name="planned_start_at" required></label><label>終了予定（日本時間・この時刻より前まで）<input type="datetime-local" name="planned_end_at" required></label></div>
+<label><input type="checkbox" name="paid" value="yes"> 有料利用の実証を検討する（この操作では課金しません）</label><button>下書きを保存</button></form>
+<section class="card"><h2>保存した計画</h2>{% for campaign in campaigns.campaigns %}<p><a href="{{ url_for('pilot_review.campaign',campaign_id=campaign.campaign_id) }}">{{ campaign.title }}</a> — 候補{{ campaign.participant_count }}人・下書き</p>{% else %}<p>まだ計画はありません。既存のお客様を自動で登録・招待することはありません。</p>{% endfor %}</section>
+{% endblock %}

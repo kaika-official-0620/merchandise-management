@@ -1,0 +1,10 @@
+{% macro icon(key) -%}
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+{% if key == 'home' %}<path d="m3 10 9-7 9 7M5 9v12h5v-7h4v7h5V9"/>
+{% elif key == 'products' %}<path d="m3 7 9-4 9 4-9 4-9-4Zm0 0v10l9 4 9-4V7M12 11v10M7.5 5l9 4"/>
+{% elif key == 'requests' %}<path d="M5 5h14v14H5zM8 9h8M8 13h5M8 17h3M15 16l2 2 4-5"/>
+{% elif key == 'money' %}<path d="M3 7h18v13H3zM3 7V4h15v3M16 11h5v5h-5z"/>
+{% elif key == 'documents' %}<path d="M6 3h8l4 4v14H6zM14 3v5h4M9 12h6M9 16h6"/>
+{% else %}<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/>{% endif %}
+</svg>
+{%- endmacro %}

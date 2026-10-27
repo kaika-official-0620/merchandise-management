@@ -1,0 +1,964 @@
+{% extends "base.html" %}
+
+{% block title %}書類管理 - 株式会社開花{% endblock %}
+
+{% block content %}
+{% set selected_group = selected_group if selected_group is defined else 'all' %}
+{% set selected_service_type = selected_service_type if selected_service_type is defined else 'all' %}
+{% set stage_cards = stage_cards if stage_cards is defined else [] %}
+{% set group_meta = group_meta if group_meta is defined else {} %}
+{% set active_meta = group_meta.get(selected_group, {}) %}
+{% set service_breakdown = service_breakdown if service_breakdown is defined else [] %}
+{% set stage_request_rows = stage_request_rows if stage_request_rows is defined else [] %}
+{% set document_type_cards = document_type_cards if document_type_cards is defined else [] %}
+{% set document_flow_cards = document_flow_cards if document_flow_cards is defined else [] %}
+{% set work_queue_cards = work_queue_cards if work_queue_cards is defined else [] %}
+
+{% macro service_badge(service_type, service_name) -%}
+    {% set normalized = service_type or '' %}
+    <span class="service-badge {{ normalized if normalized else 'default' }}">{{ service_name or '未設定' }}</span>
+{%- endmacro %}
+
+{% macro status_badge(status, label) -%}
+    <span class="status-badge {{ status or 'draft' }}">{{ label or '未設定' }}</span>
+{%- endmacro %}
+
+{% macro request_actions(row) -%}
+<div class="inline-actions">
+    {% if row.detail_url %}
+    <a href="{{ row.detail_url }}" class="btn btn-info btn-sm">申請詳細</a>
+    {% endif %}
+    {% if row.create_vendor_estimate_url %}
+    <a href="{{ row.create_vendor_estimate_url }}" class="btn btn-primary btn-sm">業者向け依頼書を作成</a>
+    {% endif %}
+    {% if row.create_vendor_kaitori_url %}
+    <a href="{{ row.create_vendor_kaitori_url }}" class="btn btn-primary btn-sm">業者買取明細書を登録</a>
+    {% endif %}
+    {% if row.create_client_invoice_url %}
+    <a href="{{ row.create_client_invoice_url }}" class="btn btn-primary btn-sm">クライアント向け買取明細書を作成</a>
+    {% endif %}
+    {% if row.shikiriosho_url %}
+    <a href="{{ row.shikiriosho_url }}" class="btn btn-outline btn-sm">精算書を確認</a>
+    {% elif row.create_shikiriosho_url %}
+    <a href="{{ row.create_shikiriosho_url }}" class="btn btn-primary btn-sm">精算書を作成</a>
+    {% endif %}
+    {% if row.auction_keisan_url %}
+    <a href="{{ row.auction_keisan_url }}" class="btn btn-outline btn-sm">計算書を確認</a>
+    {% elif row.create_auction_keisan_url %}
+    <a href="{{ row.create_auction_keisan_url }}" class="btn btn-primary btn-sm">計算書を作成</a>
+    {% endif %}
+</div>
+{%- endmacro %}
+
+{% macro related_documents_block(documents) -%}
+    {% if documents %}
+    <div class="related-documents">
+        <div class="related-documents-label">関連書類</div>
+        {% for doc in documents %}
+        <div class="related-document-card">
+            <div class="related-document-head">
+                <strong>{{ doc.document_type or '書類' }}</strong>
+                {{ status_badge(doc.status, doc.status_label) }}
+            </div>
+            <div class="related-document-meta">
+                <span>{{ doc.document_no or '-' }}</span>
+                <span>{{ doc.issue_date or '-' }}</span>
+            </div>
+            <div class="inline-actions">
+                {% if doc.detail_url %}
+                <a href="{{ doc.detail_url }}" class="btn btn-secondary btn-sm">書類詳細</a>
+                {% endif %}
+                {% if doc.request_url %}
+                <a href="{{ doc.request_url }}" class="btn btn-outline btn-sm">依頼を開く</a>
+                {% endif %}
+                {% if doc.attachment_path %}
+                <a href="{{ url_for('static', filename=doc.attachment_path) }}" target="_blank" class="btn btn-outline btn-sm">添付を開く</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+{%- endmacro %}
+
+{% macro request_table(rows) -%}
+<div class="table-scroll js-edge-hover-scroll">
+    <table class="dashboard-table">
+        <thead>
+            <tr>
+                {% if selected_group in ['vendor_outgoing', 'vendor_incoming', 'client_outgoing'] %}
+                <th>対象商品</th>
+                <th class="col-service">販売方式</th>
+                <th>受付日</th>
+                <th>処理状況</th>
+                <th>書類と次の作業</th>
+                <th>操作</th>
+                {% else %}
+                <th>クライアント</th>
+                <th class="col-service">サービス</th>
+                <th>受付日</th>
+                <th>現在の状況</th>
+                <th>書類と次の作業</th>
+                <th>操作</th>
+                {% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rows %}
+            <tr>
+                <td>
+                    {% if selected_group in ['vendor_outgoing', 'vendor_incoming', 'client_outgoing'] %}
+                    <div class="cell-title">{{ row.item_summary or '-' }}</div>
+                    <div class="cell-sub">{{ '返送先' if selected_group == 'client_outgoing' else '依頼元' }}: {{ row.client_name or '-' }}</div>
+                    {% else %}
+                    <div class="cell-title">{{ row.client_name or '-' }}</div>
+                    {% endif %}
+                </td>
+                <td class="col-service">{{ service_badge(row.service_type, row.service_name) }}</td>
+                <td>{{ row.created_date_label or '-' }}</td>
+                <td>{{ status_badge(row.status, row.status_label) }}</td>
+                <td class="work-column">
+                    <div class="cell-title">{{ row.next_document_label or '-' }}</div>
+                    {% if row.request_flow_label %}
+                    <div class="cell-sub">{{ row.request_flow_label }}</div>
+                    {% endif %}
+                    {{ related_documents_block(row.related_documents or []) }}
+                </td>
+                <td>{{ request_actions(row) }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{%- endmacro %}
+
+<style>
+.documents-page {
+    display: grid;
+    gap: 1.25rem;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.documents-page,
+.documents-page * {
+    box-sizing: border-box;
+}
+
+.documents-page > * {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.section-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+    padding: 1.25rem;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.page-header,
+.stage-header,
+.stage-topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    flex-wrap: wrap;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.page-header > div,
+.stage-header > div,
+.stage-topbar > div {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.page-header h1,
+.stage-header h2,
+.section-card h3 {
+    margin: 0;
+    color: #0f172a;
+}
+
+.page-header p,
+.stage-summary,
+.helper-text,
+.cell-sub,
+.stage-pill,
+.doc-pill {
+    color: #64748b;
+}
+
+.page-header p,
+.stage-summary,
+.helper-text {
+    margin: 0.45rem 0 0;
+    line-height: 1.75;
+}
+
+.overview-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.document-type-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.85rem;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.document-type-card {
+    display: block;
+    min-height: 100%;
+    min-width: 0;
+    text-decoration: none;
+    color: inherit;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    border-radius: 16px;
+    padding: 0.95rem 1rem;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.document-type-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
+    border-color: #93c5fd;
+}
+
+.document-type-card-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.7rem;
+    align-items: flex-start;
+}
+
+.document-type-card strong {
+    color: #0f172a;
+}
+
+.document-type-card p {
+    margin: 0.55rem 0 0;
+    color: #64748b;
+    font-size: 0.87rem;
+    line-height: 1.65;
+}
+
+.document-count-pill {
+    flex: 0 0 auto;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 0.78rem;
+    font-weight: 700;
+    padding: 0.28rem 0.7rem;
+    white-space: nowrap;
+}
+
+.archive-flow-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.operation-queue-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.85rem;
+    margin-top: 1rem;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.operation-queue-card {
+    display: grid;
+    gap: 0.55rem;
+    min-width: 0;
+    text-decoration: none;
+    color: inherit;
+    border: 1px solid #bfdbfe;
+    border-radius: 18px;
+    padding: 1rem;
+    background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+}
+
+.operation-queue-card strong {
+    color: #0f172a;
+}
+
+.operation-queue-card p {
+    margin: 0;
+    color: #64748b;
+    line-height: 1.55;
+    font-size: 0.86rem;
+}
+
+.operation-queue-count {
+    justify-self: start;
+    border-radius: 999px;
+    background: #dbeafe;
+    color: #1d4ed8;
+    padding: 0.26rem 0.7rem;
+    font-weight: 800;
+    font-size: 0.8rem;
+}
+
+.archive-flow-card {
+    position: relative;
+    display: grid;
+    gap: 0.75rem;
+    min-height: 100%;
+    min-width: 0;
+    text-decoration: none;
+    color: inherit;
+    border: 1px solid #dbeafe;
+    background:
+        radial-gradient(circle at top right, rgba(59, 130, 246, 0.12), transparent 34%),
+        linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    border-radius: 20px;
+    padding: 1.15rem;
+    overflow: hidden;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.archive-flow-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 18px 38px rgba(37, 99, 235, 0.12);
+    border-color: #93c5fd;
+}
+
+.archive-flow-card-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.9rem;
+    align-items: flex-start;
+}
+
+.archive-flow-step {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.35rem;
+    height: 2.35rem;
+    border-radius: 999px;
+    background: #1d4ed8;
+    color: #fff;
+    font-weight: 800;
+    box-shadow: 0 10px 22px rgba(37, 99, 235, 0.22);
+}
+
+.archive-flow-card h2 {
+    margin: 0;
+    color: #0f172a;
+    font-size: 1.05rem;
+    line-height: 1.5;
+}
+
+.archive-flow-card p {
+    margin: 0;
+    color: #64748b;
+    line-height: 1.75;
+    font-size: 0.92rem;
+}
+
+.archive-flow-count {
+    justify-self: flex-start;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 0.82rem;
+    font-weight: 800;
+    padding: 0.34rem 0.82rem;
+    white-space: nowrap;
+}
+
+.overview-card {
+    display: block;
+    min-width: 0;
+    text-decoration: none;
+    color: inherit;
+    border: 1px solid #dbeafe;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    border-radius: 18px;
+    padding: 1.1rem;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.overview-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 16px 34px rgba(37, 99, 235, 0.10);
+    border-color: #93c5fd;
+}
+
+.overview-card-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.9rem;
+    align-items: flex-start;
+}
+
+.stage-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.3rem 0.75rem;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.count-pill {
+    min-width: 5.2rem;
+    padding: 0.45rem 0.7rem;
+    border-radius: 12px;
+    background: #eff6ff;
+    text-align: right;
+}
+
+.count-pill strong {
+    display: block;
+    color: #1d4ed8;
+    font-size: 1rem;
+}
+
+.count-pill span {
+    font-size: 0.78rem;
+    color: #475569;
+}
+
+.doc-pill-list {
+    display: flex;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+    margin-top: 0.85rem;
+}
+
+.doc-pill {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 0.32rem 0.75rem;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    font-size: 0.8rem;
+}
+
+.service-filter-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.85rem;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.service-filter-card {
+    display: block;
+    min-width: 0;
+    text-decoration: none;
+    color: inherit;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    padding: 0.95rem 1rem;
+}
+
+.service-filter-card.is-active {
+    border-color: #60a5fa;
+    background: #eff6ff;
+    box-shadow: 0 10px 24px rgba(37, 99, 235, 0.08);
+}
+
+.service-filter-head,
+.service-filter-counts {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.service-filter-counts {
+    margin-top: 0.6rem;
+    color: #475569;
+    font-size: 0.86rem;
+}
+
+.stage-header-actions {
+    display: flex;
+    gap: 0.6rem;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-top: 0.35rem;
+    margin-left: auto;
+    padding-top: 0.2rem;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.mini-toggle {
+    position: relative;
+}
+
+.mini-toggle summary {
+    list-style: none;
+    cursor: pointer;
+    border: 1px solid #d1d5db;
+    border-radius: 999px;
+    background: #fff;
+    color: #475569;
+    padding: 0.45rem 0.8rem;
+    font-size: 0.84rem;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+
+.mini-toggle summary::-webkit-details-marker {
+    display: none;
+}
+
+.mini-toggle[open] summary {
+    border-color: #93c5fd;
+    color: #1d4ed8;
+    background: #eff6ff;
+}
+
+.mini-toggle-body {
+    position: absolute;
+    top: calc(100% + 0.45rem);
+    right: 0;
+    width: min(320px, 80vw);
+    z-index: 10;
+    border: 1px solid #dbeafe;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 20px 40px rgba(15, 23, 42, 0.12);
+    padding: 0.9rem 1rem;
+}
+
+.mini-toggle-body ul {
+    margin: 0;
+    padding-left: 1.1rem;
+    color: #475569;
+    line-height: 1.8;
+}
+
+.mini-toggle-body p {
+    margin: 0;
+    color: #475569;
+    line-height: 1.7;
+}
+
+.table-scroll {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+}
+
+.dashboard-table {
+    width: 100%;
+    min-width: 1120px;
+    max-width: 100%;
+    border-collapse: collapse;
+}
+
+.dashboard-table th,
+.dashboard-table td {
+    padding: 0.85rem 0.8rem;
+    border-bottom: 1px solid #e2e8f0;
+    vertical-align: top;
+    text-align: left;
+}
+
+.dashboard-table th {
+    color: #475569;
+    font-size: 0.84rem;
+    font-weight: 700;
+    background: #f8fafc;
+}
+
+.col-service {
+    width: 14.5rem;
+    white-space: nowrap;
+}
+
+.work-column {
+    min-width: 23rem;
+}
+
+.service-badge,
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    padding: 0.28rem 0.7rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.service-badge.wholesale {
+    background: #ccfbf1;
+    color: #115e59;
+}
+
+.service-badge.auction {
+    background: #ede9fe;
+    color: #6d28d9;
+}
+
+.service-badge.simultaneous {
+    background: #ffedd5;
+    color: #c2410c;
+}
+
+.service-badge.default {
+    background: #e2e8f0;
+    color: #334155;
+}
+
+.status-badge.pending,
+.status-badge.draft {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.status-badge.approved,
+.status-badge.sent {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.status-badge.appraising,
+.status-badge.inspecting,
+.status-badge.processing {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.status-badge.completed {
+    background: #e2e8f0;
+    color: #334155;
+}
+
+.status-badge.rejected {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.cell-title {
+    color: #0f172a;
+    font-weight: 700;
+}
+
+.inline-actions {
+    display: flex;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.inline-actions .btn {
+    white-space: normal;
+}
+
+.related-documents {
+    margin-top: 0.8rem;
+    display: grid;
+    gap: 0.55rem;
+}
+
+.related-documents-label {
+    font-size: 0.76rem;
+    color: #64748b;
+    font-weight: 700;
+}
+
+.related-document-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    background: #f8fafc;
+    padding: 0.75rem;
+    display: grid;
+    gap: 0.45rem;
+}
+
+.related-document-head,
+.related-document-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.7rem;
+    flex-wrap: wrap;
+}
+
+.related-document-meta {
+    color: #64748b;
+    font-size: 0.8rem;
+}
+
+.empty-state,
+.empty-inline,
+.info-panel {
+    border: 1px dashed #cbd5e1;
+    border-radius: 14px;
+    background: #f8fafc;
+    padding: 1rem;
+    line-height: 1.8;
+    color: #475569;
+}
+
+.empty-inline {
+    margin-top: 0.8rem;
+    font-size: 0.9rem;
+}
+
+.info-panel {
+    display: grid;
+    gap: 0.35rem;
+}
+
+.info-panel strong {
+    color: #0f172a;
+}
+
+@media (max-width: 1100px) {
+    .archive-flow-grid,
+    .operation-queue-grid,
+    .overview-grid,
+    .document-type-grid,
+    .service-filter-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 720px) {
+    .documents-page {
+        gap: 1rem;
+        overflow-x: hidden;
+    }
+
+    .section-card {
+        border-radius: 14px;
+        padding: 1rem;
+    }
+
+    .page-header,
+    .stage-header,
+    .stage-topbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .page-header .inline-actions,
+    .stage-header-actions {
+        width: 100%;
+        align-items: stretch;
+    }
+
+    .page-header .inline-actions .btn,
+    .stage-header-actions .btn {
+        width: 100%;
+        justify-content: center;
+        text-align: center;
+    }
+
+    .archive-flow-grid,
+    .operation-queue-grid,
+    .overview-grid,
+    .document-type-grid,
+    .service-filter-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .overview-card-head,
+    .service-filter-head,
+    .related-document-head,
+    .related-document-meta {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .count-pill {
+        text-align: left;
+    }
+
+    .mini-toggle-body {
+        left: 0;
+        right: auto;
+        width: min(320px, calc(100vw - 3rem));
+    }
+
+    .stage-header-actions {
+        margin-top: 0;
+        margin-left: 0;
+        padding-top: 0;
+    }
+}
+</style>
+
+<div class="documents-page">
+    <section class="section-card page-header">
+        <div>
+            <h1>書類管理</h1>
+            <p>書類の流れを 1〜7 の業務順で確認できます。処理を進めると、その段階で必要な書類だけを確認しながら次の作業へ進められます。</p>
+        </div>
+        <div class="inline-actions">
+            <a href="{{ url_for('admin_documents_history') }}" class="btn btn-outline">書類履歴を見る</a>
+        </div>
+    </section>
+
+    {% if selected_group == 'all' %}
+    {% if work_queue_cards %}
+    <section class="section-card">
+        <div class="stage-topbar">
+            <div>
+                <h2>運用チェック</h2>
+                <p class="helper-text">事務作業で先に見る場所をまとめました。書類の作成漏れ・送付漏れをここから確認できます。</p>
+            </div>
+        </div>
+        <div class="operation-queue-grid">
+            {% for card in work_queue_cards %}
+            <a href="{{ card.url }}" class="operation-queue-card">
+                <strong>{{ card.title }}</strong>
+                <span class="operation-queue-count">{{ card.count_label }}</span>
+                <p>{{ card.description }}</p>
+            </a>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+    <section class="section-card">
+        <div class="stage-topbar">
+            <div>
+                <h2>書類管理</h2>
+                <p class="helper-text">現在処理中の書類を、1〜7 の業務順で確認します。履歴ではなく、いま対応が必要な書類だけをここから開きます。</p>
+            </div>
+        </div>
+        <div class="archive-flow-grid">
+            {% for card in document_flow_cards %}
+            <a href="{{ card.url }}" class="archive-flow-card">
+                <div class="archive-flow-card-head">
+                    <span class="archive-flow-step">{{ card.step }}</span>
+                    <h2>{{ card.title }}</h2>
+                </div>
+                <p>{{ card.description }}</p>
+                <span class="archive-flow-count">{{ card.count_label }}</span>
+            </a>
+            {% endfor %}
+        </div>
+    </section>
+    {% else %}
+    <section class="section-card stage-header">
+        <div>
+            <span class="stage-pill">{{ active_meta.flow_label or '-' }}</span>
+            <h2>{{ active_meta.stage_title or '書類管理' }}</h2>
+            <p class="stage-summary">{{ active_meta.summary or '' }}</p>
+            <div class="doc-pill-list">
+                {% for label in active_meta.documents or [] %}
+                <span class="doc-pill">{{ label }}</span>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="stage-header-actions">
+            <a href="{{ url_for('admin_documents_dashboard') }}" class="btn btn-secondary">一覧へ戻る</a>
+            <a href="{{ url_for('admin_documents_history') }}" class="btn btn-outline">この段階の履歴を見る</a>
+            <details class="mini-toggle">
+                <summary>確認ポイント</summary>
+                <div class="mini-toggle-body">
+                    <ul>
+                        {% for item in active_meta.check_points or [] %}
+                        <li>{{ item }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </details>
+            <details class="mini-toggle">
+                <summary>現在の状況</summary>
+                <div class="mini-toggle-body">
+                    <p><strong>現在進行中の案件:</strong> {{ selected_group_current_count }}件</p>
+                    {% if selected_group == 'client_incoming' %}
+                    <p><strong>表示中のサービス:</strong> {{ selected_group_service_label }}</p>
+                    {% endif %}
+                    <p>過去の履歴は、左メニューの「書類履歴」から期間やキーワードで確認できます。</p>
+                </div>
+            </details>
+        </div>
+    </section>
+
+    {% if selected_group in ['client_incoming', 'vendor_outgoing', 'vendor_incoming', 'client_outgoing'] %}
+    <section class="section-card">
+        <div class="stage-topbar">
+            <div>
+                {% if selected_group == 'client_incoming' %}
+                <h3>サービス別に確認する</h3>
+                <p class="helper-text">クライアントからの受付は、サービスごとに現在進行中の案件を絞り込んで確認できます。</p>
+                {% elif selected_group == 'vendor_outgoing' %}
+                <h3>販売方式別に確認する</h3>
+                <p class="helper-text">業者へ依頼する対象商品を、業者卸販売・業者オークション・同時出品ごとに確認できます。</p>
+                {% elif selected_group == 'vendor_incoming' %}
+                <h3>販売方式別に確認する</h3>
+                <p class="helper-text">業者から届いた回答書類を、業者卸販売・業者オークション・同時出品ごとに確認できます。</p>
+                {% else %}
+                <h3>返送書類を販売方式別に確認する</h3>
+                <p class="helper-text">クライアントへ返送する書類を、業者卸販売・業者オークション・同時出品ごとに確認できます。</p>
+                {% endif %}
+            </div>
+        </div>
+        <div class="service-filter-grid">
+            {% for item in service_breakdown %}
+            <a href="{{ item.url }}" class="service-filter-card {% if item.is_selected %}is-active{% endif %}">
+                <div class="service-filter-head">
+                    <strong>{{ item.label }}</strong>
+                    {% if item.is_selected %}
+                    <span class="stage-pill">表示中</span>
+                    {% endif %}
+                </div>
+                <div class="service-filter-counts">
+                    <span>進行中 {{ item.current_count }}件</span>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    <section class="section-card">
+        <div class="stage-topbar">
+            <div>
+                <h3>{{ active_meta.action_title or '進行中の案件' }}</h3>
+                <p class="helper-text">{{ active_meta.action_note or '' }}</p>
+            </div>
+        </div>
+        {% if stage_request_rows %}
+            {{ request_table(stage_request_rows) }}
+        {% else %}
+        <div class="empty-state">
+            この段階で進行中の案件はありません。<br>
+            一覧へ戻るか、左メニューの「書類履歴」から過去のやり取りを確認してください。
+        </div>
+        {% endif %}
+    </section>
+    {% endif %}
+</div>
+{% endblock %}

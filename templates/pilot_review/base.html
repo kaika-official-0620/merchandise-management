@@ -1,0 +1,11 @@
+{% extends 'inventory_registry/frame.html' %}
+{% block title %}採算と実証の準備 - 開花{% endblock %}
+{% macro tokens(purpose,target='') %}<input type="hidden" name="registry_csrf" value="{{ stage7_csrf() }}"><input type="hidden" name="operation_token" value="{{ stage7_operation(purpose,target) }}">{% endmacro %}
+{% macro value(v) %}{% if v is none %}未確認{% elif v is sameas true %}条件内{% elif v is sameas false %}条件外{% else %}{{ v }}{% endif %}{% endmacro %}
+{% macro basis_options(selected='') %}{% for key,label in [('measured','実測'),('assumption','仮定'),('reference','参考値')] %}<option value="{{ key }}" {{ 'selected' if key==selected }}>{{ label }}</option>{% endfor %}{% endmacro %}
+{% macro tax_options(selected='unknown') %}{% for key,label in stage7_tax.items() %}<option value="{{ key }}" {{ 'selected' if key==selected }}>{{ label }}</option>{% endfor %}{% endmacro %}
+{% block registry_content %}
+<nav aria-label="採算・実証"><a href="{{ url_for('pilot_review.index') }}">実証計画</a><a href="{{ url_for('pilot_review.cohorts') }}">受付した商品の経過</a>{% if stage7_finance %}<a href="{{ url_for('pilot_review.costs') }}">原価の記録</a><a href="{{ url_for('pilot_review.scenarios') }}">採算の比較</a>{% endif %}</nav>
+<p class="notice">実証の準備と記録の画面です。実績・仮定・模擬検証を区別します。顧客への募集・課金・通知は開始しません。</p>
+{% block pilot_content %}{% endblock %}
+{% endblock %}

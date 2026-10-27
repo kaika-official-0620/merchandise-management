@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% from 'customer_navigation/icons.html' import icon %}
+{% block title %}{{ section.title }} - 開花{% endblock %}
+{% macro card(entry) -%}<a class="customer-action-card" href="{{ entry.url }}"><div class="customer-card-heading"><h2>{{ entry.title }}</h2>{% if entry.badge|default(0) %}<span class="customer-unread">{{ entry.badge }}</span>{% endif %}<span class="customer-card-arrow" aria-hidden="true">→</span></div><p>{{ entry.description }}</p></a>{%- endmacro %}
+{% block content %}
+<section class="customer-hub">
+<header class="customer-hub-heading"><span class="customer-hub-icon">{{ icon(section.key) }}</span><div><p class="customer-hub-eyebrow">KAIKA / MY PAGE</p><h1>{{ section.title }}</h1><p>{{ section.description }}</p></div></header>
+{% if section.key == 'products' %}<p class="customer-hub-guide">自分で保管する商品も、開花に預けた商品もここから確認できます。</p>{% elif section.key == 'requests' %}<p class="customer-hub-guide">開花に預ける商品の手続きと、販売を依頼した後の確認をまとめています。</p>{% elif section.key == 'money' %}<p class="customer-hub-guide">売上・利益と、お支払いの記録を分けて確認できます。下書きや検証中の金額は、確定した請求とは異なります。</p>{% elif section.key == 'support' %}<p class="customer-hub-guide">お客様ごとの連絡と、開花全体のお知らせを分けて確認できます。</p>{% endif %}
+<div class="customer-action-grid">{% for entry in section.cards if not entry.secondary %}{{ card(entry) }}{% else %}<p class="customer-hub-empty">現在利用できる操作はありません。お知らせ・サポートからお問い合わせください。</p>{% endfor %}</div>
+{% set history_cards = section.cards|selectattr('secondary')|list %}{% if history_cards %}<details class="customer-history"><summary>{% if section.key == 'support' %}通知・アカウントの設定{% elif section.key == 'money' %}集計・データの書き出し{% elif section.key == 'products' %}購入・予約の記録{% else %}以前の依頼・取引の履歴{% endif %} <span>{{ history_cards|length }}項目</span></summary><div class="customer-action-grid">{% for entry in history_cards %}{{ card(entry) }}{% endfor %}</div></details>{% endif %}
+</section>
+{% endblock %}

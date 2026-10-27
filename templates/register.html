@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}新規登録 - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-card">
+        <div class="auth-header">
+            <h1>株式会社 開花</h1>
+            <p>新規アカウント作成</p>
+        </div>
+        
+        <form method="POST" class="auth-form">
+            <div class="form-group">
+                <label for="username">ユーザー名 *</label>
+                <input type="text" id="username" name="username" required autofocus>
+            </div>
+            
+            <div class="form-group">
+                <label for="display_name">表示名</label>
+                <input type="text" id="display_name" name="display_name" placeholder="省略可">
+            </div>
+            
+            <div class="form-group">
+                <label for="email">メールアドレス *</label>
+                <input type="email" id="email" name="email" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="password">パスワード *</label>
+                <input type="password" id="password" name="password" required minlength="6">
+                <small>6文字以上</small>
+            </div>
+            
+            <div class="form-group">
+                <label for="confirm_password">パスワード（確認） *</label>
+                <input type="password" id="confirm_password" name="confirm_password" required>
+            </div>
+            
+            <button type="submit" class="btn btn-primary btn-block">登録</button>
+        </form>
+        
+        <div class="auth-footer">
+            <p>既にアカウントをお持ちですか？</p>
+            <a href="{{ url_for('login') }}">ログイン</a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+

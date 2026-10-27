@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% set page_title = "マスター設定" %}
+{% set page_badge = "" %}
+{% set page_subtitle = "ブランド名、ブランドカテゴリー、商品状態の表示と検索語を管理します。" %}
+{% set search_endpoint = "user_master_settings" %}
+{% set add_endpoint = "user_master_add" %}
+{% set edit_endpoint = "user_master_edit" %}
+{% set delete_endpoint = "user_master_delete" %}
+{% set brand_query = brand_query|default("") %}
+{% set category_query = category_query|default("") %}
+{% set brand_category_filter = brand_category_filter|default("") %}
+
+{% block title %}{{ page_title }} - 株式会社 開花{% endblock %}
+
+{% block content %}
+{% include "_master_settings_compact.html" %}
+{% endblock %}

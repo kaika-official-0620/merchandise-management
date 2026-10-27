@@ -1,0 +1,8 @@
+{% extends "inventory_registry/frame.html" %}
+{% set staff = true %}
+{% block registry_content %}
+<h1>既存在庫の照合</h1><p>同じ現物かどうかは、人が既存記録と商品を確認します。商品名が似ているだけで自動的にまとめません。</p>
+<p class="notice">既存 {{ result.legacy_row_count }}行 / 対応済み {{ result.linked_row_count }}行 / 個品 {{ result.physical_item_count }}点 / 要確認 {{ result.unresolved_count }}行。対応付けは過去作業の請求開始ではありません。</p>
+<div class="card scroll"><table><thead><tr><th>旧商品ID</th><th>顧客ID</th><th>商品名</th><th>個品ID・確認状態</th></tr></thead><tbody>{% for row in result.rows %}<tr><td>{{ row.id }}</td><td>{{ row.user_id }}</td><td>{{ row.product_name }}</td><td>{{ row.physical_item_id or '未対応' }} / {{ row.link_status or '未確認' }}</td></tr>{% endfor %}</tbody></table></div>
+<form class="card" method="post" action="{{ url_for('inventory_registry.link') }}"><h2>現物を確認して対応付ける</h2><input type="hidden" name="registry_csrf" value="{{ registry_csrf }}"><input type="hidden" name="operation_token" value="{{ registry_operation('link') }}"><label>旧商品ID<input type="number" name="merchandise_id" min="1" required></label><label>同じ現物に既存の個品IDがある場合だけ指定<input name="physical_item_id" maxlength="100"></label><p class="muted">空欄の場合は内部の個品IDを作ります。既存のラベル番号は変更しません。</p><label>照合の根拠<textarea name="note" maxlength="2000" required></textarea></label><label><input type="checkbox" name="reviewed" value="yes" required> 顧客と現物の対応を確認しました</label><button class="btn btn-primary">対応付けを保存</button></form>
+{% endblock %}

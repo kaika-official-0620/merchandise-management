@@ -1,0 +1,19 @@
+{% extends "inventory_registry/frame.html" %}
+{% block title %}商品販売・出品の確認 - 株式会社開花{% endblock %}
+{% macro tokens(purpose, target='') -%}
+<input type="hidden" name="registry_csrf" value="{{ commerce_csrf() }}"><input type="hidden" name="operation_token" value="{{ commerce_operation(purpose, target) }}">
+{%- endmacro %}
+{% macro money(value) -%}{% if value is none or value is undefined %}未確認{% else %}{{ '{:,}'.format(value) }}円{% endif %}{%- endmacro %}
+{% macro evidence(label='確認資料・根拠（資料名や管理番号）') -%}<label>{{ label }}<input name="evidence_reference" maxlength="1000" required></label>{%- endmacro %}
+{% macro status(value) -%}{{ {'reserved':'予約中','paid_ownership_pending':'テスト購入済み・所有移転の条件を確認中','confirmed':'テスト購入・所有移転の記録済み','handed_over':'お客様への受渡し確認済み','cancelled':'取消済み','expired':'期限切れ・解除済み','approved':'両者承認済み','needs_review':'確認・承認待ち','rejected':'差戻し','accepted':'注文受付済み','conflict':'競合・要対応','shipped':'発送記録済み','returned':'返品・料金再確認','sale_cancelled':'売却取消・料金再確認','pending':'未着手','working':'対応中','done':'完了','blocked':'保留','confirmed_stopped':'停止を確認済み','failed':'停止失敗','retry_requested':'再対応待ち','requested':'停止待ち'}.get(value, '要確認') }}{%- endmacro %}
+{% macro reason(value) -%}{{ {'listing_customer_approval_required':'お客様の承認が必要です','listing_kaika_approval_required':'開花の承認が必要です','listing_item_changed':'商品状態が変わりました。新しい出品案で再確認してください','listing_ownership_changed':'所有者が変わったため再確認が必要です','listing_kaika_receipt_required':'開花での受領確認が必要です','listing_registration_required':'撮影・登録内容の確認が必要です','listing_item_unavailable':'売却済み・発送済み・保留などの状態を確認してください','listing_photo_not_owned':'商品写真の利用権限を再確認してください','listing_expired':'承認期限が過ぎています','listing_superseded':'新しい出品案があります','listing_rejected':'差戻し済みです。修正した出品案で再承認してください','listing_approval_hash_mismatch':'承認した内容の一致確認が必要です','sale_already_claimed':'同じ商品に別の注文があります','price_below_approved_minimum':'合意した最低価格を下回っています','price_differs_from_approved_version':'承認した価格と注文額が異なります'}.get(value, '取引内容・承認・個品の状態を再確認してください') }}{%- endmacro %}
+{% block registry_content %}
+<style>
+.commerce-nav{margin:1rem 0}.commerce .grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem}.commerce .photos{display:flex;flex-wrap:wrap;gap:.8rem}.commerce .photos label{width:150px;padding:.5rem;border:1px solid #dce3ea;border-radius:8px}.commerce .photos img,.commerce .product-image{display:block;width:100%;max-width:260px;height:170px;object-fit:contain;background:#f4f6f8;border-radius:6px}.commerce .photos input[type=checkbox]{margin:.5rem .4rem .2rem 0}.commerce .actions{display:flex;flex-wrap:wrap;gap:1rem}.commerce .actions form{flex:1;min-width:230px}.commerce .badge{display:inline-block;padding:.15rem .55rem;border-radius:10px;background:#eef2f7}.commerce .warning{border-left:4px solid #b7791f;padding:.65rem;background:#fff7de}.commerce .description{white-space:pre-wrap;overflow-wrap:anywhere}.commerce .compact{font-size:.9rem}.commerce h2{margin-top:.5rem}.commerce details>summary{cursor:pointer;font-weight:600}.commerce button:disabled{opacity:.5}.commerce .good{background:#e9f6ed;padding:.65rem}.commerce code{font-size:.8rem}.commerce a{overflow-wrap:anywhere}@media(max-width:800px){.commerce .grid3{grid-template-columns:1fr}.commerce .photos label{width:130px}}
+</style>
+<div class="commerce">
+{% if not customer_navigation_available|default(false) %}<nav class="commerce-nav"><a href="{{ url_for('commerce.index') }}">開花の商品</a><a href="{{ url_for('commerce.orders') }}">購入・予約</a><a href="{{ url_for('commerce.listing_index') }}">出品内容・両者承認</a>{% if staff|default(false) %}<a href="{{ url_for('commerce.channels') }}">販路・受注・発送</a>{% endif %}<a href="{{ url_for('finance_review.index') }}">利益・請求下書き</a></nav>{% endif %}
+<p class="notice"><strong>検証用</strong>の商品・取引画面です。購入はテスト資金で記録します。実際の決済・外部への出品・在庫停止・返金は行いません。</p>
+{% block commerce_content %}{% endblock %}
+</div>
+{% endblock %}

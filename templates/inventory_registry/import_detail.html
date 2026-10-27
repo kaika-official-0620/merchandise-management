@@ -1,0 +1,9 @@
+{% extends "inventory_registry/frame.html" %}
+{% set staff = true %}
+{% block registry_content %}
+<h1>取込内容の確認</h1><p>状態：{{ batch.status }} / 対象顧客ID：{{ batch.customer_id }}</p>
+<p class="notice">不明な日付・金額は不明のまま残します。既存商品を再登録した作業として扱わず、料金は生成しません。元ファイルや在庫が変わった場合は再確認が必要です。</p>
+<div class="card"><h2>列の対応</h2><pre>{{ batch.mapping|default({})|tojson(indent=2) }}</pre><p>集計：{{ batch.summary|default({})|tojson }}</p></div>
+<div class="card scroll"><table><thead><tr><th>行</th><th>予定する処理</th><th>商品</th><th>確認事項</th></tr></thead><tbody>{% for row in batch.rows|default([]) %}<tr><td>{{ row.row_number }}</td><td>{{ {'create':'新規の旧在庫記録','link':'既存記録との対応','skip':'取込済み・変更なし','hold':'要確認'}.get(row.action,row.action) }}</td><td>{{ row.record.title if row.record else '' }}</td><td>{{ row.errors|default([])|join(' / ') }} {{ row.warnings|default([])|join(' / ') }} {{ row.reason|default('') }}</td></tr>{% endfor %}</tbody></table></div>
+{% if batch.status == 'preview' %}<form class="card" method="post" action="{{ url_for('inventory_registry.confirm_import',batch_id=batch.batch_id) }}"><input type="hidden" name="registry_csrf" value="{{ registry_csrf }}"><input type="hidden" name="operation_token" value="{{ registry_operation('confirm_import',batch.batch_id) }}"><input type="hidden" name="preview_hash" value="{{ batch.preview_hash }}"><label><input type="checkbox" name="reviewed" value="yes" required> 顧客・列・全行の対応を確認しました</label><button class="btn btn-primary" {% if batch.summary.hold|default(0) %}disabled{% endif %}>確認済みの取込を実行</button><p>要確認の行がある場合は、元ファイルを修正して再度確認してください。</p></form>{% endif %}
+{% endblock %}

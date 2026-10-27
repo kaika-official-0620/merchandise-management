@@ -1,0 +1,291 @@
+{% extends "base.html" %}
+{% block title %}お知らせ - 開花{% endblock %}
+
+{% block content %}
+<style>
+.announcements-page {
+    max-width: 1040px;
+    margin: 0 auto;
+    display: grid;
+    gap: 0.9rem;
+}
+
+.announcements-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 1rem;
+}
+
+.announcements-header h1 {
+    margin: 0;
+    color: #0f172a;
+    font-size: 1.45rem;
+}
+
+.announcements-home-link {
+    color: #2563eb;
+    font-weight: 800;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.announcement-filter {
+    display: flex;
+    align-items: end;
+    justify-content: flex-start;
+    gap: 0.625rem;
+    flex-wrap: wrap;
+    padding: 0.65rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #fff;
+    min-width: 0;
+}
+
+.announcement-filter label {
+    display: grid;
+    gap: 0.25rem;
+    flex: 0 1 162px;
+    width: min(100%, 162px);
+    color: #475569;
+    font-size: 0.78rem;
+    font-weight: 800;
+    min-width: 0;
+}
+
+.announcement-filter input[type="date"] {
+    width: 100%;
+    max-width: 162px;
+    min-width: 0;
+    box-sizing: border-box;
+    min-height: 38px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 0 0.65rem;
+    font: inherit;
+}
+
+.announcement-filter .btn {
+    min-height: 38px;
+    border-radius: 8px;
+}
+
+.announcements-list {
+    display: grid;
+    gap: 0.55rem;
+}
+
+.announcement-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.55rem;
+    align-items: center;
+    padding: 0.56rem 0.65rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #ffffff;
+    color: #0f172a;
+}
+
+.announcement-card.is-unread {
+    border-color: #bfdbfe;
+    box-shadow: inset 4px 0 0 #2563eb;
+}
+
+.announcement-card.is-read {
+    opacity: 0.58;
+    background: #f8fafc;
+}
+
+.announcement-card__link {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.28rem;
+    align-items: center;
+    color: inherit;
+    text-decoration: none;
+}
+
+.announcement-card__badge,
+.announcement-card__read-state {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 20px;
+    padding: 0.16rem 0.42rem;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.announcement-card__badge {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.announcement-card__badge:empty {
+    display: none;
+}
+
+.announcement-card__read-state {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.announcement-card.is-read .announcement-card__read-state {
+    background: #e2e8f0;
+    color: #64748b;
+}
+
+.announcement-card__main {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.38rem;
+}
+
+.announcement-card__title {
+    margin: 0;
+    min-width: 0;
+    color: inherit;
+    font-size: 0.94rem;
+    line-height: 1.35;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.announcement-card__date {
+    color: #94a3b8;
+    font-size: 0.74rem;
+    white-space: nowrap;
+}
+
+.announcement-card__actions {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+.announcement-card__delete {
+    min-height: 28px;
+    padding: 0 0.52rem;
+    border: 1px solid #fecaca;
+    border-radius: 999px;
+    background: #fff;
+    color: #b91c1c;
+    font-size: 0.72rem;
+    font-weight: 800;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.announcements-empty {
+    padding: 1.2rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #ffffff;
+    color: #64748b;
+}
+
+@media (max-width: 640px) {
+    .announcements-header {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .announcement-filter {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        align-items: stretch;
+        gap: 10px;
+    }
+
+    .announcement-filter label,
+    .announcement-filter input[type="date"] {
+        width: 100%;
+        max-width: 172px;
+    }
+
+    .announcement-filter .btn {
+        justify-self: start;
+        margin-left: 0;
+        width: max-content;
+        min-width: 96px;
+        border-radius: 8px;
+    }
+
+    .announcement-card {
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 0.45rem;
+        padding: 0.54rem 0.58rem;
+    }
+
+    .announcement-card__link {
+        min-width: 0;
+    }
+
+    .announcement-card__main {
+        flex-wrap: wrap;
+        gap: 0.28rem;
+    }
+
+    .announcement-card__date {
+        width: 100%;
+    }
+
+    .announcement-card__actions {
+        justify-content: flex-end;
+    }
+}
+</style>
+
+<div class="announcements-page">
+    <div class="announcements-header">
+        <h1>お知らせ</h1>
+        <a href="{{ url_for('user_home') }}" class="announcements-home-link context-back-inline">ホームへ戻る</a>
+    </div>
+
+    <form method="GET" action="{{ url_for('user_announcements_page') }}" class="announcement-filter">
+        <label>
+            日付で検索
+            <input type="date" name="date" value="{{ selected_date or '' }}">
+        </label>
+        <button type="submit" class="btn btn-primary">検索</button>
+        {% if selected_date %}
+        <a href="{{ url_for('user_announcements_page') }}" class="btn btn-secondary">検索解除</a>
+        {% endif %}
+    </form>
+
+    {% if announcements %}
+    <div class="announcements-list">
+        {% for ann in announcements %}
+        <article class="announcement-card {{ ann.announcement_type }} {% if ann.is_read %}is-read{% else %}is-unread{% endif %}" data-announcement-id="{{ ann.id }}">
+            <a href="{{ url_for('user_announcement_detail_page', announcement_id=ann.id) }}" class="announcement-card__link">
+                <div class="announcement-card__main">
+                    <span class="announcement-card__badge">
+                        {% if ann.announcement_type == 'important' %}重要{% endif %}
+                    </span>
+                    <span class="announcement-card__read-state">{% if ann.is_read %}既読{% else %}未読{% endif %}</span>
+                    <h2 class="announcement-card__title">{{ ann.title }}</h2>
+                    <span class="announcement-card__date">{{ ((ann.publish_at or ann.created_at)|string)[:16] }}</span>
+                </div>
+            </a>
+            <div class="announcement-card__actions">
+                <form method="POST" action="{{ url_for('user_announcement_delete_page', announcement_id=ann.id) }}" onsubmit="return confirm('このお知らせを一覧から削除しますか？');">
+                    <input type="hidden" name="next" value="{{ request.full_path[:-1] if request.full_path.endswith('?') else request.full_path }}">
+                    <button type="submit" class="announcement-card__delete">削除</button>
+                </form>
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="announcements-empty">表示できるお知らせはありません。</div>
+    {% endif %}
+</div>
+{% endblock %}

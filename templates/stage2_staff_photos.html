@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% block title %}開花で商品写真を追加 - 株式会社開花{% endblock %}
+{% block content %}
+<main style="max-width:900px;margin:1.5rem auto;padding:0 1rem;line-height:1.7">
+  <h1>商品写真を追加</h1>
+  <p>{{ product.product_name }}<br>個品ID：<code>{{ item.physical_item_id }}</code></p>
+  <p>開花で受領した商品の写真を追加します。現在の写真は残します。撮影日時、実際の作業時間、登録完了は、個品画面で別途確認して記録してください。</p>
+  <p>現在の商品写真：{{ paths|length }}枚（最大20枚）。記録済み容量：{{ photo_usage.known_bytes }}バイト{% if photo_usage.unknown_size_count %}、{{ photo_usage.unknown_size_count }}枚は容量未確認{% endif %}。</p>
+  <div style="display:flex;flex-wrap:wrap;gap:1rem">
+  {% for path in paths %}<figure style="margin:0"><img src="{{ url_for('static',filename=path) }}" alt="現在の商品写真 {{ loop.index }}" style="width:150px;height:150px;object-fit:contain"><figcaption>{{ 'メイン写真' if loop.first else '追加写真 ' ~ loop.index0 }}</figcaption></figure>{% endfor %}
+  </div>
+  {% if paths|length < 20 %}
+  <form method="post" enctype="multipart/form-data" style="margin:1.5rem 0">
+    <input type="hidden" name="staff_photo_csrf" value="{{ staff_photo_csrf }}">
+    <input type="hidden" name="operation_token" value="{{ operation_token }}">
+    <label for="photos">追加する写真（JPEG・PNG・WebP）</label><br>
+    <input type="file" id="photos" name="photos" accept="image/jpeg,image/png,image/webp" multiple required>
+    <p>1回の送信全体は40MB以下です。保存時に既存の画像検証・圧縮処理を行います。</p>
+    <button type="submit" class="btn btn-primary">写真を追加する</button>
+  </form>
+  {% else %}<p role="status">写真が20枚に達しています。既存の原本は保持しています。</p>{% endif %}
+  <p><a href="{{ url_for('inventory_registry.detail',item_id=item.physical_item_id) }}">個品・作業の記録に戻る</a></p>
+</main>
+{% endblock %}

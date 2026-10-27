@@ -1,0 +1,25 @@
+{% extends 'pilot_review/base.html' %}
+{% block pilot_content %}
+<h1>採算を条件ごとに比較</h1>
+<p>売れなかった商品の作業も費用に含めます。お客様の購入残高・未精算売上は会社の収入や運転資金へ加えません。未入力は未確認です。</p>
+<p>作業時間は未定です。月の合計人分を変えて比較してください。計算例：2人 × 22日 × 1日2時間 × 60分 ＝ 5,280人分。この例は仮定で、仕入れ・移動・他事業へ使う時間を除いて入力します。</p>
+<form method="post" action="{{ url_for('pilot_review.scenarios') }}" class="card">
+{{ tokens('stage7_scenario') }}
+<div class="grid"><label>対象月<input type="month" name="period" value="{{ period }}" required></label><label>比較案の名前<input name="name" maxlength="150" placeholder="例：作業時間を1日2時間とした場合"></label></div>
+<div class="grid"><label>根拠の種類<select name="basis"><option value="assumption">仮定</option><option value="reference">参考値</option></select></label><label>全ての金額の税区分<select name="tax_basis">{{ tax_options(inputs.get('tax_basis','unknown')) }}</select></label></div>
+<label>比較の根拠<input name="reference" maxlength="500" required value="{{ inputs.get('reference','') }}" placeholder="料金案・原価表・仮定条件の参照先"></label>
+<label>売却・作業時期の仮定<select name="timing_basis"><option value="unknown" {{ 'selected' if inputs.get('timing_basis')!='steady_state_assumption' }}>未確認（月の利益・作業容量を判定しない）</option><option value="steady_state_assumption" {{ 'selected' if inputs.get('timing_basis')=='steady_state_assumption' }}>毎月の受付・売却・作業量が安定していると仮定する</option></select></label><p class="muted">最終的に売れる割合は、当月に売れる割合ではありません。初月・長期滞留・売却時期の偏りは実際の経過記録で別に確認します。</p>
+<label>人件費の扱い<select name="labor_mode"><option value="time_allocated" {{ 'selected' if inputs.get('labor_mode')!='fixed_salary' }}>作業時間から配賦する</option><option value="fixed_salary" {{ 'selected' if inputs.get('labor_mode')=='fixed_salary' }}>本サービス分を固定給与で計上する</option></select></label>
+<p class="muted">時間配賦なら固定給与欄を空欄に、固定給与なら時間単価欄を空欄にします。他の費用に同じ給与を重ねて入れないでください。</p>
+<div class="grid">{% for key,label in stage7_inputs.items() %}<label>{{ label }}<input name="{{ key }}" type="number" min="0" step="1" value="{{ inputs.get(key) if inputs.get(key) is not none else '' }}" placeholder="未確認"></label>{% endfor %}</div>
+<button type="submit" name="save" value="no">この条件で比較する</button> <button type="submit" name="save" value="yes">比較して案を保存する</button>
+</form>
+{% if result %}
+<section class="card"><h2>今回の比較結果</h2><p>事業の実績や利益保証ではありません。端数のある値は比較用で、請求額ではありません。</p>
+<ul>{% for message in result.warnings %}<li>{{ message }}</li>{% endfor %}</ul>
+<div class="scroll"><table><thead><tr><th>項目</th><th>比較値</th></tr></thead><tbody>{% for key,metric in result.metrics.items() %}<tr><th>{{ metric_labels.get(key,key) }}</th><td>{{ value(metric.value) }}</td></tr>{% endfor %}</tbody></table></div>
+<ul>{% for key,status in result.checks.items() %}<li>{{ check_labels.get(key,key) }}：{{ value(status) }}</li>{% endfor %}</ul>
+{% if result.unknown_fields %}<p>未入力・未確定：{% for key in result.unknown_fields %}{{ stage7_inputs.get(key,{'tax_basis':'税区分','timing_basis':'売却・作業時期の仮定'}.get(key,key)) }}{{ '、' if not loop.last }}{% endfor %}</p>{% endif %}
+</section>{% endif %}
+<section class="card"><h2>保存した比較案</h2>{% for row in saved %}<details><summary>{{ row.name }}（{{ row.period }}）</summary><p>根拠：{{ row.inputs.reference }}</p><div class="scroll"><table><tbody>{% for key,metric in row.result.metrics.items() %}<tr><th>{{ metric_labels.get(key,key) }}</th><td>{{ value(metric.value) }}</td></tr>{% endfor %}</tbody></table></div></details>{% else %}<p>保存した比較案はありません。</p>{% endfor %}</section>
+{% endblock %}

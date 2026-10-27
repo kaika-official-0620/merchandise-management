@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}月次精算書作成 - 開花{% endblock %}
+
+{% block content %}
+<style>
+.monthly-form-page{display:grid;gap:1.1rem}.monthly-form-header,.monthly-form-card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:1.2rem;box-shadow:0 10px 24px rgba(15,23,42,.05)}
+.monthly-form-header{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap}.monthly-form-header h1{margin:0;color:#0f172a}.monthly-form-header p{margin:.35rem 0 0;color:#64748b}
+.monthly-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.9rem}.monthly-form-grid .wide{grid-column:1/-1}
+.monthly-form-grid label{display:block;font-weight:700;color:#475569;font-size:.86rem;margin-bottom:.35rem}
+.monthly-form-grid input,.monthly-form-grid select,.monthly-form-grid textarea{width:100%;border:1px solid #cbd5e1;border-radius:10px;padding:.68rem .75rem;background:#fff}
+.amount-preview{border:1px solid #d1fae5;background:#ecfdf5;border-radius:12px;padding:1rem;color:#065f46}.amount-preview strong{font-size:1.45rem}
+.monthly-actions{display:flex;gap:.7rem;flex-wrap:wrap}
+@media(max-width:768px){.monthly-form-header,.monthly-form-card{padding:1rem;border-radius:10px}.monthly-form-grid{grid-template-columns:1fr}.monthly-actions .btn{width:100%;justify-content:center}}
+</style>
+<div class="monthly-form-page">
+  <section class="monthly-form-header">
+    <div>
+      <h1>月次精算書作成</h1>
+      <p>{{ client.name }} / {{ selected_month }} 分。作成後は精算書一覧で確認・編集・送付できます。</p>
+    </div>
+    <a href="{{ url_for('admin_monthly_settlements', month=selected_month) }}" class="btn btn-secondary">一覧へ戻る</a>
+  </section>
+  <section class="monthly-form-card">
+    <form method="POST" class="monthly-form-grid" id="monthlySettlementForm">
+      <div class="amount-preview wide">
+        <div>月額利用料</div>
+        <strong>¥{{ "{:,}".format(monthly_fee or 0) }}</strong>
+        <p>無料キャンペーン中、または月額利用料なしの場合は0円になります。</p>
+      </div>
+      <div>
+        <label for="photo_packing_fee">撮影・梱包費</label>
+        <input id="photo_packing_fee" name="photo_packing_fee" type="number" min="0" value="0" data-monthly-amount>
+      </div>
+      <div>
+        <label for="shipping_support_fee">発送サポート費</label>
+        <input id="shipping_support_fee" name="shipping_support_fee" type="number" min="0" value="0" data-monthly-amount>
+      </div>
+      <div>
+        <label for="other_fee">その他費用</label>
+        <input id="other_fee" name="other_fee" type="number" min="0" value="0" data-monthly-amount>
+      </div>
+      <div>
+        <label for="status">作成状態</label>
+        <select id="status" name="status">
+          <option value="completed">送付待機にする</option>
+          <option value="draft">下書きで保存</option>
+        </select>
+      </div>
+      <div class="wide">
+        <label for="notes">備考</label>
+        <textarea id="notes" name="notes" rows="4" placeholder="管理者確認メモ、内訳補足など"></textarea>
+      </div>
+      <div class="amount-preview wide">
+        <div>精算書合計</div>
+        <strong id="monthlyTotal">¥{{ "{:,}".format(monthly_fee or 0) }}</strong>
+      </div>
+      <div class="monthly-actions wide">
+        <button type="submit" class="btn btn-primary">精算書を作成</button>
+        <a href="{{ url_for('admin_monthly_fee_settings') }}" class="btn btn-outline">月額設定を確認</a>
+      </div>
+    </form>
+  </section>
+</div>
+<script>
+(function(){
+  const base = {{ (monthly_fee or 0)|int }};
+  const total = document.getElementById('monthlyTotal');
+  function refresh(){
+    let sum = base;
+    document.querySelectorAll('[data-monthly-amount]').forEach(input => {
+      sum += Number(input.value || 0);
+    });
+    total.textContent = '¥' + sum.toLocaleString('ja-JP');
+  }
+  document.querySelectorAll('[data-monthly-amount]').forEach(input => input.addEventListener('input', refresh));
+  refresh();
+})();
+</script>
+{% endblock %}

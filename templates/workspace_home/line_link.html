@@ -1,0 +1,49 @@
+{% extends 'workspace_home/base.html' %}{% block home_content %}
+<h1>LINEとの連携を確認</h1>
+<p>ご自身がLINEで依頼したリンクであることと、ログイン中の開花アカウントをご確認ください。確認後にLINEの公式画面へ進みます。</p>
+{% if authenticated %}
+<form class="card" method="post" action="{{ url_for('workspace_home.line_link') }}">{{ tokens('stage6_line_link') }}
+<input id="line-invitation" type="hidden" name="invitation"><input id="line-token" type="hidden" name="link_token">
+<button id="line-confirm" disabled>このアカウントとLINEを連携する</button></form>
+{% else %}<p><a href="{{ url_for('login',next='/notifications/line/link') }}">開花にログインして確認する</a></p>{% endif %}
+<p id="line-link-status">LINEで受け取ったリンクから開いてください。リンクが失効したら、公式アカウントへ「開花連携」と送ってください。</p>
+<script>
+(() => {
+  const key='kaika-line-link-test';
+  const button=document.getElementById('line-confirm');
+  if(button)button.form.addEventListener('submit',()=>{try{sessionStorage.removeItem(key);}catch(_){}});
+  function refreshProof() {
+  if(button){button.disabled=true;document.getElementById('line-invitation').value='';document.getElementById('line-token').value='';}
+  const incoming=location.hash.length>1;
+  const params=new URLSearchParams(location.hash.slice(1));
+  const fresh={invitation:params.get('invitation')||'',linkToken:params.get('linkToken')||'',expires:Date.now()+600000};
+  history.replaceState(null,'',location.pathname);
+  const valid=p=>p&&Number.isFinite(p.expires)&&p.expires>Date.now()&&typeof p.invitation==='string'&&typeof p.linkToken==='string'&&/^[A-Za-z0-9_-]{32,200}$/.test(p.invitation)&&/^[A-Za-z0-9_+=/.-]{10,1024}$/.test(p.linkToken);
+  let value=fresh;
+  // Only a return from login without a new fragment may restore the pending proof.
+  if(incoming) {
+    if(valid(value)) { try{sessionStorage.setItem(key,JSON.stringify(value));}catch(_){} }
+  } else {
+    try{value=JSON.parse(sessionStorage.getItem(key)||'null');}catch(_){value=null;}
+  }
+  if(!valid(value)) {
+    value=null;
+    try{sessionStorage.removeItem(key);}catch(_){}
+    const status=document.getElementById('line-link-status');
+    if(status)status.textContent='連携リンクが無効、または有効期限が切れています。公式アカウントへ「開花連携」と送って、新しいリンクを開いてください。';
+  }
+  if(valid(value)&&document.getElementById('line-confirm')) {
+    document.getElementById('line-invitation').value=value.invitation;
+    document.getElementById('line-token').value=value.linkToken;
+    document.getElementById('line-confirm').disabled=false;
+  }
+  if(valid(value)) {
+    const status=document.getElementById('line-link-status');
+    if(status)status.textContent='LINEで受け取ったリンクから開いてください。リンクが失効したら、公式アカウントへ「開花連携」と送ってください。';
+  }
+  }
+  refreshProof();
+  window.addEventListener('hashchange',refreshProof);
+})();
+</script>
+{% endblock %}

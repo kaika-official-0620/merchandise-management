@@ -1,0 +1,89 @@
+# 開花の共通プラットフォーム：検証用 Render 環境
+
+更新日：2026-09-12。サイトとアプリが同じ在庫・受付・売上・契約を参照する構成の、公開前の業務確認用設定です。既存の `render.yaml` は本番用のままです。検証には別の `render.staging.yaml` を使います。
+
+## 用意したもの
+
+| 対象 | 検証専用の構成 |
+| --- | --- |
+| Web サービス | `kaika-platform-staging`。現行 Python ソースを `staging_app:app` で起動 |
+| データベース | 別 PostgreSQL 16 `kaika-platform-staging-db`、DB 名 `kaika_staging`。既存本番のメジャー版に合わせ、外部 IP 接続は不許可 |
+| 商品画像 | 別の 5 GB 永続ディスク。既存サイトと同じパスでも、本番とは別サービスのボリューム |
+| URL | `https://kaika-platform-staging.onrender.com`。現行本番ドメインへの転送は停止 |
+| 認証 | サイトと同じログイン。HTTP Basic 認証は追加せず、アプリ内のログインと API 認証も確認できる |
+| 初期データ | 架空の管理者・ノーマル・ビジネス各 1 名。利用者 2 名に自己保管と開花保管を各 1 商品 |
+| 初期パスワード | Render の `generateValue` で個別に生成。ファイル・ログ・URLには出力しない |
+| 自動公開 | コミットからの自動デプロイを停止。確認した変更を手動反映 |
+
+Render の設定形式・生成シークレット・データベース参照・接続制限は [Blueprint 公式仕様](https://render.com/docs/blueprint-spec) に基づきます。Web サービスと DB とディスクは課金対象の構成です。作成前に Render が表示する費用を確認してください。
+
+2026-09-12 に費用承認を受けて検証環境を作成し、実サービスの起動と架空商品の業務連動を確認しました。確認済みコミットは `bddc06ef54e017af5ff845a8978f0ee5119d6845`、デプロイ ID は `dep-daih5i8ae00c73egejqg` です。本番と別のサービス・DB・ディスクを使用しています。
+
+## 起動時の分離確認
+
+`staging_app.py` は既存アプリを読み込む前に、次を確認します。
+
+1. `KAIKA_RUNTIME_ENV=staging`、専用 DB 名、別ホスト名、十分な長さの生成シークレットを要求する。接続 URL の host/dbname 上書きや TLS 無効化を拒否し、指定された `verify-ca` / `verify-full` は初期化・通常接続の両方で維持する。
+2. 本番用課金・LINE・メール・Google・Expo の認証情報が入っていたら、値を表示せず起動を拒否する。
+3. 商品画像ディスクがマウントされていることを確認する。初回は空のディスクに `.kaika-staging-volume` を付ける。未識別の既存ファイルがあるディスクは利用しない。
+4. 新しい空 DB に `kaika_environment` の `staging` 印を付ける。既存データがある未識別 DB、本番印、復元隔離用の `kaika_recovery_quarantine` がある DB は利用しない。
+5. DB の初期化から seed まで PostgreSQL のロックで直列化する。現行ソースを読み込めず、古いバイトコードへフォールバックした場合も起動しない。
+6. 3 つの検証アカウントのみログイン可能にする。既存コードが作る既定 `admin` の初期パスワードは未知のランダム値に失効させる。
+
+すべての HTML 画面には「開花の検証環境・架空データ専用」と表示し、検索エンジンには `noindex` を返します。画像を含む非公開画面はログインが必要です。アプリ API は既存の bearer token と所有者チェックを使います。
+
+## 初期段階では停止する連携
+
+- Stripe の実契約・料金変更・解約・Webhook、アプリ内購入の検証 API。
+- LINE の設定画面・送信・Webhook、Google Drive の取得。
+- プッシュ通知の実送信。通知設定を単に有効にしても、この段階では送信できません。
+- 毎月の料金更新、未納・長期在庫の自動移動、LINE 定期配信、旧自動バックアップ。
+- 旧形式のバックアップ取込み。本番データの検証環境への混入を防ぎます。
+
+専用起動時は Python の外向き socket 通信も止めるため、既存コードに連携の呼び出しが残っていても外部へ送れません。専用 URL を検査済みの PostgreSQL 接続は psycopg2/libpq で行います。Tesseract の初回取得はデプロイの build 段階で行い、実行時の外部ダウンロードは利用できません。
+
+これは最初の業務確認段階です。LINE・プッシュの実受信、テスト用ストア購入を確認する際は、テスト用プロジェクト・受信者・アカウントを確定し、対象通信だけを許す後続の設定・実装変更を行います。現段階の全体遮断を外すだけで進めないでください。
+
+## Render に作成する手順
+
+1. 確認済みソースを GitHub の開発用ブランチへ保存する。本番の自動デプロイ対象ブランチへ直接反映しない。
+2. Render にログインし、新しい Blueprint を作る。ソースのブランチと Blueprint Path に `render.staging.yaml` を指定する。
+3. 新規サービス `kaika-platform-staging` と新規 DB `kaika-platform-staging-db` が対象であること、表示費用を確認して作成する。本番の環境変数グループは共有しない。
+4. デプロイ完了後に `/healthz` を確認する。`database` が `postgres`、応答ヘッダー `X-Kaika-Environment` が `staging` になることを確認する。
+5. Render の Environment で、担当するアカウントの生成済み初期パスワードを確認して検証サイトへ入力する。チャット・スクリーンショット・URLには貼らない。
+6. PC で利用者と管理者の操作を最後まで通す。続いてアプリの staging 用接続先をこの HTTPS URL にし、同じアカウント・同じ商品で確認する。
+
+画像ディスクは実行時のみ利用でき、build や pre-deploy コマンドからは使えません。そのため、ディスク確認と初期 seed は実行時の起動処理に置いています。ディスク付きの検証サービスは単一インスタンスです。[Render 永続ディスク公式説明](https://render.com/docs/disks)
+
+## 初期アカウントと再実行
+
+| ユーザー名 | 初期パスワードの環境変数 | 役割 |
+| --- | --- | --- |
+| `staging_admin` | `STAGING_ADMIN_PASSWORD` | 開花側の受領・登録・記帳 |
+| `staging_normal` | `STAGING_NORMAL_PASSWORD` | 自己保管商品の登録・販売記録 |
+| `staging_business` | `STAGING_BUSINESS_PASSWORD` | 上位機能の申請も確認 |
+
+ノーマルとビジネスは seed 作成時に 180 日間の検証用権限を付与します。料金・本契約は作りません。期限が近づいたら、担当者が管理画面で検証期間を管理します。
+
+通常の再起動で seed が再実行されても、既存の商品・売上・写真・パスワード・権限期限を上書きしません。ユーザーが編集した内容は残ります。削除した seed 商品も再作成しません。検証アカウントそのものが削除・改名された場合は起動を止め、自動で代替アカウントを作りません。
+
+手動実行は、検証 Web サービスの Render Shell で次を使います。
+
+```sh
+python scripts/seed_staging.py
+```
+
+削除・リセット用オプションはありません。生成用環境変数を変更しても、既存アカウントのパスワードは変わりません。通常のプロフィールまたは管理者による変更手続きを使います。
+
+## 確認済み範囲と残る確認
+
+- `tests/test_staging_environment.py`：24 件成功。設定拒否・分離印・隔離 DB・seed の再実行・旧 admin 失効・認証・外部遷移・連携遮断・scheduler 停止・接続先上書き拒否・TLS 指定の維持を、架空の一時 DB と接続モックで確認。
+- `scripts/verify_staging_runtime.py`：19 件成功。実際の `render_app` をソースから一時領域へ複製し、staging seed・管理者/利用者の実ログイン・プラン画面・native API 認証と共通在庫を確認。実データ・実課金・外部送信なし。機械可読結果は `docs/staging-runtime-verification.json`。
+- `scripts/verify_staging_postgres.py`：**ローカルの架空 PostgreSQL 17.11** で初回起動 15 件・別 Python プロセスによる再起動 20 件、計 35 件成功。専用 `kaika_staging` DB の初期化、4 商品の seed、3 アカウントの PC ログイン、native API の共通在庫、編集済み商品・パスワード・権限期限の保持を確認した。TLS 補強後の再起動では、初期化と通常接続の両方が `verify-full` を維持することも確認した。接続資格情報は一時領域に置き、結果には含めていない。結果は `docs/staging-postgres-verification.json`。
+- ローカル試験は PostgreSQL 17.11 であり、本番の PostgreSQL 16 と同一版の試験ではない。検証 Blueprint は本番に合わせて `postgresMajorVersion: "16"` を明示し、無指定時の既定版への追従を避ける。[Render の PostgreSQL バージョン指定](https://render.com/docs/blueprint-spec#postgresmajorversion)
+- `scripts/verify_deployed_staging.py --with-intake`：**実 Render 環境で 40 件成功・失敗 0・HTTPS リクエスト 49 回**。サービス内の生成済み認証情報を出力せずに使用し、実 HTTPS・検証 PostgreSQL 16・写真ディスクを経由した。独立した PC / KaikaApp 相当セッションで、新規架空商品の写真付き登録、編集反映、古い画面の上書き拒否、他利用者の閲覧拒否、預け入れ、発送案内、架空の発送報告・受領、受領後の同一商品・写真・権限の保持を確認。架空商品 ID `5`、受付 ID `1`、run ID `dafbb3234047b148bdbf0c5616618624`。詳細は [実サービスの確認手順と結果](deployed-staging-verification.md)、機械可読記録は [deployed-staging-verification.json](deployed-staging-verification.json)。
+- `scripts/verify_deployed_staging.py --verify-run dafbb3234047b148bdbf0c5616618624`：**実サービス再起動後も 20 件成功・失敗 0・HTTPS リクエスト 24 回**。Render の「Restart service」後、Web Shell が別の新しい実行インスタンスへ接続したことを確認して実施。同じ架空商品 ID `5`・受付 ID `1`、初回と同じ写真 SHA256 と保存先、商品情報・開花保管状態・受領済み受付・利用者の編集ロック・他利用者の閲覧拒否を確認。再照合で在庫・受付は作成・変更せず、ログイン履歴等だけが通常の認証処理に伴って更新される。
+- 新しいソースの再デプロイ後の保全、スマホ実機の WebView・カメラ、実通知、ストア購入、アプリ内課金は引き続き未確認。今回の実サービス再起動・PC / KaikaApp 相当 HTTP セッションの成功を、それらの確認と混同しない。
+- 既存サイト全体の PostgreSQL 移行 SQL をこの文書だけで保証しない。起動失敗時は検証サービスで修正し、本番へは進めない。
+
+担当者側で必要になるのは Render / GitHub へのログイン・権限付与、Render 表示費用の確認、検証アカウントでの実務確認、後段の Apple / Google 開発者登録です。アカウントのパスワードや API 秘密鍵をチャットへ送る必要はありません。
