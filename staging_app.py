@@ -5,6 +5,7 @@ from staging_environment import (StagingConfigurationError, check_upload_disk,
     install_outbound_guard, prepare_environment, register_staging_boundary,
     seed_test_data, staging_bootstrap, validate_environment)
 from staging_review import bootstrap_staging_review
+from staging_access import register_staging_access
 
 
 config = validate_environment()
@@ -20,6 +21,7 @@ with staging_bootstrap(config) as staging_connection:
                                       for role in ("admin", "normal", "business")})
     register_staging_boundary(render_app.module)
     bootstrap_staging_review(render_app.module, config, connection=staging_connection)
+    register_staging_access(render_app.module, config, connection=staging_connection)
 
 app = render_app.app
 print("[STAGING] Ready: isolated database/disk; fictional test accounts; external delivery and billing disabled.", flush=True)

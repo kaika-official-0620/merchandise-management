@@ -1,5 +1,5 @@
 {
-  "created_at": "2026-10-27T02:49:02.196842+00:00",
+  "created_at": "2026-10-27T07:46:21.515824+00:00",
   "source_files": [
     {
       "path": "account_data_inventory.py",
@@ -78,8 +78,8 @@
     },
     {
       "path": "docs/cloud-staging-handoff-2026-10-27.md",
-      "sha256": "c375c196ade561aa93572f306b054437f97d35130f0015bebc352b2b38726ee5",
-      "source_sha256": "c375c196ade561aa93572f306b054437f97d35130f0015bebc352b2b38726ee5"
+      "sha256": "64a4ed4d0c60326c38fbdaa41575dd3f569162b0ee754eee862a5fc2d14b6f3d",
+      "source_sha256": "64a4ed4d0c60326c38fbdaa41575dd3f569162b0ee754eee862a5fc2d14b6f3d"
     },
     {
       "path": "docs/customer-navigation-handoff-2026-10-26.md",
@@ -198,8 +198,8 @@
     },
     {
       "path": "render.staging.yaml",
-      "sha256": "57f5044f3a55596a05830f4138bcd987f3d42d0c933e9925bac0f2540447cd56",
-      "source_sha256": "57f5044f3a55596a05830f4138bcd987f3d42d0c933e9925bac0f2540447cd56"
+      "sha256": "3dc242a21a107b69807b5679f5dcc62d05f1b7267da9d7d84cc0150c711e116a",
+      "source_sha256": "3dc242a21a107b69807b5679f5dcc62d05f1b7267da9d7d84cc0150c711e116a"
     },
     {
       "path": "render_app.py",
@@ -220,6 +220,11 @@
       "path": "sales_agency_document_runtime_patch.py",
       "sha256": "a3611a4c4dfdaf6e9540a319e1f17001c24b23dbf36829499bd16d8fc1c8d687",
       "source_sha256": "851aa5b856697c08def17c3825c71a194b90caee118c23161d3914a344ba57a3"
+    },
+    {
+      "path": "scripts/create_staging_access.py",
+      "sha256": "f000e48c0e7abc2440f5b0bcc7ef1bfdc985543c16f24810293e2b2e44fbe571",
+      "source_sha256": "f000e48c0e7abc2440f5b0bcc7ef1bfdc985543c16f24810293e2b2e44fbe571"
     },
     {
       "path": "scripts/inspect_stage8_integrations.py",
@@ -433,8 +438,8 @@
     },
     {
       "path": "scripts/verify_staging_review_postgres.py",
-      "sha256": "aba0b5a6fbe9ba946f1e659905060d810b654bf7d1c92896a91eff4e4797cc05",
-      "source_sha256": "aba0b5a6fbe9ba946f1e659905060d810b654bf7d1c92896a91eff4e4797cc05"
+      "sha256": "13eac8b1a2a3d05945a888491c486fdf5163ed3dd11e940011cf8d4ebae1e512",
+      "source_sha256": "13eac8b1a2a3d05945a888491c486fdf5163ed3dd11e940011cf8d4ebae1e512"
     },
     {
       "path": "scripts/verify_staging_runtime.py",
@@ -732,14 +737,19 @@
       "source_sha256": "bd7d4abca7ca818d1e91ac42a5f6ae1e220bdb64dbfd66929546165ffeafd263"
     },
     {
+      "path": "staging_access.py",
+      "sha256": "e20e822d5c9c18b8f576492cc68b22829cbdbb5566543de6dc8f584cf906737c",
+      "source_sha256": "e20e822d5c9c18b8f576492cc68b22829cbdbb5566543de6dc8f584cf906737c"
+    },
+    {
       "path": "staging_app.py",
-      "sha256": "9b494d996d6ed962267c7362b8cdad562ea08337019af1de054e0c7f022379b1",
-      "source_sha256": "9b494d996d6ed962267c7362b8cdad562ea08337019af1de054e0c7f022379b1"
+      "sha256": "20aa10f595f89d7422e8cc92cd60a2049347d1e0a60e63f95b6c219c59091ac6",
+      "source_sha256": "20aa10f595f89d7422e8cc92cd60a2049347d1e0a60e63f95b6c219c59091ac6"
     },
     {
       "path": "staging_environment.py",
-      "sha256": "94d3374a1ca7807de6a2bd676dd1ed2cbc72096d664d353e827418d0ec7f923e",
-      "source_sha256": "94d3374a1ca7807de6a2bd676dd1ed2cbc72096d664d353e827418d0ec7f923e"
+      "sha256": "edc9a3c196886a2b6bc03f6c8931390d99496f3ac0874c91ba96a94ae8e86c64",
+      "source_sha256": "edc9a3c196886a2b6bc03f6c8931390d99496f3ac0874c91ba96a94ae8e86c64"
     },
     {
       "path": "staging_review.py",
@@ -2017,6 +2027,11 @@
       "source_sha256": "5f2b6cd3590cd69f65f96f9a4e931f9a1f58b5ddcfe0f6af0b7273ab3307dcf3"
     },
     {
+      "path": "tests/test_create_staging_access.py",
+      "sha256": "cf0808514a877709cf420341f4743f091a1acf9f8d96cd2794580269533efe18",
+      "source_sha256": "cf0808514a877709cf420341f4743f091a1acf9f8d96cd2794580269533efe18"
+    },
+    {
       "path": "tests/test_custody_transfer_jobs.py",
       "sha256": "87a5f5b3af833a95a6e27c8cbc34d822b7e5c9853941208d6b55f3ccfffc53fc",
       "source_sha256": "87a5f5b3af833a95a6e27c8cbc34d822b7e5c9853941208d6b55f3ccfffc53fc"
@@ -2267,9 +2282,14 @@
       "source_sha256": "a4a8fcfd76b68f756eeb854f8910e50d3718aa2fe06eb8fd0a9e80815d3dfffa"
     },
     {
+      "path": "tests/test_staging_access.py",
+      "sha256": "c49fadd29015b0c3c63d9361f5cb3a82e88afeac4fa86fe56322a8bd1c863952",
+      "source_sha256": "c49fadd29015b0c3c63d9361f5cb3a82e88afeac4fa86fe56322a8bd1c863952"
+    },
+    {
       "path": "tests/test_staging_environment.py",
-      "sha256": "db72d7bedf4b90c49018ad6512db21aafee1ab014d4d5f1e58047816da015a4f",
-      "source_sha256": "db72d7bedf4b90c49018ad6512db21aafee1ab014d4d5f1e58047816da015a4f"
+      "sha256": "1175e256a1ae3fee2dc2cc74a7adc168b6edf58052b3384d5811a2c0e4fb3871",
+      "source_sha256": "1175e256a1ae3fee2dc2cc74a7adc168b6edf58052b3384d5811a2c0e4fb3871"
     },
     {
       "path": "tests/test_staging_package.py",
@@ -2297,7 +2317,7 @@
       "source_sha256": "0e4ebe0b96f41ada0add9314a152777ea09a5e3e9424159d12b4d4c85cd4f395"
     }
   ],
-  "included": 459,
+  "included": 463,
   "data_policy": "source only; no database, uploaded business file, credential or Git history",
   "line_endings": "Text files normalized to LF; source_sha256 records the original working-copy bytes.",
   "generated_files": [

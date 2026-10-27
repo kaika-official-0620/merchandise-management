@@ -290,6 +290,12 @@ def register_staging_boundary(runtime):
             return jsonify(error={"code": "staging_disabled", "message": "検証環境では外部連携・実課金・アカウント削除・旧データの取込みを停止しています。"}), 403
         if path == "/register":
             return redirect(url_for("login"))
+        # The separate, opt-in one-use access extension performs its own
+        # same-origin/CSRF/expiry/atomic-consumption checks. Without that
+        # successfully registered extension these paths stay login-protected.
+        if (path in {"/staging/access", "/staging/access/consume"}
+                and app.extensions.get("kaika_staging_access")):
+            return None
         if (path not in {"/healthz", "/robots.txt"}
                 and not (path.startswith("/static/") and not path.startswith("/static/uploads/"))
                 and current_user.is_authenticated and current_user.username not in test_usernames):

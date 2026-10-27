@@ -24,6 +24,10 @@ services:
       # database/volume verification. No physical or digital charge is sent.
       - key: KAIKA_STAGING_REVIEW_ENABLED
         value: "1"
+      # Optional, single-use 15-minute access links for the fictional business
+      # tester only. This entrypoint is never used by the production service.
+      - key: KAIKA_STAGING_ACCESS_ENABLED
+        value: "1"
       - key: KAIKA_STAGING_DATABASE_NAME
         value: kaika_staging
       - key: DATABASE_URL

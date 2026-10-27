@@ -8,8 +8,10 @@ fixture. This does not exercise Render mounts, delivery providers or devices.
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 import hashlib
+from html.parser import HTMLParser
 import importlib
 import json
 import os
@@ -19,12 +21,17 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import traceback
 from urllib.parse import quote, urlsplit, urlunsplit
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+# Flask test_client uses this only as an in-process Host header. No HTTP client
+# connects to this hostname, and every application socket remains prohibited.
+HTTP_HOST = 'kaika-platform-staging.onrender.com'
 
 
 def safe_error(error):
@@ -35,6 +42,146 @@ def safe_error(error):
 
 def write_report(path, value):
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding='utf-8')
+
+
+def verify_access(runtime, config, access, state, state_path, users, phase_name, check):
+    """Exercise only fixture tokens; no bearer material enters reports/logs."""
+    base = 'https://' + HTTP_HOST
+    app = runtime.app
+    business_id = users['business']['id']
+
+    class Inputs(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.values = {}
+
+        def handle_starttag(self, tag, attributes):
+            attributes = dict(attributes)
+            if tag == 'input' and attributes.get('name'):
+                self.values[attributes['name']] = attributes.get('value', '')
+
+    def mint(ttl=900):
+        with closing(runtime.get_db()) as connection:
+            return access.mint_staging_access(config, connection=connection, ttl_seconds=ttl)
+
+    def claimed(token):
+        with closing(runtime.get_db()) as connection:
+            return access.claim_staging_access(config, connection=connection, token=token)
+
+    def row(token):
+        with closing(runtime.get_db()) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute('SELECT token_hash,user_id,password_fingerprint,created_at,expires_at,consumed_at '
+                    'FROM kaika_staging_access_tokens WHERE token_hash=%s', (hashlib.sha256(token.encode()).hexdigest(),))
+                return cursor.fetchone()
+
+    def prepare_client():
+        client = app.test_client()
+        response = client.get('/staging/access', base_url=base)
+        fields = Inputs()
+        fields.feed(response.get_data(as_text=True))
+        check('access_page_public_https', response.status_code == 200)
+        check('access_page_private', 'no-store' in response.headers.get('Cache-Control', '')
+              and response.headers.get('Referrer-Policy') == 'no-referrer')
+        check('access_page_session_csrf', bool(fields.values.get('csrf_token')))
+        check('access_fragment_page_markup', 'location.hash' in response.get_data(as_text=True)
+              and 'replaceState' in response.get_data(as_text=True))
+        return client, fields.values.get('csrf_token', '')
+
+    def submit(client, token, csrf, origin=base):
+        return client.post('/staging/access/consume', base_url=base,
+            json={'token': token, 'csrf_token': csrf}, headers={'Origin': origin})
+
+    check('access_extension_registered', bool(app.extensions.get('kaika_staging_access')))
+    if phase_name == 'restart':
+        check('access_restart_used_token_stays_rejected', claimed(state['used_access_token']) is None)
+        check('access_restart_pending_token_survives', claimed(state['pending_access_token']) == business_id)
+        check('access_restart_pending_becomes_one_use', claimed(state['pending_access_token']) is None)
+    token = mint()
+    stored = row(token)
+    check('access_database_hash_only', stored is not None and stored[0] == hashlib.sha256(token.encode()).hexdigest()
+          and len(stored[0]) == 64 and token not in tuple(str(value) for value in stored))
+    check('access_fixed_business_lifetime', stored[1] == business_id and stored[4] - stored[3] == 900 and stored[5] is None)
+    client, csrf = prepare_client()
+    check('access_get_does_not_consume', row(token)[5] is None)
+    check('access_cross_origin_rejected', submit(client, token, csrf, 'https://other.example.invalid').status_code == 403)
+    check('access_wrong_csrf_rejected', submit(client, token, 'fictional-wrong-csrf').status_code == 403)
+    check('access_csrf_bound_to_session', submit(app.test_client(), token, csrf).status_code == 403)
+    check('access_refusals_keep_token_unused', row(token)[5] is None)
+    consumed = submit(client, token, csrf)
+    check('access_post_one_use_login', consumed.status_code == 200 and
+          consumed.get_json() == {'ok': True, 'next': '/workspace-home'})
+    with client.session_transaction(base_url=base) as session:
+        check('access_session_business_only', session.get('_user_id') == str(business_id)
+              and all(token != str(value) for value in session.values()))
+    check('access_login_home', client.get('/workspace-home', base_url=base).status_code == 200)
+    replay_client, replay_csrf = prepare_client()
+    replay = submit(replay_client, token, replay_csrf)
+    check('access_web_replay_rejected', replay.status_code in (400, 401, 403, 410))
+    with replay_client.session_transaction(base_url=base) as session:
+        check('access_replay_stays_anonymous', '_user_id' not in session)
+    check('access_database_replay_rejected', claimed(token) is None)
+
+    expiring = mint(ttl=1)
+    time.sleep(2)
+    check('access_expired_rejected', claimed(expiring) is None and row(expiring)[5] is None)
+    ineligible = mint()
+    try:
+        with closing(runtime.get_db()) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("UPDATE users SET role='admin' WHERE id=%s", (business_id,))
+            connection.commit()
+        check('access_ineligible_user_rejected', claimed(ineligible) is None and row(ineligible)[5] is None)
+    finally:
+        with closing(runtime.get_db()) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("UPDATE users SET role='user' WHERE id=%s", (business_id,))
+            connection.commit()
+
+    racing = mint()
+    digest = hashlib.sha256(racing.encode()).hexdigest()
+    with closing(runtime.get_db()) as first, closing(runtime.get_db()) as second:
+        check('access_race_independent_connections', first.get_backend_pid() != second.get_backend_pid())
+        with first.cursor() as cursor:
+            cursor.execute('SELECT token_hash FROM kaika_staging_access_tokens WHERE token_hash=%s FOR UPDATE', (digest,))
+        started = threading.Event()
+
+        def contender():
+            started.set()
+            return access.claim_staging_access(config, connection=second, token=racing)
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            pending = executor.submit(contender)
+            try:
+                if not started.wait(5):
+                    raise AssertionError('Fixture token contender did not start')
+                waiting = False
+                deadline = time.monotonic() + 5
+                with closing(runtime.get_db()) as observer:
+                    observer.autocommit = True
+                    while time.monotonic() < deadline:
+                        with observer.cursor() as cursor:
+                            cursor.execute('SELECT wait_event_type FROM pg_stat_activity WHERE pid=%s', (second.get_backend_pid(),))
+                            wait_row = cursor.fetchone()
+                        if wait_row and wait_row[0] == 'Lock':
+                            waiting = True
+                            break
+                        time.sleep(.02)
+                check('access_race_actual_postgres_lock_wait', waiting)
+                winner = access.claim_staging_access(config, connection=first, token=racing)
+            finally:
+                first.rollback()
+            loser = pending.result(timeout=10)
+        check('access_race_exactly_one_winner', winner == business_id and loser is None)
+    check('access_race_consumption_persisted', row(racing)[5] is not None and claimed(racing) is None)
+
+    if phase_name == 'initialize':
+        # Like generated fixture account passwords, these are retained only in
+        # the owned private temporary workspace to exercise a separate process.
+        state['used_access_token'] = token
+        state['pending_access_token'] = mint()
+        write_report(state_path, state)
+        check('access_pending_token_prepared_for_restart', row(state['pending_access_token'])[5] is None)
 
 
 def phase(args):
@@ -68,9 +215,10 @@ def phase(args):
     os.environ.update({
         'DATABASE_URL': state['database_url'], 'KAIKA_RUNTIME_ENV': 'staging',
         'KAIKA_STAGING_DATABASE_NAME': state['database_name'],
-        'STAGING_HOSTNAME': 'kaika-fixture.example.invalid',
-        'PRIMARY_DOMAIN': 'kaika-fixture.example.invalid', 'SECRET_KEY': state['secret'],
+        'STAGING_HOSTNAME': HTTP_HOST,
+        'PRIMARY_DOMAIN': HTTP_HOST, 'SECRET_KEY': state['secret'],
         'KAIKA_STAGING_REVIEW_ENABLED': '1',
+        'KAIKA_STAGING_ACCESS_ENABLED': '1',
     })
     for role, password in state['passwords'].items():
         os.environ['STAGING_' + role.upper() + '_PASSWORD'] = password
@@ -90,6 +238,7 @@ def phase(args):
     try:
         boundary = importlib.import_module('staging_environment')
         review = importlib.import_module('staging_review')
+        access = importlib.import_module('staging_access')
         config = boundary.validate_environment()
         boundary.prepare_environment(config)
         boundary.install_outbound_guard()
@@ -106,6 +255,7 @@ def phase(args):
                               side_effect=lambda runtime: boundary.check_upload_disk(runtime, require_mount=False)):
                 result = review.bootstrap_staging_review(loaded.module, config, connection=connection)
             check('review_bootstrap_enabled', result.get('enabled') is True)
+            access.register_staging_access(loaded.module, config, connection=connection)
         app, runtime = loaded.app, loaded.module
         check('all_stage_2_to_7_flags_enabled', all(app.config.get(key) is True for key in review.REVIEW_FLAGS))
         check('external_and_destructive_flags_disabled', all(app.config.get(key) is False for key in review.DISABLED_REVIEW_FLAGS))
@@ -161,7 +311,7 @@ def phase(args):
                 check('grant_expiry_not_extended', cursor.fetchone()[0] == state['grant_expiry'])
                 check('photo_bytes_survive_reboot', photo.is_file() and hashlib.sha256(photo.read_bytes()).hexdigest() == state['photo_sha256'])
 
-        base = 'https://kaika-fixture.example.invalid'
+        base = 'https://' + HTTP_HOST
         clients = {}
         common = ('/workspace-home', '/inventory/items', '/finance', '/commerce', '/commerce/orders',
                   '/commerce/listings', '/payments', '/notifications', '/notifications/settings', '/plans')
@@ -206,7 +356,7 @@ def phase(args):
         login_target = urlsplit(anonymous_photo.headers.get('Location', ''))
         check('anonymous_photo_denied', anonymous_photo.status_code in (401, 403) or
               anonymous_photo.status_code in (302, 303) and
-              login_target.path == '/login' and login_target.netloc in ('', 'kaika-fixture.example.invalid')
+              login_target.path == '/login' and login_target.netloc in ('', HTTP_HOST)
               and login_target.scheme in ('', 'https'))
         check('home_requires_auth', anon.get('/workspace-home', base_url=base).status_code in (302, 303, 401))
         rejected = anon.post('/api/mobile/v1/session', json={'username': 'admin', 'password': 'fictional-rejected'}, base_url=base)
@@ -215,6 +365,7 @@ def phase(args):
         token = (token_response.get_json() or {}).get('token', '')
         mobile = anon.get('/api/mobile/v1/items', headers={'Authorization': 'Bearer ' + token}, base_url=base)
         check('native_api_same_legacy_inventory', token_response.status_code == 200 and mobile.status_code == 200 and (mobile.get_json() or {}).get('total') == 2)
+        verify_access(runtime, config, access, state, state_path, users, args.phase, check)
         try:
             with socket.socket() as denied:
                 denied.connect(('203.0.113.1', 443))

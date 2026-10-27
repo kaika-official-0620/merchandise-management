@@ -355,6 +355,25 @@ class StagingBoundaryTests(unittest.TestCase):
         self.assertEqual(self.client.get("/healthz", base_url=self.base).status_code, 200)
         self.assertEqual(self.client.get("/api/plans/me", base_url=self.base).status_code, 401)
 
+    def test_one_use_access_routes_are_not_public_without_registered_extension(self):
+        calls = []
+        self.app.add_url_rule('/staging/access', 'access_fixture', lambda: calls.append('get') or 'landing')
+        self.app.add_url_rule('/staging/access/consume', 'claim_fixture', lambda: calls.append('post') or ('proof required', 403), methods=['POST'])
+        self.assertEqual(self.client.get('/staging/access', base_url=self.base).status_code, 302)
+        self.assertEqual(self.client.post('/staging/access/consume', base_url=self.base).status_code, 302)
+        self.assertEqual(calls, [])
+
+    def test_one_use_access_registration_only_exposes_its_two_guarded_routes(self):
+        self.app.add_url_rule('/staging/access', 'access_fixture', lambda: 'landing only')
+        self.app.add_url_rule('/staging/access/consume', 'claim_fixture', lambda: ('proof required', 403), methods=['POST'])
+        self.app.extensions['kaika_staging_access'] = True
+        self.assertEqual(self.client.get('/staging/access', base_url=self.base).status_code, 200)
+        self.assertEqual(self.client.post('/staging/access/consume', base_url=self.base).status_code, 403)
+        for path in ('/staging/access/elsewhere', '/staging/access/consume/', '/admin'):
+            self.assertEqual(self.client.get(path, base_url=self.base).status_code, 302)
+        with self.client.session_transaction(base_url=self.base) as state:
+            self.assertNotIn('_user_id', state)
+
     def test_seeded_browser_login_works_without_http_basic_auth(self):
         self.assertEqual(self.login().status_code, 302)
         response = self.client.get("/", base_url=self.base)
