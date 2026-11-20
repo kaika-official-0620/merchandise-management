@@ -1,4 +1,4 @@
-"""Opt-in, one-use access to the fictional staging business account only.
+"""Opt-in, limited-use access to the fictional staging business account only.
 
 No issuance on import/startup; raw tokens are returned only to the explicit
 issuer. Browser links carry the token in a fragment, never a query/path.
@@ -25,6 +25,7 @@ HOST = 'kaika-platform-staging.onrender.com'
 USERNAME = 'staging_business'
 DEFAULT_TTL_SECONDS = 900
 MAX_TTL_SECONDS = 24 * 60 * 60
+MAX_LINK_USES = 5
 ATTEMPT_WINDOW_SECONDS = 900
 TTL_CONSTRAINT = 'kaika_staging_access_tokens_lifetime_check'
 LEGACY_TTL_CONSTRAINT = 'kaika_staging_access_tokens_check'
@@ -151,8 +152,13 @@ def _schema(cur, sqlite):
     attempt_ddl = '''CREATE TABLE IF NOT EXISTS kaika_staging_access_attempts (
         session_hash TEXT PRIMARY KEY CHECK(length(session_hash)=64),
         window_started BIGINT NOT NULL, attempt_count INTEGER NOT NULL CHECK(attempt_count>=1))'''
+    quota_ddl = f'''CREATE TABLE IF NOT EXISTS kaika_staging_access_quotas (
+        token_hash TEXT PRIMARY KEY REFERENCES kaika_staging_access_tokens(token_hash) ON DELETE RESTRICT,
+        max_uses INTEGER NOT NULL CHECK(max_uses BETWEEN 2 AND {MAX_LINK_USES}),
+        use_count INTEGER NOT NULL DEFAULT 0 CHECK(use_count BETWEEN 0 AND max_uses))'''
     cur.execute(token_ddl)
     cur.execute(attempt_ddl)
+    cur.execute(quota_ddl)
     if sqlite:
         cur.execute('''CREATE TRIGGER IF NOT EXISTS kaika_staging_access_no_delete
             BEFORE DELETE ON kaika_staging_access_tokens BEGIN SELECT RAISE(ABORT,'retain staging access evidence'); END''')
@@ -162,10 +168,17 @@ def _schema(cur, sqlite):
             NEW.password_fingerprint IS NOT OLD.password_fingerprint OR NEW.created_at IS NOT OLD.created_at OR
             NEW.expires_at IS NOT OLD.expires_at OR OLD.consumed_at IS NOT NULL OR NEW.consumed_at IS NULL
             BEGIN SELECT RAISE(ABORT,'staging access is single use'); END''')
+        cur.execute('''CREATE TRIGGER IF NOT EXISTS kaika_staging_access_quota_no_delete
+            BEFORE DELETE ON kaika_staging_access_quotas BEGIN SELECT RAISE(ABORT,'retain staging access quota'); END''')
+        cur.execute('''CREATE TRIGGER IF NOT EXISTS kaika_staging_access_quota_increment
+            BEFORE UPDATE ON kaika_staging_access_quotas WHEN NEW.token_hash IS NOT OLD.token_hash
+            OR NEW.max_uses IS NOT OLD.max_uses OR NEW.use_count != OLD.use_count + 1
+            BEGIN SELECT RAISE(ABORT,'staging access quota only permits single increments'); END''')
     else:
         from staging_review import _check_columns, _column_names, _function, _trigger
         _check_columns(cur, 'kaika_staging_access_tokens', _column_names(token_ddl))
         _check_columns(cur, 'kaika_staging_access_attempts', _column_names(attempt_ddl))
+        _check_columns(cur, 'kaika_staging_access_quotas', _column_names(quota_ddl))
         _migrate_token_lifetime(cur)
         function = '''CREATE OR REPLACE FUNCTION kaika_staging_access_guard() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
             IF TG_OP='DELETE' THEN RAISE EXCEPTION 'retain staging access evidence'; END IF;
@@ -178,13 +191,26 @@ def _schema(cur, sqlite):
         _trigger(cur, 'CREATE TRIGGER kaika_staging_access_immutable BEFORE UPDATE OR DELETE ON '
                  'kaika_staging_access_tokens FOR EACH ROW EXECUTE FUNCTION kaika_staging_access_guard()',
                  'kaika_staging_access_immutable')
+        quota_function = '''CREATE OR REPLACE FUNCTION kaika_staging_access_quota_guard()
+            RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+            IF TG_OP='DELETE' THEN RAISE EXCEPTION 'retain staging access quota'; END IF;
+            IF ROW(NEW.token_hash,NEW.max_uses) IS DISTINCT FROM ROW(OLD.token_hash,OLD.max_uses)
+                OR NEW.use_count != OLD.use_count + 1
+            THEN RAISE EXCEPTION 'staging access quota only permits single increments'; END IF;
+            RETURN NEW; END; $$'''
+        _function(cur, quota_function, 'kaika_staging_access_quota_guard')
+        _trigger(cur, 'CREATE TRIGGER kaika_staging_access_quota_increment BEFORE UPDATE OR DELETE ON '
+                 'kaika_staging_access_quotas FOR EACH ROW EXECUTE FUNCTION kaika_staging_access_quota_guard()',
+                 'kaika_staging_access_quota_increment')
 
 
-def mint_staging_access(config, *, connection, environ=None, ttl_seconds=DEFAULT_TTL_SECONDS):
+def mint_staging_access(config, *, connection, environ=None, ttl_seconds=DEFAULT_TTL_SECONDS, max_uses=1):
     """Return one raw secret to an explicit issuer; fixed seeded account only."""
     _validate(config, environ)
     if type(ttl_seconds) is not int or not 1 <= ttl_seconds <= MAX_TTL_SECONDS:
         raise StagingConfigurationError(f'Staging access lifetime must be 1 to {MAX_TTL_SECONDS} seconds.')
+    if type(max_uses) is not int or not 1 <= max_uses <= MAX_LINK_USES:
+        raise StagingConfigurationError(f'Staging access use limit must be 1 to {MAX_LINK_USES}.')
     cur = None
     try:
         cur, sqlite, tables = _scope(connection, config)
@@ -192,9 +218,13 @@ def mint_staging_access(config, *, connection, environ=None, ttl_seconds=DEFAULT
         if not user:
             raise StagingConfigurationError('The dedicated staging business account is unavailable.')
         token, now = secrets.token_urlsafe(32), _now()
+        token_hash = _digest(token)
         _execute(cur, '''INSERT INTO kaika_staging_access_tokens
             (token_hash,user_id,password_fingerprint,created_at,expires_at) VALUES (%s,%s,%s,%s,%s)''',
-            (_digest(token), user['id'], _digest(user['password_hash']), now, now + ttl_seconds), sqlite=sqlite)
+            (token_hash, user['id'], _digest(user['password_hash']), now, now + ttl_seconds), sqlite=sqlite)
+        if max_uses > 1:
+            _execute(cur, 'INSERT INTO kaika_staging_access_quotas (token_hash,max_uses) VALUES (%s,%s)',
+                     (token_hash, max_uses), sqlite=sqlite)
         connection.commit()
         return token
     except StagingConfigurationError:
@@ -209,29 +239,49 @@ def mint_staging_access(config, *, connection, environ=None, ttl_seconds=DEFAULT
 
 
 def claim_staging_access(config, *, connection, token, environ=None):
-    """Consume once and return the fixed user ID, or None; owns transaction."""
+    """Spend one permitted use and return the fixed user ID; owns transaction."""
     _validate(config, environ)
     if not isinstance(token, str) or not TOKEN_PATTERN.fullmatch(token):
         return None
     cur = None
     try:
         cur, sqlite, tables = _scope(connection, config)
+        token_hash = _digest(token)
         sql = 'SELECT * FROM kaika_staging_access_tokens WHERE token_hash=%s'
-        _execute(cur, sql + ('' if sqlite else ' FOR UPDATE'), (_digest(token),), sqlite=sqlite)
+        _execute(cur, sql + ('' if sqlite else ' FOR UPDATE'), (token_hash,), sqlite=sqlite)
         row = cur.fetchone()
         record = _dict(cur, row) if row else None
-        now = _now()
         user = _eligible(cur, sqlite, tables) if record else None
+        now = _now()
         if (not record or not user or record['user_id'] != user['id']
-                or record['consumed_at'] is not None or not record['created_at'] <= now < record['expires_at']
+                or not record['created_at'] <= now < record['expires_at']
                 or not hmac.compare_digest(record['password_fingerprint'], _digest(user['password_hash']))):
             connection.rollback()
             return None
-        _execute(cur, '''UPDATE kaika_staging_access_tokens SET consumed_at=%s
-            WHERE token_hash=%s AND consumed_at IS NULL''', (now, _digest(token)), sqlite=sqlite)
-        if cur.rowcount != 1:
+        first_use = record['consumed_at'] is None
+        _execute(cur, 'SELECT use_count FROM kaika_staging_access_quotas WHERE token_hash=%s',
+                 (token_hash,), sqlite=sqlite)
+        quota = cur.fetchone()
+        if quota is None and not first_use:
             connection.rollback()
             return None
+        if quota is not None:
+            # A pre-upgrade worker could have spent the link's original one use.
+            # Treat an inconsistent first-use marker as spent.
+            if first_use != (_dict(cur, quota)['use_count'] == 0):
+                connection.rollback()
+                return None
+            _execute(cur, '''UPDATE kaika_staging_access_quotas SET use_count=use_count+1
+                WHERE token_hash=%s AND use_count<max_uses''', (token_hash,), sqlite=sqlite)
+            if cur.rowcount != 1:
+                connection.rollback()
+                return None
+        if first_use:
+            _execute(cur, '''UPDATE kaika_staging_access_tokens SET consumed_at=%s
+                WHERE token_hash=%s AND consumed_at IS NULL''', (now, token_hash), sqlite=sqlite)
+            if cur.rowcount != 1:
+                connection.rollback()
+                return None
         connection.commit()
         return int(user['id'])
     except Exception:
@@ -267,7 +317,7 @@ def _attempt(config, connection, browser):
 
 PAGE = '''<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>開花の確認サイト</title>
 <style nonce="{{ nonce }}">body{font-family:system-ui,sans-serif;margin:0;background:#f3f6fc;color:#17243a}main{max-width:440px;margin:12vh auto;padding:28px;background:white;border-radius:16px}h1{font-size:24px}p{line-height:1.8}button{width:100%;padding:16px;background:#3359bf;border:0;border-radius:8px;color:white;font-size:18px}button:disabled{opacity:.55}a{color:#3359bf}</style></head>
-<body><main><h1>開花の確認サイト</h1><p>架空データ専用の「開花依頼ユーザー」で開きます。実際の課金・通知は行いません。</p><p>リンクは案内された有効期限内に1回だけ使えます。</p>
+<body><main><h1>開花の確認サイト</h1><p>架空データ専用の「開花依頼ユーザー」で開きます。実際の課金・通知は行いません。</p><p>リンクは案内された期限と回数の範囲で使えます。</p>
 <form id="access-form"><input type="hidden" id="csrf-token" name="csrf_token" value="{{ csrf }}"><button id="open-button" type="submit">確認サイトを開く</button></form>
 <p id="status" role="status"></p><p><a href="/login">通常のログイン画面へ</a></p><noscript>JavaScriptを有効にするか、通常のログイン画面をご利用ください。</noscript></main>
 <script nonce="{{ nonce }}">(()=>{'use strict';let token=new URLSearchParams(location.hash.slice(1)).get('token')||'';history.replaceState(null,'',location.pathname);const button=document.getElementById('open-button'),status=document.getElementById('status');
