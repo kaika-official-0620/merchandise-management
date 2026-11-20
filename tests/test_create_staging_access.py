@@ -26,7 +26,7 @@ class StagingAccessCommandTests(unittest.TestCase):
         return result, output.getvalue(), mint, driver, connection
 
     def test_no_implicit_issue_or_connection(self):
-        for args in ([], ['--ttl-seconds', '86400']):
+        for args in ([], ['--ttl-seconds', '86400', '--max-uses', '5']):
             with self.subTest(args=args):
                 result, text, mint, driver, _ = self.run_command(args)
                 self.assertEqual(result, 0)
@@ -44,6 +44,7 @@ class StagingAccessCommandTests(unittest.TestCase):
         self.assertEqual(parse_qs(parsed.fragment), {'token': ['a'*43]})
         mint.assert_called_once()
         self.assertEqual(mint.call_args.kwargs['ttl_seconds'], 900)
+        self.assertEqual(mint.call_args.kwargs['max_uses'], 1)
         self.assertIn('EXPIRES_IN_SECONDS=900;', text)
         self.assertEqual(driver.connect.call_args.kwargs['sslmode'], 'require')
         connection.close.assert_called_once()
@@ -53,7 +54,25 @@ class StagingAccessCommandTests(unittest.TestCase):
         self.assertEqual(result, 0)
         mint.assert_called_once()
         self.assertEqual(mint.call_args.kwargs['ttl_seconds'], 86400)
-        self.assertIn('EXPIRES_IN_SECONDS=86400; ACCOUNT=staging_business; SINGLE_USE=true', text)
+        self.assertEqual(mint.call_args.kwargs['max_uses'], 1)
+        self.assertIn('EXPIRES_IN_SECONDS=86400; ACCOUNT=staging_business; SINGLE_USE=true; MAX_USES=1', text)
+
+    def test_explicit_one_day_link_with_multiple_logins(self):
+        result, text, mint, _, _ = self.run_command(['--issue', '--ttl-seconds', '86400', '--max-uses', '5'])
+        self.assertEqual(result, 0)
+        mint.assert_called_once()
+        self.assertEqual(mint.call_args.kwargs['ttl_seconds'], 86400)
+        self.assertEqual(mint.call_args.kwargs['max_uses'], 5)
+        self.assertIn('EXPIRES_IN_SECONDS=86400; ACCOUNT=staging_business; SINGLE_USE=false; MAX_USES=5', text)
+
+    def test_invalid_max_uses_is_rejected_without_issuance(self):
+        for value in ('0', '6', '1.5'):
+            with self.subTest(value=value), redirect_stderr(io.StringIO()), \
+                    patch.object(command, 'validate_environment') as validate, \
+                    self.assertRaises(SystemExit) as error:
+                command.main(['--issue', '--max-uses', value])
+            self.assertEqual(error.exception.code, 2)
+            validate.assert_not_called()
 
     def test_invalid_lifetime_is_rejected_without_issuance(self):
         for value in ('0', '86401', 'one day'):
@@ -67,7 +86,7 @@ class StagingAccessCommandTests(unittest.TestCase):
     def test_disabled_or_different_host_refuses_before_issuance(self):
         for options in ({'host': 'stock.kaika-potential.co.jp'}, {'enabled': '0'}):
             with self.subTest(options=options):
-                result, text, mint, driver, _ = self.run_command(['--issue'], **options)
+                result, text, mint, driver, _ = self.run_command(['--issue', '--max-uses', '5'], **options)
                 self.assertEqual(result, 1)
                 self.assertFalse(json.loads(text)['issued'])
                 mint.assert_not_called()
