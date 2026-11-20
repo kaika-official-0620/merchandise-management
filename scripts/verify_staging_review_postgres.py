@@ -99,6 +99,12 @@ def verify_access(runtime, config, access, state, state_path, users, phase_name,
         check('access_restart_used_token_stays_rejected', claimed(state['used_access_token']) is None)
         check('access_restart_pending_token_survives', claimed(state['pending_access_token']) == business_id)
         check('access_restart_pending_becomes_one_use', claimed(state['pending_access_token']) is None)
+        full_day = mint(ttl=86400)
+        stored_day = row(full_day)
+        check('access_legacy_ceiling_migrated', stored_day[4] - stored_day[3] == 86400)
+        with patch.object(access, '_now', return_value=stored_day[4] - 1):
+            check('access_24_hour_late_claim', claimed(full_day) == business_id)
+            check('access_24_hour_replay_rejected', claimed(full_day) is None)
     token = mint()
     stored = row(token)
     check('access_database_hash_only', stored is not None and stored[0] == hashlib.sha256(token.encode()).hexdigest()
@@ -184,6 +190,15 @@ def verify_access(runtime, config, access, state, state_path, users, phase_name,
         state['pending_access_token'] = mint()
         write_report(state_path, state)
         check('access_pending_token_prepared_for_restart', row(state['pending_access_token'])[5] is None)
+        # Recreate the previous release's lifetime constraint on the disposable
+        # database. The second real app startup must migrate it without changing rows.
+        with closing(runtime.get_db()) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("""ALTER TABLE kaika_staging_access_tokens
+                    DROP CONSTRAINT kaika_staging_access_tokens_lifetime_check,
+                    ADD CONSTRAINT kaika_staging_access_tokens_check
+                    CHECK(expires_at>created_at AND expires_at-created_at<=900)""")
+            connection.commit()
 
 
 def verify_home_preferences(runtime, state, state_path, users, clients, phase_name, check):
