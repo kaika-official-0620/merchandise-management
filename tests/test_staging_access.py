@@ -136,9 +136,20 @@ class StagingAccessTests(unittest.TestCase):
         self.assertEqual(self.db.execute('SELECT COUNT(*) FROM kaika_staging_access_tokens').fetchone()[0], 0)
 
     def test_ttl_is_capped_and_not_coerced(self):
-        for ttl in (0, -1, 901, True, '900', 1.5):
+        for ttl in (0, -1, 86401, True, '900', 1.5):
             with self.subTest(ttl=ttl), self.assertRaises(StagingConfigurationError):
                 self.mint(ttl)
+
+    def test_full_day_link_can_be_used_once_after_fifteen_minutes(self):
+        issued_at = 1000
+        with patch.object(access, '_now', return_value=issued_at):
+            token = self.mint(86400)
+            expires_unused = self.mint(86400)
+        with patch.object(access, '_now', return_value=issued_at + 86399):
+            self.assertEqual(self.claim(token), 1)
+            self.assertIsNone(self.claim(token))
+        with patch.object(access, '_now', return_value=issued_at + 86400):
+            self.assertIsNone(self.claim(expires_unused))
 
     def test_claim_is_once_and_consumed_evidence_cannot_be_rewritten_or_deleted(self):
         token = self.mint()
