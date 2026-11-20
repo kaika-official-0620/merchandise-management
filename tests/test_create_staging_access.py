@@ -5,7 +5,7 @@ import os
 from types import SimpleNamespace
 import unittest
 from unittest.mock import MagicMock, patch
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from urllib.parse import urlsplit, parse_qs
 
 from scripts import create_staging_access as command
@@ -26,11 +26,13 @@ class StagingAccessCommandTests(unittest.TestCase):
         return result, output.getvalue(), mint, driver, connection
 
     def test_no_implicit_issue_or_connection(self):
-        result, text, mint, driver, _ = self.run_command([])
-        self.assertEqual(result, 0)
-        self.assertFalse(json.loads(text)['issued'])
-        mint.assert_not_called()
-        driver.connect.assert_not_called()
+        for args in ([], ['--ttl-seconds', '86400']):
+            with self.subTest(args=args):
+                result, text, mint, driver, _ = self.run_command(args)
+                self.assertEqual(result, 0)
+                self.assertFalse(json.loads(text)['issued'])
+                mint.assert_not_called()
+                driver.connect.assert_not_called()
 
     def test_explicit_issue_matches_browser_fragment_contract_and_tls(self):
         result, text, mint, driver, connection = self.run_command(['--issue'])
@@ -42,8 +44,25 @@ class StagingAccessCommandTests(unittest.TestCase):
         self.assertEqual(parse_qs(parsed.fragment), {'token': ['a'*43]})
         mint.assert_called_once()
         self.assertEqual(mint.call_args.kwargs['ttl_seconds'], 900)
+        self.assertIn('EXPIRES_IN_SECONDS=900;', text)
         self.assertEqual(driver.connect.call_args.kwargs['sslmode'], 'require')
         connection.close.assert_called_once()
+
+    def test_explicit_one_day_link_keeps_single_use(self):
+        result, text, mint, _, _ = self.run_command(['--issue', '--ttl-seconds', '86400'])
+        self.assertEqual(result, 0)
+        mint.assert_called_once()
+        self.assertEqual(mint.call_args.kwargs['ttl_seconds'], 86400)
+        self.assertIn('EXPIRES_IN_SECONDS=86400; ACCOUNT=staging_business; SINGLE_USE=true', text)
+
+    def test_invalid_lifetime_is_rejected_without_issuance(self):
+        for value in ('0', '86401', 'one day'):
+            with self.subTest(value=value), redirect_stderr(io.StringIO()), \
+                    patch.object(command, 'validate_environment') as validate, \
+                    self.assertRaises(SystemExit) as error:
+                command.main(['--issue', '--ttl-seconds', value])
+            self.assertEqual(error.exception.code, 2)
+            validate.assert_not_called()
 
     def test_disabled_or_different_host_refuses_before_issuance(self):
         for options in ({'host': 'stock.kaika-potential.co.jp'}, {'enabled': '0'}):
