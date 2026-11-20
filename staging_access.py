@@ -23,7 +23,12 @@ from staging_environment import StagingConfigurationError, validate_environment
 
 HOST = 'kaika-platform-staging.onrender.com'
 USERNAME = 'staging_business'
-MAX_TTL_SECONDS = 900
+DEFAULT_TTL_SECONDS = 900
+MAX_TTL_SECONDS = 24 * 60 * 60
+ATTEMPT_WINDOW_SECONDS = 900
+TTL_CONSTRAINT = 'kaika_staging_access_tokens_lifetime_check'
+LEGACY_TTL_CONSTRAINT = 'kaika_staging_access_tokens_check'
+TTL_EXPRESSION = f'expires_at > created_at AND expires_at - created_at <= {MAX_TTL_SECONDS}'
 MAX_ATTEMPTS = 8
 MESSAGE = 'このリンクではログインできません。新しい確認用リンクをご利用ください。'
 TOKEN_PATTERN = re.compile(r'[A-Za-z0-9_-]{43}\Z')
@@ -114,13 +119,34 @@ def _eligible(cur, sqlite, tables, *, lock=True):
     return user
 
 
+def _migrate_token_lifetime(cur):
+    """Replace the original PostgreSQL limit without changing any token rows."""
+    cur.execute("""SELECT conname, pg_get_expr(conbin, conrelid) AS expression
+        FROM pg_constraint WHERE conrelid='public.kaika_staging_access_tokens'::regclass
+        AND contype='c' AND conname IN (%s,%s)""", (TTL_CONSTRAINT, LEGACY_TTL_CONSTRAINT))
+    checks = {}
+    for row in cur.fetchall():
+        constraint = _dict(cur, row)
+        checks[constraint['conname']] = re.sub(r'[\s()]', '', constraint['expression']).lower()
+    current = re.sub(r'\s', '', TTL_EXPRESSION).lower()
+    legacy = 'expires_at>created_atandexpires_at-created_at<=900'
+    if checks.get(TTL_CONSTRAINT) == current and checks.get(LEGACY_TTL_CONSTRAINT) != legacy:
+        return
+    if TTL_CONSTRAINT in checks or checks.get(LEGACY_TTL_CONSTRAINT) != legacy:
+        raise StagingConfigurationError('Unexpected staging access lifetime constraint.')
+    cur.execute(f'''ALTER TABLE kaika_staging_access_tokens
+        ADD CONSTRAINT {TTL_CONSTRAINT} CHECK({TTL_EXPRESSION}),
+        DROP CONSTRAINT {LEGACY_TTL_CONSTRAINT}''')
+
+
 def _schema(cur, sqlite):
-    token_ddl = '''CREATE TABLE IF NOT EXISTS kaika_staging_access_tokens (
+    token_ddl = f'''CREATE TABLE IF NOT EXISTS kaika_staging_access_tokens (
         token_hash TEXT PRIMARY KEY CHECK(length(token_hash)=64),
         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
         password_fingerprint TEXT NOT NULL CHECK(length(password_fingerprint)=64),
         created_at BIGINT NOT NULL, expires_at BIGINT NOT NULL, consumed_at BIGINT,
-        CHECK(expires_at>created_at AND expires_at-created_at<=900),
+        CONSTRAINT {TTL_CONSTRAINT} CHECK({TTL_EXPRESSION}),
+        CONSTRAINT kaika_staging_access_consumption_check
         CHECK(consumed_at IS NULL OR (consumed_at>=created_at AND consumed_at<expires_at)))'''
     attempt_ddl = '''CREATE TABLE IF NOT EXISTS kaika_staging_access_attempts (
         session_hash TEXT PRIMARY KEY CHECK(length(session_hash)=64),
@@ -140,6 +166,7 @@ def _schema(cur, sqlite):
         from staging_review import _check_columns, _column_names, _function, _trigger
         _check_columns(cur, 'kaika_staging_access_tokens', _column_names(token_ddl))
         _check_columns(cur, 'kaika_staging_access_attempts', _column_names(attempt_ddl))
+        _migrate_token_lifetime(cur)
         function = '''CREATE OR REPLACE FUNCTION kaika_staging_access_guard() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
             IF TG_OP='DELETE' THEN RAISE EXCEPTION 'retain staging access evidence'; END IF;
             IF ROW(NEW.token_hash,NEW.user_id,NEW.password_fingerprint,NEW.created_at,NEW.expires_at)
@@ -153,11 +180,11 @@ def _schema(cur, sqlite):
                  'kaika_staging_access_immutable')
 
 
-def mint_staging_access(config, *, connection, environ=None, ttl_seconds=MAX_TTL_SECONDS):
+def mint_staging_access(config, *, connection, environ=None, ttl_seconds=DEFAULT_TTL_SECONDS):
     """Return one raw secret to an explicit issuer; fixed seeded account only."""
     _validate(config, environ)
     if type(ttl_seconds) is not int or not 1 <= ttl_seconds <= MAX_TTL_SECONDS:
-        raise StagingConfigurationError('Staging access lifetime must be 1 to 900 seconds.')
+        raise StagingConfigurationError(f'Staging access lifetime must be 1 to {MAX_TTL_SECONDS} seconds.')
     cur = None
     try:
         cur, sqlite, tables = _scope(connection, config)
@@ -226,7 +253,7 @@ def _attempt(config, connection, browser):
                 ELSE kaika_staging_access_attempts.attempt_count+1 END,
             window_started=CASE WHEN kaika_staging_access_attempts.window_started<=%s THEN %s
                 ELSE kaika_staging_access_attempts.window_started END RETURNING attempt_count''',
-            (_digest(browser), now, now-MAX_TTL_SECONDS, now-MAX_TTL_SECONDS, now), sqlite=sqlite)
+            (_digest(browser), now, now-ATTEMPT_WINDOW_SECONDS, now-ATTEMPT_WINDOW_SECONDS, now), sqlite=sqlite)
         allowed = _dict(cur, cur.fetchone())['attempt_count'] <= MAX_ATTEMPTS
         connection.commit()
         return allowed
@@ -240,7 +267,7 @@ def _attempt(config, connection, browser):
 
 PAGE = '''<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>開花の確認サイト</title>
 <style nonce="{{ nonce }}">body{font-family:system-ui,sans-serif;margin:0;background:#f3f6fc;color:#17243a}main{max-width:440px;margin:12vh auto;padding:28px;background:white;border-radius:16px}h1{font-size:24px}p{line-height:1.8}button{width:100%;padding:16px;background:#3359bf;border:0;border-radius:8px;color:white;font-size:18px}button:disabled{opacity:.55}a{color:#3359bf}</style></head>
-<body><main><h1>開花の確認サイト</h1><p>架空データ専用の「開花依頼ユーザー」で開きます。実際の課金・通知は行いません。</p><p>リンクは発行から15分以内に1回だけ使えます。</p>
+<body><main><h1>開花の確認サイト</h1><p>架空データ専用の「開花依頼ユーザー」で開きます。実際の課金・通知は行いません。</p><p>リンクは案内された有効期限内に1回だけ使えます。</p>
 <form id="access-form"><input type="hidden" id="csrf-token" name="csrf_token" value="{{ csrf }}"><button id="open-button" type="submit">確認サイトを開く</button></form>
 <p id="status" role="status"></p><p><a href="/login">通常のログイン画面へ</a></p><noscript>JavaScriptを有効にするか、通常のログイン画面をご利用ください。</noscript></main>
 <script nonce="{{ nonce }}">(()=>{'use strict';let token=new URLSearchParams(location.hash.slice(1)).get('token')||'';history.replaceState(null,'',location.pathname);const button=document.getElementById('open-button'),status=document.getElementById('status');
