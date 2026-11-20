@@ -97,8 +97,8 @@ class StagingAccessTests(unittest.TestCase):
         self.client = self.app.test_client()
         self.origin = 'https://' + access.HOST
 
-    def mint(self, ttl=900):
-        return access.mint_staging_access(self.config, connection=self.db, ttl_seconds=ttl)
+    def mint(self, ttl=900, *, max_uses=1):
+        return access.mint_staging_access(self.config, connection=self.db, ttl_seconds=ttl, max_uses=max_uses)
 
     def claim(self, token):
         return access.claim_staging_access(self.config, connection=self.db, token=token)
@@ -150,6 +150,37 @@ class StagingAccessTests(unittest.TestCase):
             self.assertIsNone(self.claim(token))
         with patch.object(access, '_now', return_value=issued_at + 86400):
             self.assertIsNone(self.claim(expires_unused))
+
+    def test_limit_rejects_excess_and_invalid_types_before_inserting_token(self):
+        for limit in (0, 6, True, '5', 2.0):
+            with self.subTest(limit=limit), self.assertRaises(StagingConfigurationError):
+                self.mint(max_uses=limit)
+        self.assertEqual(self.db.execute('SELECT COUNT(*) FROM kaika_staging_access_tokens').fetchone()[0], 0)
+
+    def test_quota_cannot_be_reset_or_raised_and_preserves_first_use(self):
+        token = self.mint(86400, max_uses=5)
+        self.assertEqual(self.claim(token), 1)
+        first_claimed_at = self.consumed()
+        for sql in ('UPDATE kaika_staging_access_quotas SET use_count=0',
+                    'UPDATE kaika_staging_access_quotas SET use_count=use_count+2',
+                    'UPDATE kaika_staging_access_quotas SET max_uses=4',
+                    'DELETE FROM kaika_staging_access_quotas'):
+            with self.subTest(sql=sql), self.assertRaises(sqlite3.IntegrityError):
+                self.db.execute(sql)
+            self.db.rollback()
+        self.assertEqual(self.claim(token), 1)
+        self.assertEqual(self.consumed(), first_claimed_at)
+        self.assertEqual(tuple(self.db.execute('SELECT use_count,max_uses FROM kaika_staging_access_quotas').fetchone()),
+                         (2, 5))
+
+    def test_consumed_token_with_unused_quota_fails_closed(self):
+        token = self.mint(86400, max_uses=5)
+        # Simulate an earlier server version spending the original token without
+        # updating the new quota table during a rollback.
+        self.db.execute('UPDATE kaika_staging_access_tokens SET consumed_at=created_at')
+        self.db.commit()
+        self.assertIsNone(self.claim(token))
+        self.assertEqual(self.db.execute('SELECT use_count FROM kaika_staging_access_quotas').fetchone()[0], 0)
 
     def test_claim_is_once_and_consumed_evidence_cannot_be_rewritten_or_deleted(self):
         token = self.mint()
