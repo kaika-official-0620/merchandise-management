@@ -62,9 +62,9 @@ def verify_access(runtime, config, access, state, state_path, users, phase_name,
             if tag == 'input' and attributes.get('name'):
                 self.values[attributes['name']] = attributes.get('value', '')
 
-    def mint(ttl=900):
+    def mint(ttl=900, *, max_uses=1):
         with closing(runtime.get_db()) as connection:
-            return access.mint_staging_access(config, connection=connection, ttl_seconds=ttl)
+            return access.mint_staging_access(config, connection=connection, ttl_seconds=ttl, max_uses=max_uses)
 
     def claimed(token):
         with closing(runtime.get_db()) as connection:
@@ -94,11 +94,56 @@ def verify_access(runtime, config, access, state, state_path, users, phase_name,
         return client.post('/staging/access/consume', base_url=base,
             json={'token': token, 'csrf_token': csrf}, headers={'Origin': origin})
 
+    def verify_final_use_race(max_uses):
+        prefix = 'access_race' if max_uses == 1 else 'access_multi_final_use_race'
+        racing = mint(max_uses=max_uses)
+        if max_uses > 1:
+            check(prefix + '_prior_claims', [claimed(racing) for _ in range(max_uses - 1)] ==
+                  [business_id] * (max_uses - 1))
+        digest = hashlib.sha256(racing.encode()).hexdigest()
+        with closing(runtime.get_db()) as first, closing(runtime.get_db()) as second:
+            check(prefix + '_independent_connections', first.get_backend_pid() != second.get_backend_pid())
+            with first.cursor() as cursor:
+                cursor.execute('SELECT token_hash FROM kaika_staging_access_tokens WHERE token_hash=%s FOR UPDATE', (digest,))
+            started = threading.Event()
+
+            def contender():
+                started.set()
+                return access.claim_staging_access(config, connection=second, token=racing)
+
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                pending = executor.submit(contender)
+                try:
+                    if not started.wait(5):
+                        raise AssertionError('Fixture token contender did not start')
+                    waiting = False
+                    deadline = time.monotonic() + 5
+                    with closing(runtime.get_db()) as observer:
+                        observer.autocommit = True
+                        while time.monotonic() < deadline:
+                            with observer.cursor() as cursor:
+                                cursor.execute('SELECT wait_event_type FROM pg_stat_activity WHERE pid=%s', (second.get_backend_pid(),))
+                                wait_row = cursor.fetchone()
+                            if wait_row and wait_row[0] == 'Lock':
+                                waiting = True
+                                break
+                            time.sleep(.02)
+                    check(prefix + '_actual_postgres_lock_wait', waiting)
+                    winner = access.claim_staging_access(config, connection=first, token=racing)
+                finally:
+                    first.rollback()
+                loser = pending.result(timeout=10)
+            check(prefix + '_exactly_one_winner', winner == business_id and loser is None)
+        check(prefix + '_consumption_persisted', row(racing)[5] is not None and claimed(racing) is None)
+
     check('access_extension_registered', bool(app.extensions.get('kaika_staging_access')))
     if phase_name == 'restart':
         check('access_restart_used_token_stays_rejected', claimed(state['used_access_token']) is None)
         check('access_restart_pending_token_survives', claimed(state['pending_access_token']) == business_id)
         check('access_restart_pending_becomes_one_use', claimed(state['pending_access_token']) is None)
+        partially_used = state['partially_used_access_token']
+        check('access_multi_restart_preserves_remaining_uses',
+              [claimed(partially_used) for _ in range(4)] == [business_id, business_id, business_id, None])
         full_day = mint(ttl=86400)
         stored_day = row(full_day)
         check('access_legacy_ceiling_migrated', stored_day[4] - stored_day[3] == 86400)
@@ -130,6 +175,28 @@ def verify_access(runtime, config, access, state, state_path, users, phase_name,
         check('access_replay_stays_anonymous', '_user_id' not in session)
     check('access_database_replay_rejected', claimed(token) is None)
 
+    # The first phase later recreates the legacy 15-minute schema. Exercise
+    # the full 24-hour lifetime only after that schema has been re-migrated.
+    repeat = mint(ttl=86400 if phase_name == 'restart' else 900, max_uses=5)
+    statuses, sessions = [], []
+    for _ in range(6):
+        repeat_client, repeat_csrf = prepare_client()
+        response = submit(repeat_client, repeat, repeat_csrf)
+        statuses.append(response.status_code)
+        with repeat_client.session_transaction(base_url=base) as session:
+            sessions.append(session.get('_user_id'))
+    check('access_multi_five_web_claims_then_rejected',
+          statuses[:5] == [200] * 5 and statuses[5] in (400, 401, 403, 410))
+    check('access_multi_only_five_fictional_business_sessions',
+          sessions == [str(business_id)] * 5 + [None])
+
+    expiring_repeat = mint(ttl=30, max_uses=5)
+    repeat_deadline = row(expiring_repeat)[4]
+    with patch.object(access, '_now', return_value=repeat_deadline - 1):
+        check('access_multi_can_claim_just_before_expiry', claimed(expiring_repeat) == business_id)
+    with patch.object(access, '_now', return_value=repeat_deadline):
+        check('access_multi_expiry_rejects_unspent_uses', claimed(expiring_repeat) is None)
+
     expiring = mint(ttl=1)
     time.sleep(2)
     check('access_expired_rejected', claimed(expiring) is None and row(expiring)[5] is None)
@@ -146,48 +213,17 @@ def verify_access(runtime, config, access, state, state_path, users, phase_name,
                 cursor.execute("UPDATE users SET role='user' WHERE id=%s", (business_id,))
             connection.commit()
 
-    racing = mint()
-    digest = hashlib.sha256(racing.encode()).hexdigest()
-    with closing(runtime.get_db()) as first, closing(runtime.get_db()) as second:
-        check('access_race_independent_connections', first.get_backend_pid() != second.get_backend_pid())
-        with first.cursor() as cursor:
-            cursor.execute('SELECT token_hash FROM kaika_staging_access_tokens WHERE token_hash=%s FOR UPDATE', (digest,))
-        started = threading.Event()
-
-        def contender():
-            started.set()
-            return access.claim_staging_access(config, connection=second, token=racing)
-
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            pending = executor.submit(contender)
-            try:
-                if not started.wait(5):
-                    raise AssertionError('Fixture token contender did not start')
-                waiting = False
-                deadline = time.monotonic() + 5
-                with closing(runtime.get_db()) as observer:
-                    observer.autocommit = True
-                    while time.monotonic() < deadline:
-                        with observer.cursor() as cursor:
-                            cursor.execute('SELECT wait_event_type FROM pg_stat_activity WHERE pid=%s', (second.get_backend_pid(),))
-                            wait_row = cursor.fetchone()
-                        if wait_row and wait_row[0] == 'Lock':
-                            waiting = True
-                            break
-                        time.sleep(.02)
-                check('access_race_actual_postgres_lock_wait', waiting)
-                winner = access.claim_staging_access(config, connection=first, token=racing)
-            finally:
-                first.rollback()
-            loser = pending.result(timeout=10)
-        check('access_race_exactly_one_winner', winner == business_id and loser is None)
-    check('access_race_consumption_persisted', row(racing)[5] is not None and claimed(racing) is None)
+    verify_final_use_race(1)
+    verify_final_use_race(5)
 
     if phase_name == 'initialize':
         # Like generated fixture account passwords, these are retained only in
         # the owned private temporary workspace to exercise a separate process.
         state['used_access_token'] = token
         state['pending_access_token'] = mint()
+        state['partially_used_access_token'] = mint(max_uses=5)
+        check('access_multi_partially_used_before_restart',
+              [claimed(state['partially_used_access_token']) for _ in range(2)] == [business_id] * 2)
         write_report(state_path, state)
         check('access_pending_token_prepared_for_restart', row(state['pending_access_token'])[5] is None)
         # Recreate the previous release's lifetime constraint on the disposable
