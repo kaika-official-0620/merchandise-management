@@ -118,6 +118,8 @@ class SelfInventoryTest(unittest.TestCase):
                              PRODUCT_IMAGE_MAX_DIMENSION=1200, PRODUCT_IMAGE_JPEG_QUALITY=85,
                              GOOGLE_DRIVE_ALLOWED_MIME_TYPES={"image/jpeg": ("JPEG", ".jpg"), "image/png": ("PNG", ".png"), "image/webp": ("WEBP", ".webp")})
         exec(self.image_code, image_globals)
+        self.normalize_image = image_globals["normalize_product_image_bytes"]
+        self.image_error = image_globals["ProductImageValidationError"]
         self.runtime = SimpleNamespace(app=self.app, DATABASE_URL=None, get_db=self.db,
                                        save_validated_product_image=image_globals["save_validated_product_image"],
                                        remove_uploaded_relative_paths=image_globals["remove_uploaded_relative_paths"])
@@ -345,6 +347,55 @@ class SelfInventoryTest(unittest.TestCase):
         self.assertRegex(path, r"^uploads/self_[0-9a-f]{32}\.png$")
         with Image.open(self.static / path) as photo:
             self.assertEqual(photo.format, "PNG")
+
+    def test_gallery_jpeg_with_generic_multipart_type_keeps_orientation(self):
+        raw = io.BytesIO()
+        orientation = Image.Exif()
+        orientation[274] = 6
+        Image.new("RGB", (1300, 640), "blue").save(raw, format="JPEG", exif=orientation)
+        raw.seek(0)
+        item_id = self.create({"photo": (raw, "IMG_1234.JPG", "application/octet-stream")})
+        with Image.open(self.static / self.record(item_id)["photo_path"]) as photo:
+            self.assertEqual(photo.format, "JPEG")
+            self.assertEqual(photo.height, 1200)
+            self.assertLess(photo.width, photo.height)
+            self.assertFalse(photo.getexif())
+
+    def test_gallery_formats_save_as_jpeg_on_registration_and_edit(self):
+        from pillow_heif import from_pillow
+
+        heic, avif, mpo = io.BytesIO(), io.BytesIO(), io.BytesIO()
+        photo = Image.new("RGB", (64, 32), "orange")
+        from_pillow(photo).save(heic)
+        photo.save(avif, format="AVIF")
+        photo.save(mpo, format="MPO", save_all=True, append_images=[photo.copy()])
+        for data in (heic, avif, mpo):
+            data.seek(0)
+
+        # A photo library may present a JPEG filename and MIME for different bytes.
+        item_id = self.create({"photo": (heic, "IMG_1234.jpeg", "image/jpeg"),
+                               "additional_photos": [(avif, "IMG_1235.avif", "image/avif")]})
+        url, data = self.form(item_id)
+        data["additional_photos"] = [(mpo, "IMG_1236.jpg", "image/jpeg")]
+        self.assertEqual(self.client.post(url, data=data).status_code, 302)
+        record = self.record(item_id)
+        paths = [record["photo_path"], *json.loads(record["additional_photos"])]
+        self.assertEqual(len(paths), 3)
+        for path in paths:
+            with Image.open(self.static / path) as saved:
+                self.assertTrue(path.endswith(".jpg"))
+                self.assertEqual(saved.format, "JPEG")
+                self.assertEqual(saved.size, (64, 32))
+
+    def test_gallery_decode_does_not_change_google_drive_photo_policy(self):
+        from pillow_heif import from_pillow
+
+        heic = io.BytesIO()
+        from_pillow(Image.new("RGB", (8, 8), "blue")).save(heic)
+        with self.assertRaises(self.image_error):
+            self.normalize_image(heic.getvalue(), expected_mime_type="image/jpeg")
+        with self.assertRaises(self.image_error):
+            self.normalize_image(self.png()[0].getvalue(), expected_mime_type="image/jpeg")
 
     def test_bad_second_image_rolls_back_record_and_first_image(self):
         url, data = self.form()
