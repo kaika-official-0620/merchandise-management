@@ -8,6 +8,7 @@ import io
 import json
 import re
 import unittest
+from unittest.mock import patch
 import test_self_inventory as fixtures
 from inventory_custody import register_inventory_custody
 from self_inventory import _lock_submission
@@ -32,8 +33,13 @@ class InventoryCustodyTests(unittest.TestCase):
         with self.db() as conn:
             conn.execute('ALTER TABLE merchandise ADD COLUMN storage_start_date TEXT')
             conn.execute('ALTER TABLE merchandise ADD COLUMN other_cost INTEGER DEFAULT 0')
+            conn.execute('ALTER TABLE merchandise ADD COLUMN kaika_product_code TEXT')
             conn.execute('ALTER TABLE users ADD COLUMN display_name TEXT')
             conn.execute('ALTER TABLE users ADD COLUMN username TEXT')
+            conn.execute('ALTER TABLE users ADD COLUMN admin_permissions TEXT')
+            conn.execute('UPDATE users SET admin_permissions=? WHERE id=3', ('["merchandise","invoices"]',))
+            conn.execute("""INSERT INTO users (id, role, entitled, subscription_status, admin_permissions)
+                VALUES (6,'admin',1,'active','["invoices"]'), (7,'admin',1,'active','["merchandise"]')""")
             conn.execute("UPDATE users SET username='fixture-user-' || id,display_name='架空利用者' || id")
         self.custody = register_inventory_custody(self.runtime)
         # These inert sentinels exercise the before_request guard independently
@@ -190,6 +196,101 @@ class InventoryCustodyTests(unittest.TestCase):
         self.assertEqual(self.client.post('/inventory/intakes/new', data=token).status_code, 404)
         self.assertEqual(self.client.post('/inventory/intakes/new', data=owner_token).status_code, 400)
         self.assertEqual(self.client.get(f'/inventory/self/{item_id}/sale').status_code, 404)
+
+    def test_intake_staff_permissions_cover_list_detail_and_receipt_mutations(self):
+        intake_id, _ = self.new_intake()
+        self.receive(intake_id)
+        detail = f'/inventory/intakes/{intake_id}'
+        register = detail + '/register'
+        for route in ('/inventory/intakes', detail, register):
+            self.login(6)
+            self.assertEqual(self.client.get(route).status_code, 403)
+            self.login(7)
+            self.assertEqual(self.client.get(route).status_code, 200)
+        self.login(6)
+        for route, purpose in ((detail, 'intake'), (register, 'register_received')):
+            version = self.row('SELECT version FROM inventory_intakes WHERE id=?', (intake_id,))['version']
+            token = self.custody.signer.dumps({'user': 6, 'purpose': purpose, 'target': intake_id,
+                                               'version': version, 'nonce': 'fixture-role-scope'})
+            self.assertEqual(self.client.post(route, data={'operation_token': token, 'csrf_token': 'fixture-csrf',
+                                                           'action':'complete','product_name':'架空商品'}).status_code, 403)
+        self.assertEqual(self.row('SELECT status FROM inventory_intakes WHERE id=?',(intake_id,))['status'], 'received')
+        self.assertEqual(self.row('SELECT COUNT(*) AS n FROM inventory_intake_items')['n'], 0)
+        self.login(1)
+        self.assertEqual(self.client.get(detail).status_code, 200)
+        self.assertEqual(self.client.get(register).status_code, 403)
+
+    def test_prefilled_candidates_only_include_eligible_items_and_registration_post_does_not_read_all(self):
+        open_item = self.create()
+        pending_item = self.create()
+        self.new_intake(pending_item)
+        shipped_item = self.create()
+        locked_item = self.create()
+        with self.db() as conn:
+            conn.execute('UPDATE merchandise SET is_shipped=1 WHERE id=?',(shipped_item,))
+            conn.execute("INSERT INTO sale_requests (merchandise_id,status) VALUES (?,'pending')",(locked_item,))
+        path = '/inventory/intakes/new'
+        page = self.client.get(f'{path}?item_id={locked_item}').get_data(as_text=True)
+        self.assertIn(f'name="item_ids" value="{open_item}"', page)
+        for blocked in (pending_item, shipped_item, locked_item):
+            self.assertNotIn(f'name="item_ids" value="{blocked}"', page)
+        self.assertRegex(page, r'name="kind" value="registration"\s+checked')
+        valid_prefill = self.client.get(f'{path}?item_id={open_item}').get_data(as_text=True)
+        self.assertRegex(valid_prefill, r'name="kind" value="transfer"\s+checked')
+
+        registration = self.operation(path)
+        helper = self.app.extensions['kaika_self_inventory']
+        with patch.object(helper, 'workflow_lock_queries', side_effect=AssertionError('no candidate query')):
+            response = self.client.post(path, data={**registration,'kind':'registration','expected_count':'1'})
+        self.assertEqual(response.status_code, 302)
+
+    def test_intake_search_combines_scope_status_and_safe_keyword(self):
+        own_item = self.create()
+        with self.db() as conn:
+            conn.execute("UPDATE merchandise SET kaika_product_code='TEST-111' WHERE id=?",(own_item,))
+        own, _ = self.new_intake(own_item)
+        self.action(own, 'approve', user=3, shipping_instructions='架空発送先')
+        self.login(2)
+        other, _ = self.new_intake()
+        self.login(1)
+        path = '/inventory/intakes'
+        owned = self.client.get(path+'?q=test-111&status=approved').get_data(as_text=True)
+        self.assertIn(f'受付 #{own} ·', owned)
+        self.assertNotIn(f'受付 #{other} ·', self.client.get(path+f'?q=%23{other}').get_data(as_text=True))
+        self.assertIn('条件に一致する受付はありません', self.client.get(path+'?q=%25').get_data(as_text=True))
+        self.login(7)
+        self.assertIn(f'受付 #{other} ·', self.client.get(path+'?q=架空利用者2').get_data(as_text=True))
+        self.assertNotIn(f'受付 #{own} ·', self.client.get(path+'?status=requested').get_data(as_text=True))
+
+    def test_intake_list_pages_keep_customer_scope(self):
+        with self.db() as conn:
+            conn.executemany("""INSERT INTO inventory_intakes (user_id,kind,status,expected_count,submission_hash)
+                VALUES (?,'registration','requested',1,?)""",
+                [(1, f'fixture-page-{number}') for number in range(31)] + [(2, 'fixture-other-page')])
+        path = '/inventory/intakes?status=requested'
+        first = self.client.get(path).get_data(as_text=True)
+        second = self.client.get(path + '&page=2').get_data(as_text=True)
+        self.assertIn('受付 #31 ·', first)
+        self.assertNotIn('受付 #32 ·', first)
+        self.assertNotIn('受付 #1 ·', first)
+        self.assertIn('次のページ', first)
+        self.assertIn('受付 #1 ·', second)
+        self.assertNotIn('受付 #2 ·', second)
+        self.assertNotIn('次のページ', second)
+
+    def test_receipt_discrepancy_is_private_and_does_not_change_custody(self):
+        item = self.create()
+        intake_id, _ = self.new_intake(item)
+        self.action(intake_id, 'approve', user=7, shipping_instructions='架空発送先')
+        path = f'/inventory/intakes/{intake_id}'
+        details = self.action(intake_id, 'report_discrepancy', user=7, observed_count='0', discrepancy_note='内部向け架空差異')
+        self.assertEqual(self.client.post(path, data=details).status_code, 409)
+        self.assertIn('内部向け架空差異', self.client.get(path).get_data(as_text=True))
+        self.assertEqual(self.row('SELECT status,received_count FROM inventory_intakes WHERE id=?',(intake_id,)),
+                         {'status':'approved','received_count':None})
+        self.assertEqual(self.record(item)['custody_location'], 'self')
+        self.login(1)
+        self.assertNotIn('内部向け架空差異', self.client.get(path).get_data(as_text=True))
 
     def test_csrf_and_wrong_operation_tokens_do_not_create_intakes(self):
         item_id = self.create()

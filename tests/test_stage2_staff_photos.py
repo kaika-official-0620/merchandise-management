@@ -115,7 +115,6 @@ class Stage2StaffPhotosTests(unittest.TestCase):
             self.assertEqual(self.submit(data).status_code, 403)
         self.login(3)
         with self.db() as conn:
-            conn.execute('ALTER TABLE users ADD COLUMN admin_permissions TEXT')
             conn.execute('UPDATE users SET admin_permissions=? WHERE id=3', ('["payments"]',))
         self.assertEqual(self.client.get(self.path_url).status_code, 403)
         self.assertEqual(self.submit(data).status_code, 403)

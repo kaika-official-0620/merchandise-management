@@ -48,6 +48,10 @@ class User(UserMixin):
     def is_admin(self):
         return self.role in {"admin", "owner"}
 
+    def has_permission(self, permission):
+        permissions = json.loads(getattr(self, "admin_permissions", None) or "[]")
+        return self.role == "owner" or (self.role == "admin" and (not permissions or permission in permissions))
+
 
 class Plans:
     enabled = True
@@ -447,6 +451,10 @@ class SelfInventoryTest(unittest.TestCase):
             cur.execute("""INSERT INTO feature_subscriptions
                 (provider, subscription_id, user_id, plan_code, status, period_end, verified_at)
                 VALUES ('stripe', 'sub_fixture', 1, 'normal', 'active', ?, ?)""", (now + 3600, now))
+        self.assertEqual(self.client.get("/inventory/self/new").status_code, 403)
+        with plans.db(write=True) as cur:
+            cur.execute("INSERT INTO feature_manual_grants (user_id,plan_code,expires_at) VALUES (1,'normal',?)",
+                        (now + 3600,))
 
         def read_form(item_id=None):
             url = f"/inventory/self/{item_id}/edit" if item_id else "/inventory/self/new"
@@ -473,7 +481,7 @@ class SelfInventoryTest(unittest.TestCase):
         new_url, new_data = read_form()
 
         with plans.db(write=True) as cur:
-            cur.execute("UPDATE feature_subscriptions SET period_end=? WHERE subscription_id='sub_fixture'", (now - 1,))
+            cur.execute("UPDATE feature_manual_grants SET expires_at=? WHERE user_id=1", (now - 1,))
         self.assertEqual(self.client.get(new_url).status_code, 403)
         self.assertEqual(self.client.get(edit_url).status_code, 403)
         # Valid forms opened before expiry cannot bypass the fresh entitlement check.

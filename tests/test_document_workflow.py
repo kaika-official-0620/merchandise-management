@@ -182,6 +182,29 @@ class DocumentWorkflowTests(unittest.TestCase):
         self.assertEqual(self.client.get(docs[0]['url']).status_code,200)
         self.assertEqual(self.client.get('/admin/customer-submissions/estimate/102').status_code,404)
 
+    def test_inbox_can_find_older_records_and_keeps_date_filters_in_japan_time(self):
+        table = KINDS['estimate'][0]
+        with self.connect() as db:
+            db.executemany(f'INSERT INTO {table}(id,user_id,status,document_scope,document_no,updated_at) VALUES (?,?,?,?,?,?)',
+                [(doc_id, 1, 'submitted', 'client_incoming', f'LATER-{doc_id}', '2026-10-28 08:00:00') for doc_id in range(100, 305)] + [
+                    (90, 2, 'submitted', 'client_incoming', 'OLDER_90', '2026-10-27 15:15:00'),
+                    (91, 2, 'submitted', 'client_incoming', 'MORNING_91', '2026-10-27 14:59:00'),
+                    (92, 2, 'submitted', 'admin_created', 'OLDER_92', '2026-10-27 15:15:00'),
+                ])
+        self.login(9)
+        first = self.client.get('/admin/customer-submissions?category=estimate').get_json(force=True)
+        fifth = self.client.get('/admin/customer-submissions?category=estimate&page=5').get_json(force=True)
+        self.assertEqual(len(first), 50)
+        self.assertEqual(first[0]['id'], 304)
+        self.assertIn(90, {row['id'] for row in fifth})
+        self.assertNotIn(92, {row['id'] for row in fifth})
+        filtered = self.client.get('/admin/customer-submissions', query_string={
+            'q': 'older_', 'category': 'estimate', 'received_from': '2026-10-28', 'received_through': '2026-10-28',
+        }).get_json(force=True)
+        self.assertEqual([(row['id'], row['sent_at']) for row in filtered], [(90, '2026/10/28 00:15')])
+        self.assertIn('received_through=2026-10-28', filtered[0]['url'])
+        self.assertEqual(self.client.get(filtered[0]['url']).status_code, 200)
+
     def test_calculation_detail_uses_matching_table(self):
         self.add_doc(kind='calculation')
         self.assertEqual(self.send(kind='calculation').status_code,302)

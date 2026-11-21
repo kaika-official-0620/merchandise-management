@@ -146,6 +146,14 @@ class InventoryRegistryWebTests(unittest.TestCase):
         detail = self.client.get('/inventory/items/' + self.item)
         self.assertNotIn('name="operation_token"', detail.get_data(as_text=True))
 
+    def test_staff_datetime_fields_have_browser_compatible_defaults(self):
+        self.login()
+        detail = self.client.get('/inventory/items/' + self.item)
+        self.assertEqual(detail.status_code, 200)
+        for field in ('occurred_at', 'performed_at'):
+            self.assertRegex(detail.get_data(as_text=True),
+                rf'name="{field}" value="\d{{4}}-\d{{2}}-\d{{2}}T\d{{2}}:\d{{2}}:\d{{2}}\.\d{{3}}"')
+
     def test_work_requires_csrf_and_actor_bound_operation(self):
         self.login()
         form = self.item_form('work')
