@@ -390,7 +390,7 @@
                 <div class="form-group">
                     <label>メイン写真（1枚目）</label>
                     <div class="kaika-image-picker__choices">
-                        <input class="kaika-image-picker__input" type="file" id="photo" name="photo" accept="image/jpeg,image/png,image/webp">
+                        <input class="kaika-image-picker__input" type="file" id="photo" name="photo" accept="image/*">
                         <label class="kaika-image-picker__button" for="photo">PC / 端末から選択</label>
                         <button type="button" id="google-drive-photo-btn" class="kaika-image-picker__button kaika-image-picker__button--drive" disabled>Google Driveから選択</button>
                     </div>
@@ -400,7 +400,7 @@
                 <div class="form-group">
                     <label>追加写真（最大19枚）</label>
                     <div class="kaika-image-picker__choices">
-                        <input class="kaika-image-picker__input" type="file" id="additional_photos" name="additional_photos" accept="image/jpeg,image/png,image/webp" multiple>
+                        <input class="kaika-image-picker__input" type="file" id="additional_photos" name="additional_photos" accept="image/*" multiple>
                         <label class="kaika-image-picker__button" for="additional_photos">PC / 端末から選択</label>
                         <button type="button" id="google-drive-additional-btn" class="kaika-image-picker__button kaika-image-picker__button--drive" disabled>Google Driveから選択</button>
                     </div>
@@ -1682,8 +1682,11 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             const reader = new FileReader();
+            // If the browser cannot decode the gallery photo, let the server validate it.
+            reader.onerror = reader.onabort = () => resolve(file);
             reader.onload = function(e) {
                 const img = new Image();
+                img.onerror = () => resolve(file);
                 img.onload = function() {
                     if (img.width <= MAX_WIDTH && img.height <= MAX_HEIGHT) {
                         resolve(file);
@@ -1709,9 +1712,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     canvas.width = width;
                     canvas.height = height;
                     const ctx = canvas.getContext('2d');
+                    if (!ctx) { resolve(file); return; }
                     ctx.drawImage(img, 0, 0, width, height);
                     
                     canvas.toBlob(function(blob) {
+                        if (!blob) { resolve(file); return; }
                         const resizedFile = new File([blob], file.name, {
                             type: 'image/jpeg',
                             lastModified: Date.now()
