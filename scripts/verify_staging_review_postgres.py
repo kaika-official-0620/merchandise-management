@@ -26,7 +26,7 @@ import tempfile
 import threading
 import time
 import traceback
-from urllib.parse import quote, urlsplit, urlunsplit
+from urllib.parse import quote, urlencode, urlsplit, urlunsplit
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -235,6 +235,68 @@ def verify_access(runtime, config, access, state, state_path, users, phase_name,
                     ADD CONSTRAINT kaika_staging_access_tokens_check
                     CHECK(expires_at>created_at AND expires_at-created_at<=900)""")
             connection.commit()
+
+
+def verify_product_list_return(client, phase_name, check):
+    """Follow the real sale correction and its product-list return link."""
+    class Page(HTMLParser):
+        def __init__(self, response):
+            super().__init__()
+            self.tokens = {}
+            self.links = {}
+            self.feed(response.get_data(as_text=True))
+
+        def handle_starttag(self, tag, attributes):
+            fields = dict(attributes)
+            if tag == 'input' and fields.get('type') == 'hidden' and fields.get('name'):
+                self.tokens[fields['name']] = fields.get('value', '')
+            if tag == 'a' and fields.get('href'):
+                self.links.setdefault(fields['href'], set()).update(fields.get('class', '').split())
+
+    base = 'https://' + HTTP_HOST
+    new_path = '/inventory/self/new'
+    name = 'fictional-product-return-' + phase_name
+    create = Page(client.get(new_path, base_url=base))
+    created = client.post(new_path, base_url=base, data={**create.tokens, 'product_name': name})
+    detail_path = urlsplit(created.location or '').path
+    check('product_return_created_own_item', created.status_code == 302 and detail_path.startswith('/view/'))
+    if created.status_code != 302 or not detail_path.startswith('/view/'):
+        return
+    sale_path = '/inventory/self/' + detail_path.rsplit('/', 1)[-1] + '/sale'
+    values = {'action': 'sale', 'sale_date': '2026-09-10', 'sale_price': '6000',
+              'shipping_cost': '500', 'commission': '300', 'other_cost': '0'}
+    sale_form = Page(client.get(sale_path, base_url=base))
+    sold = client.post(sale_path, base_url=base, data={**sale_form.tokens, **values})
+    check('product_return_sale_saved', sold.status_code == 302 and sold.location == detail_path)
+
+    # These are the Referer and explicit back_url shapes that previously sent
+    # the detail's list link to the sale editor rather than the product list.
+    detail_after_sale = Page(client.get(detail_path, base_url=base, headers={'Referer': base + sale_path}))
+    explicit_editor = Page(client.get(detail_path, base_url=base, query_string={'back_url': sale_path}))
+    check('product_return_editor_referrer_goes_to_product_list',
+          'context-back-inline' in detail_after_sale.links.get('/', []))
+    check('product_return_explicit_editor_url_goes_to_product_list',
+          'context-back-inline' in explicit_editor.links.get('/', []))
+
+    list_path = '/?' + urlencode({'filter': 'sold', 'search': name, 'sort': 'sold_newest'})
+    filtered_list = client.get(list_path, base_url=base)
+    sale_link = next((link for link in Page(filtered_list).links if
+                      urlsplit(link).path == sale_path and '?' in link), None)
+    check('product_return_sold_list_links_to_sale_editor', filtered_list.status_code == 200 and sale_link is not None)
+    if sale_link is None:
+        return
+    correction = Page(client.get(sale_link, base_url=base, headers={'Referer': base + list_path}))
+    saved = client.post(sale_link, base_url=base, data={**correction.tokens, **values,
+                        'sale_price': '6100', 'correction_reason': 'fixture correction'},
+                        headers={'Referer': base + sale_link})
+    check('product_return_sold_correction_saved', saved.status_code == 302 and bool(saved.location))
+    if not saved.location:
+        return
+    detail = Page(client.get(saved.location, base_url=base, headers={'Referer': base + sale_link}))
+    back = client.get(list_path, base_url=base)
+    check('product_return_sold_correction_keeps_original_list',
+          'context-back-inline' in detail.links.get(list_path, []) and back.status_code == 200
+          and name in back.get_data(as_text=True))
 
 
 def verify_home_preferences(runtime, state, state_path, users, clients, phase_name, check):
@@ -890,6 +952,7 @@ def phase(args):
         verify_access(runtime, config, access, state, state_path, users, args.phase, check)
         verify_documents(runtime, state, state_path, users, clients, args.phase, check)
         verify_source_documents(runtime, state, state_path, users, clients, args.phase, check)
+        verify_product_list_return(clients['business'], args.phase, check)
         try:
             with socket.socket() as denied:
                 denied.connect(('203.0.113.1', 443))
