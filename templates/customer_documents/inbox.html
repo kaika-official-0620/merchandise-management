@@ -3,9 +3,34 @@
 {% block content %}
 <h1>お客様から届いた書類</h1>
 <p>お客様が「開花へ送る」を押した書類を表示します。下書き・作成済み未送信の書類は含みません。</p>
-<div style="overflow-x:auto"><table class="table"><thead><tr><th>受信日時</th><th>お客様</th><th>書類</th><th>書類番号</th><th>確認</th></tr></thead><tbody>
+<form class="customer-documents-filters" method="get" action="{{ url_for('admin_customer_submissions') }}">
+  <label for="doc-q">書類番号・お客様名</label>
+  <input type="search" id="doc-q" name="q" value="{{ filters.q }}" maxlength="100">
+  <label for="doc-category">書類の種類</label>
+  <select id="doc-category" name="category"><option value="">すべて</option>{% for key, title in categories.items() %}<option value="{{ key }}"{% if filters.category == key %} selected{% endif %}>{{ title }}</option>{% endfor %}</select>
+  <label for="doc-from">受信日（開始）</label>
+  <input type="date" id="doc-from" name="received_from" value="{{ filters.received_from }}">
+  <label for="doc-through">受信日（終了）</label>
+  <input type="date" id="doc-through" name="received_through" value="{{ filters.received_through }}">
+  <div class="customer-documents-filter-actions"><button type="submit" class="btn btn-primary">絞り込む</button><a class="btn btn-secondary" href="{{ url_for('admin_customer_submissions') }}">条件をクリア</a></div>
+</form>
+<style>
+.customer-documents-filters{display:grid;grid-template-columns:max-content minmax(0,24rem);gap:.65rem 1rem;align-items:center;margin:1rem 0}
+.customer-documents-filters input,.customer-documents-filters select{min-height:44px;min-width:0;width:100%;box-sizing:border-box}
+.customer-documents-filter-actions{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:.5rem}
+.customer-documents-page{display:flex;flex-wrap:wrap;align-items:center;gap:.75rem;margin:1rem 0}
+@media(max-width:560px){.customer-documents-filters{grid-template-columns:minmax(0,1fr);gap:.4rem}.customer-documents-filters label{margin-top:.35rem}}
+</style>
+<div style="overflow-x:auto"><table class="table"><thead><tr><th>受信日時（日本時間）</th><th>お客様</th><th>書類</th><th>書類番号</th><th>確認</th></tr></thead><tbody>
 {% for doc in submissions %}<tr><td>{{ doc.sent_at }}</td><td>{{ doc.customer or 'お客様' }}</td><td>{{ doc.title }}</td><td>{{ doc.number }}</td><td><a class="btn btn-secondary" href="{{ doc.url }}">内容を確認</a></td></tr>
-{% else %}<tr><td colspan="5">届いている書類はありません。</td></tr>{% endfor %}
+{% else %}<tr><td colspan="5">条件に合う書類はありません。</td></tr>{% endfor %}
 </tbody></table></div>
+{% if filters.page > 1 or has_next %}
+<nav class="customer-documents-page" aria-label="書類受付のページ">
+  {% if filters.page > 1 %}<a class="btn btn-secondary" href="{{ url_for('admin_customer_submissions', q=filters.q, category=filters.category, received_from=filters.received_from, received_through=filters.received_through, page=filters.page-1) }}">前のページ</a>{% endif %}
+  <span>{{ filters.page }}ページ</span>
+  {% if has_next %}<a class="btn btn-secondary" href="{{ url_for('admin_customer_submissions', q=filters.q, category=filters.category, received_from=filters.received_from, received_through=filters.received_through, page=filters.page+1) }}">次のページ</a>{% endif %}
+</nav>
+{% endif %}
 <p>「内容を確認」から受領した明細を確認できます。商品の作業記録や料金の確認は、それぞれの業務画面で行います。</p>
 {% endblock %}
