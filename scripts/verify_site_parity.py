@@ -320,18 +320,20 @@ def exercise_workflows(module, preview, users, clients, request, report):
                 continue
             arguments = {name: ('user' if name == 'role' else 999999) for name in rules[0].arguments}
             guarded_paths[endpoint] = url_for(endpoint, **arguments)
+    from security_access import CUSTOMER_DOCUMENT_MUTATIONS
     for endpoint, path in guarded_paths.items():
         before = database_fingerprint()
+        role = 'normal' if endpoint in CUSTOMER_DOCUMENT_MUTATIONS else 'admin'
         anonymous = request('anonymous', path, label='guarded_mutation_requires_login')
         check(endpoint + ' rejects anonymous mutation entry', anonymous is not None and anonymous.status_code == 401 and
               database_fingerprint() == before)
-        confirmation = request('admin', path, label='guarded_mutation_confirmation')
+        confirmation = request(role, path, label='guarded_mutation_confirmation')
         confirmation_fields = tokens(confirmation, security=True) if confirmation is not None else {}
         check(endpoint + ' GET only confirms without changing records', confirmation is not None and confirmation.status_code == 200 and
               bool(confirmation_fields.get('security_csrf_token')) and database_fingerprint() == before)
-        head = request('admin', path, 'HEAD', label='guarded_mutation_head')
+        head = request(role, path, 'HEAD', label='guarded_mutation_head')
         check(endpoint + ' HEAD leaves records unchanged', head is not None and head.status_code == 200 and database_fingerprint() == before)
-        rejected = request('admin', path, 'POST', {}, 'guarded_mutation_missing_csrf')
+        rejected = request(role, path, 'POST', {}, 'guarded_mutation_missing_csrf')
         check(endpoint + ' POST requires CSRF without changing records', rejected is not None and rejected.status_code == 400 and
               database_fingerprint() == before)
 
