@@ -18,6 +18,7 @@ from flask import abort, flash, g, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from werkzeug.exceptions import HTTPException
+from customer_navigation import customer_product_detail_url, customer_product_list_url
 from stage2_self_management import (basic_self_management_allowed, enabled as stage2_enabled,
     enforce_new_registration, photo_summary, record_item_photos, registration_quota, require_schema)
 
@@ -305,6 +306,8 @@ class SelfInventory:
 
     def form(self, item=None, error=None, locked=False, status=200):
         values = dict(item or {})
+        list_url = customer_product_list_url(request.args.get("back_url"), request.referrer)
+        return_url = customer_product_detail_url(item["id"], list_url) if item else list_url
         quota, photos_usage = None, None
         if stage2_enabled(self.app):
             with self.connection() as (_, cur):
@@ -313,7 +316,7 @@ class SelfInventory:
                     photos_usage = photo_summary(cur, item['id'], current_user.id, self.postgres)
         if error and request.method == "POST":
             values.update({key: request.form.get(key, "") for key in (*TEXT_LIMITS, *MONEY_FIELDS, "purchase_date")})
-        return render_template("self_inventory_form.html", item=item, values=values, error=error,
+        return render_template("self_inventory_form.html", item=item, values=values, error=error, return_url=return_url,
                                locked=locked, additional_photos=self.photos(item),
                                submission_token=self.token(item), csrf_token_value=self.plans.csrf_token(),
                                stage2_quota=quota, photos_usage=photos_usage,
@@ -334,6 +337,7 @@ class SelfInventory:
 
         self.plans.check_csrf()
         token = self.check_token(item_id)
+        list_url = customer_product_list_url(request.args.get("back_url"), request.referrer)
         created = []
         try:
             with self.connection(write=True) as (conn, cur):
@@ -354,7 +358,7 @@ class SelfInventory:
                     cur.execute(f"SELECT merchandise_id FROM self_inventory_items WHERE submission_hash = {self.mark} AND user_id = {self.mark}", (submission_hash, current_user.id))
                     previous = _row(cur.fetchone(), cur)
                     if previous:
-                        return redirect(url_for("view_item", id=previous["merchandise_id"]))
+                        return redirect(customer_product_detail_url(previous["merchandise_id"], list_url))
                     if stage2_enabled(self.app):
                         enforce_new_registration(cur, current_user.id, self.app, self.postgres)
                 values = self.values()
@@ -388,8 +392,8 @@ class SelfInventory:
                                                       'after': values}, ensure_ascii=False, default=str))
             flash("商品を登録しました" if item is None else "商品情報を保存しました", "success")
             if item is None and request.form.get('continue_register') == '1':
-                return redirect(url_for('self_inventory_new'))
-            return redirect(url_for("view_item", id=item_id))
+                return redirect(url_for('self_inventory_new', back_url=list_url if list_url != url_for('index') else None))
+            return redirect(customer_product_detail_url(item_id, list_url))
         except Exception as exc:
             cleanup = getattr(self.runtime, "remove_uploaded_relative_paths", None)
             if created and callable(cleanup):

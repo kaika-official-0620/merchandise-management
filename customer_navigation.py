@@ -3,6 +3,8 @@
 The destinations keep their existing authentication, ownership and plan guards.
 This module groups them; a visible link never grants access to its destination.
 """
+from urllib.parse import urlsplit, urlunsplit
+
 from flask import Blueprint, abort, current_app, g, render_template, request, url_for
 from flask_login import current_user, login_required
 
@@ -33,6 +35,32 @@ def destination(endpoint, **values):
     if endpoint not in current_app.view_functions:
         return None
     return url_for(endpoint, **values)
+
+
+def customer_product_list_url(*candidates):
+    """Keep the product list's filters while refusing returns to action pages."""
+    list_path = url_for('index')
+    current_host = urlsplit(request.host_url).netloc
+    for candidate in candidates:
+        if not candidate:
+            continue
+        try:
+            parsed = urlsplit(candidate.strip())
+        except ValueError:
+            continue
+        if parsed.path != list_path:
+            continue
+        if parsed.netloc and parsed.netloc != current_host:
+            continue
+        if parsed.scheme and (parsed.scheme not in ('http', 'https') or not parsed.netloc):
+            continue
+        return urlunsplit(('', '', list_path, parsed.query, parsed.fragment))
+    return list_path
+
+
+def customer_product_detail_url(item_id, list_url):
+    back_url = list_url if list_url != url_for('index') else None
+    return url_for('view_item', id=item_id, back_url=back_url)
 
 
 def current_section(endpoint, args=None):

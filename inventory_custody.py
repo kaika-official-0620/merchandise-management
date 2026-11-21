@@ -18,6 +18,7 @@ from flask_login import current_user, login_required
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from werkzeug.exceptions import HTTPException
 
+from customer_navigation import customer_product_detail_url, customer_product_list_url
 from self_inventory import _row, _truthy, _lock_submission
 from stage2_self_management import (basic_self_management_allowed, enabled as stage2_enabled,
     record_item_photos, require_schema)
@@ -314,10 +315,12 @@ class InventoryCustody:
 
     def sale(self, item_id):
         self.require_user(basic=True)
+        list_url = customer_product_list_url(request.args.get('back_url'), request.referrer)
+        detail_url = customer_product_detail_url(item_id, list_url)
         if request.method == 'GET':
             with self.db() as (_, cur):
                 item = self.own_item(cur, item_id)
-            return render_template('self_inventory_sale.html', item=item,
+            return render_template('self_inventory_sale.html', item=item, detail_url=detail_url,
                                    operation_token=self.token('sale', item_id, item['custody_version']),
                                    csrf_token_value=self.plans.csrf_token(), today=self.runtime.get_jst_now().date().isoformat(),
                                    stage2_self_records=stage2_enabled(self.app))
@@ -370,7 +373,7 @@ class InventoryCustody:
                        details=json.dumps({'before':before,'after':updates,'reason':request.form.get('correction_reason',''),
                            'registry_sale_observation_id': (registry_result or {}).get('self_sale_observation_id')},ensure_ascii=False,default=str))
         flash('ご自身の販売記録を保存しました。開花への作業依頼は発生しません。', 'success')
-        return redirect(url_for('view_item', id=item_id))
+        return redirect(detail_url)
 
     def new_intake(self):
         self.require_user()

@@ -26,6 +26,7 @@ from kaika_fee_counts import is_kaika_fee_item, is_kaika_fee_client
 from backup_restore_guard import legacy_restore_block_reason
 from runtime_security import require_session_secret, install_runtime_security, legacy_operation_disabled
 from recovery_runtime_guard import guard_new_connection
+from customer_navigation import customer_product_list_url
 from decimal import Decimal
 from datetime import datetime, timedelta, date, timezone
 from urllib.parse import quote, urlparse, urlsplit, urlunsplit
@@ -3072,6 +3073,9 @@ def resolve_internal_back_url(candidate, fallback=''):
     return normalized
 
 def get_item_back_url(fallback):
+    if not (current_user.is_admin() or current_user.is_owner()):
+        return customer_product_list_url(request.args.get('back_url'), request.referrer)
+
     explicit_back_url = resolve_internal_back_url(request.args.get('back_url', ''), '')
     if explicit_back_url:
         return explicit_back_url
@@ -29570,7 +29574,7 @@ class GoogleDriveRequestError(ProductImageValidationError):
 
 
 def normalize_product_image_bytes(raw_bytes, expected_mime_type=None):
-    """実画像をデコードし、商品画像の1200px方針へ正規化する。"""
+    """Validate decoded product photos and normalize to the supported web formats."""
     from PIL import Image, ImageOps, UnidentifiedImageError
 
     if not raw_bytes:
@@ -29578,41 +29582,66 @@ def normalize_product_image_bytes(raw_bytes, expected_mime_type=None):
     if len(raw_bytes) > GOOGLE_DRIVE_IMAGE_MAX_BYTES:
         raise ProductImageValidationError('画像ファイルのサイズ上限を超えています。')
 
-    try:
-        with warnings.catch_warnings():
-            warnings.simplefilter('error', Image.DecompressionBombWarning)
-            with Image.open(io.BytesIO(raw_bytes)) as probe:
-                actual_format = (probe.format or '').upper()
-                width, height = probe.size
-                probe.verify()
-    except (UnidentifiedImageError, OSError, SyntaxError, Image.DecompressionBombWarning) as exc:
-        raise ProductImageValidationError('有効な画像ファイルではありません。') from exc
-
     format_to_mime = {
         'JPEG': 'image/jpeg',
         'PNG': 'image/png',
         'WEBP': 'image/webp',
     }
-    actual_mime_type = format_to_mime.get(actual_format)
-    if not actual_mime_type:
-        raise ProductImageValidationError('JPEG、PNG、WebP画像だけ選択できます。')
-    if expected_mime_type and expected_mime_type != actual_mime_type:
-        raise ProductImageValidationError('DriveのMIMEタイプと画像内容が一致しません。')
-    if width <= 0 or height <= 0 or width * height > PRODUCT_IMAGE_MAX_PIXELS:
-        raise ProductImageValidationError('画像の画素数が上限を超えています。')
+    allow_gallery = expected_mime_type is None
+    if allow_gallery:
+        format_to_mime.update(HEIF='image/jpeg', AVIF='image/jpeg', MPO='image/jpeg')
+
+    def open_source():
+        stream = io.BytesIO(raw_bytes)
+        # HEIF is recognized from the file header and decoded only here, so
+        # support attachments and documents don't inherit a new Pillow decoder.
+        if allow_gallery and raw_bytes[4:8] == b'ftyp':
+            from pillow_heif import HeifImageFile, get_file_mimetype
+            if get_file_mimetype(raw_bytes[:12]) in ('image/heic', 'image/heif'):
+                return HeifImageFile(stream)
+        return Image.open(stream)
+
+    def require_size(image):
+        width, height = image.size
+        if width <= 0 or height <= 0 or width * height > PRODUCT_IMAGE_MAX_PIXELS:
+            raise ProductImageValidationError('画像の画素数が上限を超えています。')
 
     try:
         with warnings.catch_warnings():
             warnings.simplefilter('error', Image.DecompressionBombWarning)
-            with Image.open(io.BytesIO(raw_bytes)) as source:
+            with open_source() as probe:
+                output_mime_type = format_to_mime.get((probe.format or '').upper())
+                if not output_mime_type:
+                    supported = 'JPEG・PNG・WebP・HEIC/HEIF・AVIF' if allow_gallery else 'JPEG・PNG・WebP'
+                    raise ProductImageValidationError(f'{supported}の写真を選んでください。')
+                if expected_mime_type and expected_mime_type != output_mime_type:
+                    raise ProductImageValidationError('DriveのMIMEタイプと画像内容が一致しません。')
+                require_size(probe)
+                probe.verify()
+    except ProductImageValidationError:
+        raise
+    except (Image.DecompressionBombError, Image.DecompressionBombWarning) as exc:
+        raise ProductImageValidationError('画像の画素数が上限を超えています。') from exc
+    except (UnidentifiedImageError, OSError, SyntaxError, ValueError, RuntimeError, EOFError) as exc:
+        message = ('写真を読み込めませんでした。写真ライブラリから選び直してください。'
+                   if allow_gallery else '有効な画像ファイルではありません。')
+        raise ProductImageValidationError(message) from exc
+
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter('error', Image.DecompressionBombWarning)
+            with open_source() as source:
                 source.load()
+                require_size(source)
                 image = ImageOps.exif_transpose(source)
                 image.thumbnail(
                     (PRODUCT_IMAGE_MAX_DIMENSION, PRODUCT_IMAGE_MAX_DIMENSION),
                     Image.Resampling.LANCZOS,
                 )
+                for key in ('exif', 'xmp', 'XML:com.adobe.xmp', 'Raw profile type exif'):
+                    image.info.pop(key, None)
                 output = io.BytesIO()
-                if actual_format == 'JPEG':
+                if output_mime_type == 'image/jpeg':
                     if image.mode not in ('RGB', 'L'):
                         background = Image.new('RGB', image.size, 'white')
                         if 'A' in image.getbands():
@@ -29626,7 +29655,7 @@ def normalize_product_image_bytes(raw_bytes, expected_mime_type=None):
                         quality=PRODUCT_IMAGE_JPEG_QUALITY,
                         optimize=True,
                     )
-                elif actual_format == 'PNG':
+                elif output_mime_type == 'image/png':
                     image.save(output, format='PNG', optimize=True)
                 else:
                     image.save(
@@ -29635,13 +29664,17 @@ def normalize_product_image_bytes(raw_bytes, expected_mime_type=None):
                         quality=PRODUCT_IMAGE_JPEG_QUALITY,
                         method=6,
                     )
-    except (OSError, SyntaxError, Image.DecompressionBombWarning) as exc:
+    except ProductImageValidationError:
+        raise
+    except (Image.DecompressionBombError, Image.DecompressionBombWarning) as exc:
+        raise ProductImageValidationError('画像の画素数が上限を超えています。') from exc
+    except (OSError, SyntaxError, ValueError, RuntimeError, EOFError) as exc:
         raise ProductImageValidationError('画像を安全な形式へ変換できませんでした。') from exc
 
     normalized = output.getvalue()
     if not normalized or len(normalized) > GOOGLE_DRIVE_IMAGE_MAX_BYTES:
         raise ProductImageValidationError('変換後の画像サイズが上限を超えています。')
-    return normalized, actual_mime_type, GOOGLE_DRIVE_ALLOWED_MIME_TYPES[actual_mime_type][1]
+    return normalized, output_mime_type, GOOGLE_DRIVE_ALLOWED_MIME_TYPES[output_mime_type][1]
 
 
 def read_limited_product_image(stream, max_bytes=None):
