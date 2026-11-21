@@ -27,6 +27,7 @@ from backup_restore_guard import legacy_restore_block_reason
 from runtime_security import require_session_secret, install_runtime_security, legacy_operation_disabled
 from recovery_runtime_guard import guard_new_connection
 from customer_navigation import customer_product_list_url
+from document_workflow import is_issued_staff_document_status
 from quote_documents import allocate_quote_number, ensure_quote_number_schema, validate_quote_dates
 from decimal import Decimal
 from datetime import datetime, timedelta, date, timezone
@@ -6894,11 +6895,13 @@ def document_no_has_prefix(document, *prefixes):
 
 def is_user_created_invoice_document(invoice):
     document_scope = (row_value(invoice, 'document_scope') or '').strip()
-    if is_truthy_document_flag(row_value(invoice, 'source_admin_kaitori_id')):
+    if any(is_truthy_document_flag(row_value(invoice, key)) for key in (
+        'source_admin_kaitori_id', 'sales_agency_request_id', 'created_by_admin_id',
+    )):
         return False
     if document_scope == 'admin_kaitori':
         return False
-    if document_no_has_prefix(invoice, 'KT-'):
+    if any(str(row_value(invoice, key) or '').strip().upper().startswith('KT-') for key in ('invoice_no', 'document_no')):
         return False
     return True
 
@@ -6922,10 +6925,20 @@ def is_user_deletable_mitsumori_document(mitsumori):
     return bool(mitsumori) and is_user_created_mitsumori_document(mitsumori) and is_deletable_document_status(row_value(mitsumori, 'status'))
 
 
+def is_staff_keisan_document(keisan):
+    return is_truthy_document_flag(row_value(keisan, 'is_admin_created')) or document_no_has_prefix(keisan, 'AK-')
+
+
+def is_user_visible_keisan_document(keisan):
+    return bool(keisan) and (
+        not is_staff_keisan_document(keisan) or is_issued_staff_document_status(row_value(keisan, 'status'))
+    )
+
+
 def is_user_deletable_keisan_document(keisan):
     return (
         bool(keisan)
-        and not is_truthy_document_flag(row_value(keisan, 'is_admin_created'))
+        and not is_staff_keisan_document(keisan)
         and is_deletable_document_status(row_value(keisan, 'status'))
     )
 
@@ -28646,6 +28659,8 @@ def user_keisan_list():
         
         for row in cur.fetchall():
             item = dict(row)
+            if not is_user_visible_keisan_document(item):
+                continue
             for key in ['created_at', 'updated_at', 'issue_date']:
                 if item.get(key) and hasattr(item[key], 'strftime'):
                     item[key] = item[key].strftime('%Y-%m-%d %H:%M:%S') if key.endswith('_at') else item[key].strftime('%Y-%m-%d')
@@ -28795,7 +28810,11 @@ def user_keisan_edit(id):
         return redirect(url_for('documents'))
     
     # 管理者作成の計算書は編集不可
-    if is_truthy_document_flag(keisan.get('is_admin_created')):
+    if is_staff_keisan_document(keisan):
+        cur.close()
+        conn.close()
+        if not is_user_visible_keisan_document(keisan):
+            abort(404)
         flash('管理者が発行した計算書は編集できません。閲覧とPDF出力のみ可能です。', 'error')
         return redirect(url_for('user_keisan_view', id=id))
     
@@ -28898,9 +28917,11 @@ def user_keisan_view(id):
             (id, current_user.id),
         )
         keisan = cur.fetchone()
-        if keisan:
+        if is_user_visible_keisan_document(keisan):
             keisan = dict(keisan)
             cur.execute("UPDATE user_keisan SET is_read = 1 WHERE id = %s", (id,))
+        else:
+            keisan = None
         cur.execute("SELECT * FROM user_keisan_items WHERE keisan_id = %s ORDER BY item_no", (id,))
         items = [dict(row) for row in cur.fetchall()]
     else:
@@ -28916,9 +28937,11 @@ def user_keisan_view(id):
             (id, current_user.id),
         )
         keisan = cur.fetchone()
-        if keisan:
+        if is_user_visible_keisan_document(keisan):
             keisan = dict(keisan)
             cur.execute("UPDATE user_keisan SET is_read = 1 WHERE id = ?", (id,))
+        else:
+            keisan = None
         cur.execute("SELECT * FROM user_keisan_items WHERE keisan_id = ? ORDER BY item_no", (id,))
         items = [dict(row) for row in cur.fetchall()]
     
@@ -28982,6 +29005,8 @@ def user_keisan_download(id):
     finally:
         cur.close()
         conn.close()
+    if not current_user.is_admin() and keisan and not is_user_visible_keisan_document(keisan):
+        abort(404)
 
     if not keisan:
         flash('計算書が見つかりません', 'error')
@@ -29032,12 +29057,13 @@ def user_keisan_pdf(id):
             (id, current_user.id),
         )
         keisan = cur.fetchone()
-        if keisan:
+        if is_user_visible_keisan_document(keisan):
             keisan = dict(keisan)
             cur.execute("UPDATE user_keisan SET is_read = 1 WHERE id = %s", (id,))
             cur.execute("SELECT * FROM user_keisan_items WHERE keisan_id = %s ORDER BY item_no", (id,))
             items = [dict(row) for row in cur.fetchall()]
         else:
+            keisan = None
             items = []
     else:
         cur = conn.cursor()
@@ -29052,7 +29078,7 @@ def user_keisan_pdf(id):
             (id, current_user.id),
         )
         row = cur.fetchone()
-        if row:
+        if is_user_visible_keisan_document(row):
             columns = [d[0] for d in cur.description]
             keisan = dict(zip(columns, row))
             cur.execute("UPDATE user_keisan SET is_read = 1 WHERE id = ?", (id,))
@@ -29086,20 +29112,20 @@ def user_keisan_delete(id):
     
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT status, is_admin_created FROM user_keisan WHERE id = %s AND user_id = %s", (id, current_user.id))
+        cur.execute("SELECT status, is_admin_created, document_no FROM user_keisan WHERE id = %s AND user_id = %s", (id, current_user.id))
         keisan = cur.fetchone()
         if is_user_deletable_keisan_document(keisan):
             cur.execute("DELETE FROM user_keisan_items WHERE keisan_id = %s", (id,))
             cur.execute("DELETE FROM user_keisan WHERE id = %s", (id,))
             conn.commit()
             flash('計算書を削除しました', 'success')
-        elif keisan and is_truthy_document_flag(keisan.get('is_admin_created')):
+        elif keisan and is_staff_keisan_document(keisan):
             flash('管理者が発行した計算書は削除できません', 'error')
         else:
             flash('完了済みの計算書は削除できません', 'error')
     else:
         cur = conn.cursor()
-        cur.execute("SELECT status, is_admin_created FROM user_keisan WHERE id = ? AND user_id = ?", (id, current_user.id))
+        cur.execute("SELECT status, is_admin_created, document_no FROM user_keisan WHERE id = ? AND user_id = ?", (id, current_user.id))
         keisan = cur.fetchone()
         if keisan:
             keisan = dict(keisan)
@@ -29108,7 +29134,7 @@ def user_keisan_delete(id):
             cur.execute("DELETE FROM user_keisan WHERE id = ?", (id,))
             conn.commit()
             flash('計算書を削除しました', 'success')
-        elif keisan and is_truthy_document_flag(keisan.get('is_admin_created')):
+        elif keisan and is_staff_keisan_document(keisan):
             flash('管理者が発行した計算書は削除できません', 'error')
         else:
             flash('完了済みの計算書は削除できません', 'error')

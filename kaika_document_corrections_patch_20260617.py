@@ -8,7 +8,8 @@ from datetime import datetime
 
 from flask import abort, flash, make_response, redirect, render_template, request, url_for
 from flask_login import current_user
-from document_workflow import STAFF_INBOX_EVENT
+from customer_navigation import is_customer
+from document_workflow import ISSUED_STAFF_DOCUMENT_STATUSES, STAFF_INBOX_EVENT, is_issued_staff_document_status
 from quote_documents import allocate_quote_number, validate_quote_dates
 
 
@@ -554,9 +555,9 @@ def apply(module):
     def source_invoice_is_actionable(invoice):
         if not invoice:
             return False
-        status = (invoice.get("status") or "sent").strip()
+        status = (invoice.get("status") or "").strip().lower()
         scope = (invoice.get("document_scope") or "client_outgoing").strip()
-        return scope == "client_outgoing" and status not in {"draft", "in_progress", FINAL_DOCUMENT_STATUS}
+        return scope == "client_outgoing" and is_issued_staff_document_status(status) and status not in {"replaced", "差替え済み"}
 
     def linked_mitsumori_id_for_invoice(cur, invoice_id, user_id):
         cur.execute(
@@ -594,13 +595,15 @@ def apply(module):
     def pending_source_invoices(user_id):
         conn, cur = open_cursor()
         try:
+            issued_statuses = tuple(status for status in ISSUED_STAFF_DOCUMENT_STATUSES if status not in {"replaced", "差替え済み"})
+            issued_placeholders = ", ".join(mark() for _ in issued_statuses)
             cur.execute(
                 f"""
                 SELECT i.*
                 FROM invoices i
                 WHERE i.sender_id = {mark()}
                   AND COALESCE(i.document_scope, 'client_outgoing') = 'client_outgoing'
-                  AND COALESCE(i.status, 'sent') NOT IN ('draft', 'in_progress', {mark()})
+                  AND LOWER(TRIM(COALESCE(i.status, ''))) IN ({issued_placeholders})
                   AND NOT EXISTS (
                       SELECT 1
                       FROM user_mitsumori m
@@ -610,7 +613,7 @@ def apply(module):
                   )
                 ORDER BY COALESCE(i.issue_date, i.created_at) DESC, i.id DESC
                 """,
-                (user_id, FINAL_DOCUMENT_STATUS, FINAL_DOCUMENT_STATUS),
+                (user_id, *issued_statuses, FINAL_DOCUMENT_STATUS),
             )
             return rows_to_dicts(cur.fetchall())
         finally:
@@ -779,6 +782,9 @@ def apply(module):
         return normalized
 
     def user_mitsumori_list_v3():
+        if not is_customer():
+            abort(403)
+        is_user_deletable = module.is_user_deletable_mitsumori_document
         conn, cur = open_cursor()
         try:
             cur.execute(
@@ -792,7 +798,7 @@ def apply(module):
                 """,
                 (current_user.id,),
             )
-            mitsumori_list = rows_to_dicts(cur.fetchall())
+            mitsumori_list = [row for row in rows_to_dicts(cur.fetchall()) if is_user_deletable(row)]
         finally:
             cur.close()
             conn.close()
@@ -803,6 +809,8 @@ def apply(module):
         )
 
     def user_document_list_v3():
+        if not is_customer():
+            abort(403)
         is_user_deletable_mitsumori_document = getattr(module, "is_user_deletable_mitsumori_document", lambda _doc: True)
         conn, cur = open_cursor()
         try:
@@ -827,6 +835,7 @@ def apply(module):
                 SELECT *
                 FROM user_kaitori_shoudaku
                 WHERE user_id = {mark()}
+                  AND COALESCE(NULLIF(TRIM(document_scope), ''), 'client_incoming') = 'client_incoming'
                   AND COALESCE(status, 'draft') IN ('draft', 'in_progress')
                 ORDER BY updated_at DESC, created_at DESC
                 """,
@@ -845,6 +854,8 @@ def apply(module):
         )
 
     def user_mitsumori_requests_v3():
+        if not is_customer():
+            abort(403)
         return render_template(
             "mitsumori_requests.html",
             pending_mitsumori_from_invoices=pending_source_invoices(current_user.id),

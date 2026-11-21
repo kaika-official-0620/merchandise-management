@@ -10,6 +10,7 @@ from flask import abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 from werkzeug.routing import BuildError
 from werkzeug.utils import secure_filename
+from document_workflow import is_issued_staff_document_status
 from quote_documents import allocate_quote_number, validate_quote_dates
 
 
@@ -975,7 +976,7 @@ def apply(module: Any) -> None:
             return False
         if not is_admin_generated_invoice(row):
             return True
-        return not module.is_deletable_document_status(row.get("status"))
+        return is_issued_staff_document_status(row.get("status"))
 
     def is_admin_vendor_mitsumori(row: dict | None) -> bool:
         if not row:

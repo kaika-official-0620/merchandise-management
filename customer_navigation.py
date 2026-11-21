@@ -159,7 +159,7 @@ def section_cards(key):
         add('user_analytics', '売上の分析', 'これまでの売上や商品の動きを確認します。')
         add('reports', 'レポート・CSV', '期間別の集計を確認し、必要なデータを書き出します。', secondary=True)
     elif key == 'documents':
-        add('user_document_list', '書類を作る', '見積依頼書や買取承諾書など、必要な書類を作成します。')
+        add('user_document_list', '自分の書類を作る', '見積依頼書や買取承諾書を作成し、下書きを編集します。')
         add('documents', '届いた書類・履歴', '請求書や精算書、これまでに作成・受領した書類を確認します。')
     elif key == 'support':
         add('customer_navigation.guide', '使い方・よくある質問', '商品の登録、書類の送信、アプリの確認方法を目的別に確認できます。')

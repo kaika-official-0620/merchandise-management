@@ -585,6 +585,9 @@ register_customer_navigation(module)
 from document_workflow import register_document_workflow
 register_document_workflow(module)
 
+from member_documents import register_member_documents
+register_member_documents(module)
+
 # Private support intake; preserve existing records and protected attachment URLs.
 from inquiry_support import register_inquiry_support
 register_inquiry_support(module)

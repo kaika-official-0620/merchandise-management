@@ -35,6 +35,16 @@ MAX_TOTAL = 2_000_000_000
 INBOX_PAGE_SIZE = 50
 STAFF_INBOX_EVENT = 'staff_inbox_update'
 INBOX_STATES = {'pending': '未対応', 'in_progress': '対応中', 'resolved': '対応済み'}
+# Status values and legacy display labels for issued receipts. A staff cancellation
+# can originate from a draft and does not establish that a receipt was delivered.
+ISSUED_STAFF_DOCUMENT_STATUSES = (
+    'sent', 'submitted', 'approved', 'rejected', 'shared', 'received', 'replaced',
+    '送付済み', '送信済み', '承認済み', '差し戻し', '却下', '共有済み', '受領済み', '差替え済み',
+)
+
+
+def is_issued_staff_document_status(status):
+    return str(status or '').strip().lower() in ISSUED_STAFF_DOCUMENT_STATUSES
 
 
 def inbox_staff(user):
@@ -86,7 +96,10 @@ class DocumentWorkflow:
         if not row or str(row.get(owner)) != str(user_id) or row.get('is_admin_created') or row.get('created_by_admin_id'):
             return False
         if kind in {'estimate', 'consent'}:
-            return (row.get('document_scope') or 'client_incoming') == 'client_incoming'
+            personal = (row.get('document_scope') or 'client_incoming') == 'client_incoming'
+            if kind == 'estimate':
+                personal = personal and not str(row.get('document_no') or '').strip().upper().startswith(('KM-', 'MT-'))
+            return personal
         if kind == 'calculation':
             return not row.get('proxy_service_auction_id')
         return (row.get('document_scope') or 'user_created') in {'client_outgoing', 'user_created'} and not row.get('source_admin_kaitori_id') and not str(row.get('invoice_no') or '').upper().startswith('KT-')
@@ -278,7 +291,7 @@ class DocumentWorkflow:
             return "p.metadata::jsonb ->> 'assignee_user_id'"
         return "CAST(json_extract(p.metadata, '$.assignee_user_id') AS TEXT)"
 
-    def inbox(self, *, query, category, received_from, received_through, page, handling='', assignee=''):
+    def inbox(self, *, query, category, received_from, received_through, page, handling='', assignee='', customer_id=None):
         queries, values = [], []
         needle = '%' + query.lower().replace('!', '!!').replace('%', '!%').replace('_', '!_') + '%'
         assignee_sql = self.inbox_assignee_sql()
@@ -303,6 +316,8 @@ class DocumentWorkflow:
                     predicates.append('COALESCE(d.created_by_admin_id, 0)=0')
                 if kind in {'estimate', 'consent'} and 'document_scope' in columns:
                     predicates.append("COALESCE(NULLIF(d.document_scope, ''), 'client_incoming')='client_incoming'")
+                if kind == 'estimate' and 'document_no' in columns:
+                    predicates.append("SUBSTR(UPPER(TRIM(COALESCE(d.document_no,''))),1,3) NOT IN ('KM-','MT-')")
                 if kind == 'calculation' and 'proxy_service_auction_id' in columns:
                     predicates.append('COALESCE(d.proxy_service_auction_id, 0)=0')
                 if kind == 'purchase_statement':
@@ -313,6 +328,9 @@ class DocumentWorkflow:
                     if 'invoice_no' in columns:
                         predicates.append("SUBSTR(UPPER(COALESCE(d.invoice_no, '')),1,3)<>'KT-'")
                 values.append(kind)
+                if customer_id is not None:
+                    predicates.append(f'd.{owner}={self.mark}')
+                    values.append(customer_id)
                 if query:
                     predicates.append(f"(LOWER(COALESCE(u.display_name,'')) LIKE {self.mark} ESCAPE '!' OR LOWER({number}) LIKE {self.mark} ESCAPE '!')")
                     values.extend((needle, needle))
@@ -380,9 +398,11 @@ class DocumentWorkflow:
                     f'ORDER BY p.id DESC LIMIT {self.mark}', (table, document_id, STAFF_INBOX_EVENT, limit))
         return self.rows(cur)
 
-    def update_inbox(self, kind, document_id, actor_id, revision, handling, assignee_id):
+    def update_inbox(self, kind, document_id, actor_id, revision, handling, assignee_id, *, expected_customer_id=None):
         with self.db(write=True) as (_, cur):
-            self.received_document(cur, kind, document_id, lock=True)
+            doc = self.received_document(cur, kind, document_id, lock=True)
+            if expected_customer_id is not None and doc[KINDS[kind][3]] != expected_customer_id:
+                abort(404)
             table = KINDS[kind][0]
             current = next(iter(self.inbox_history(cur, table, document_id, limit=1)), None)
             if revision != (current['id'] if current else 0):
@@ -410,13 +430,33 @@ def register_document_workflow(runtime):
     def form_wrapper(original, kind):
         @wraps(original)
         def guarded(*args, **kwargs):
-            if request.method == 'POST' and current_user.is_authenticated:
-                service.validate_form(kind, kwargs.get('id'))
+            if current_user.is_authenticated:
+                if current_user.role != 'user':
+                    abort(403, description='ご自身の書類作成はお客様アカウントで利用できます。')
+                if request.method == 'POST':
+                    service.validate_form(kind, kwargs.get('id'))
             return original(*args, **kwargs)
         return guarded
     for endpoint, kind in FORMS.items():
         if endpoint in app.view_functions:
             app.view_functions[endpoint] = form_wrapper(app.view_functions[endpoint], kind)
+
+    def personal_estimate_wrapper(original, *, staff_export=False):
+        @wraps(original)
+        @login_required
+        def guarded(id):
+            if current_user.role == 'user':
+                with service.db() as (_, cur):
+                    service.document(cur, 'estimate', id, current_user.id)
+            elif not (staff_export and inbox_staff(current_user)):
+                abort(403)
+            return original(id)
+        return guarded
+
+    for endpoint in ('user_mitsumori_view', 'user_mitsumori_pdf', 'user_mitsumori_download', 'user_mitsumori_delete'):
+        if endpoint in app.view_functions:
+            app.view_functions[endpoint] = personal_estimate_wrapper(app.view_functions[endpoint],
+                                                                   staff_export=endpoint == 'user_mitsumori_download')
 
     def csrf():
         supplied = request.form.get('security_csrf_token', '')
@@ -464,6 +504,16 @@ def register_document_workflow(runtime):
     def staff_id(value):
         return bool(re.fullmatch(r'[1-9][0-9]{0,9}', value) and int(value) <= 2_147_483_647)
 
+    def member_context():
+        selected = request.args.get('member_id')
+        if selected is None:
+            return None
+        if not current_user.has_permission('users'):
+            abort(403)
+        if not staff_id(selected):
+            abort(400, description='対象のお客様を確認してください。')
+        return int(selected)
+
     def inbox_filters():
         category = request.args.get('category', '')
         if category and category not in KINDS:
@@ -495,9 +545,12 @@ def register_document_workflow(runtime):
             abort(403)
         if kind not in KINDS:
             abort(404)
+        member_id = member_context()
         table, items, key, *_ = KINDS[kind]
         with service.db() as (_, cur):
             doc = service.received_document(cur, kind, document_id)
+            if member_id is not None and doc[KINDS[kind][3]] != member_id:
+                abort(404)
             cur.execute(f'SELECT * FROM {items} WHERE {key}={service.mark} ORDER BY item_no,id', (document_id,))
             details = service.rows(cur)
             staff = service.eligible_inbox_staff(cur)
@@ -506,8 +559,14 @@ def register_document_workflow(runtime):
             entry['time'] = database_event_time(entry['created_at'], postgres=service.pg)
         current = history[0] if history else {'id': 0, 'handling': 'pending', 'assignee': None}
         query_args = inbox_query_args(inbox_filters())
+        back_url = url_for('admin_customer_submissions', **query_args)
+        back_text = 'お客様から届いた書類へ戻る'
+        if member_id is not None:
+            query_args['member_id'] = member_id
+            back_url = url_for('admin_member_documents', user_id=member_id)
+            back_text = 'このお客様の書類へ戻る'
         return render_template('customer_documents/received_detail.html', document=doc, details=details, title=KINDS[kind][6],
-                               back_url=url_for('admin_customer_submissions', **query_args),
+                               back_url=back_url, back_text=back_text,
                                progress_url=url_for('admin_customer_submission_progress', kind=kind, document_id=document_id, **query_args),
                                staff=staff, inbox_states=INBOX_STATES, progress=current, history=history)
 
@@ -524,7 +583,11 @@ def register_document_workflow(runtime):
                 or not re.fullmatch(r'0|[1-9][0-9]{0,9}', revision)):
             abort(400, description='担当者と対応状況を選び直してください。')
         query_args = inbox_query_args(inbox_filters())
-        changed = service.update_inbox(kind, document_id, current_user.id, int(revision), handling, assignee)
+        member_id = member_context()
+        if member_id is not None:
+            query_args['member_id'] = member_id
+        changed = service.update_inbox(kind, document_id, current_user.id, int(revision), handling, assignee,
+                                       expected_customer_id=member_id)
         flash('担当者と対応状況を保存しました。' if changed else '変更はありません。', 'success' if changed else 'info')
         return redirect(url_for('admin_customer_submission_detail', kind=kind, document_id=document_id, **query_args))
 

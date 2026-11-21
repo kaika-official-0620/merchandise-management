@@ -9,6 +9,8 @@ from datetime import date, datetime, timedelta
 from typing import Any, Iterable
 
 from flask import abort, flash, g, redirect, render_template, request, send_file, url_for
+from customer_navigation import is_customer
+from document_workflow import ISSUED_STAFF_DOCUMENT_STATUSES
 from werkzeug.utils import secure_filename
 
 
@@ -25,11 +27,11 @@ ADMIN_HISTORY_CATEGORIES = [
     ("kaika_mitsumori", "開花用見積依頼書", "開花商品・個人顧客向けに作成した見積依頼書"),
 ]
 USER_HISTORY_CATEGORIES = [
-    ("client_incoming", "見積依頼書", "作成済み・送信済みの見積依頼書"),
-    ("kaitori", "買取明細書", "開花から送付された買取明細書"),
+    ("client_incoming", "見積依頼書", "自分で作成した見積依頼書"),
+    ("kaitori", "買取明細書", "自分で作成した明細書と、開花から届いた明細書"),
     ("shikiriosho", "精算書", "月額利用料や代行費用の精算書"),
     ("keisan", "計算書", "代行仕入れサービスなどの計算書"),
-    ("user_shoudaku", "ユーザー買取承諾書", "ユーザーが作成した買取承諾書"),
+    ("user_shoudaku", "買取承諾書", "自分で作成した買取承諾書"),
 ]
 HISTORY_CATEGORIES = ADMIN_HISTORY_CATEGORIES
 STATUS_LABELS = {
@@ -495,24 +497,58 @@ def apply(module: Any) -> None:
             return bool(checker(status))
         return str(status or "").strip() in {"draft", "in_progress", "作成中", "下書き"}
 
-    HISTORY_DRAFT_STATUSES = ("draft", "in_progress", "作成中", "下書き")
+    # The list, counts and unread indicators must agree on which issued documents a member can see.
+    def issued_history_condition(ph: str, alias: str = "") -> str:
+        status_placeholders = ", ".join(ph for _ in ISSUED_STAFF_DOCUMENT_STATUSES)
+        return f"LOWER(TRIM(COALESCE({alias}status, ''))) IN ({status_placeholders})"
 
-    def invoice_user_visible_filter(cur, ph: str, user_id_value: Any) -> tuple[list[str], list[Any]]:
-        where_parts = [f"sender_id = {ph}"]
+    def history_staff_origin_filter(cur, ph: str, table: str, alias: str = "") -> tuple[str, list[Any]]:
+        if table == "invoices":
+            origin = [f"UPPER(TRIM(COALESCE({alias}invoice_no, ''))) LIKE {ph}"]
+            params: list[Any] = ["KT-%"]
+            if column_exists(cur, table, "document_no"):
+                origin.append(f"UPPER(TRIM(COALESCE({alias}document_no, ''))) LIKE {ph}")
+                params.append("KT-%")
+            for column in ("source_admin_kaitori_id", "sales_agency_request_id", "created_by_admin_id"):
+                if column_exists(cur, table, column):
+                    origin.append(f"COALESCE({alias}{column}, 0) <> 0")
+            if column_exists(cur, table, "document_scope"):
+                origin.append(f"TRIM(COALESCE({alias}document_scope, '')) = {ph}")
+                params.append("admin_kaitori")
+        else:
+            origin = [f"UPPER(TRIM(COALESCE({alias}document_no, ''))) LIKE {ph}"]
+            params = ["AK-%"]
+            if column_exists(cur, table, "is_admin_created"):
+                truth_value = "TRUE" if DATABASE_URL else "1"
+                origin.append(f"COALESCE({alias}is_admin_created, {'FALSE' if DATABASE_URL else '0'}) = {truth_value}")
+        return "(" + " OR ".join(origin) + ")", params
+
+    def user_visible_history_filter(cur, ph: str, table: str, user_id_value: Any, alias: str = "") -> tuple[list[str], list[Any]]:
+        owner_column = "sender_id" if table == "invoices" else "user_id"
+        staff_origin, origin_params = history_staff_origin_filter(cur, ph, table, alias)
+        return [
+            f"{alias}{owner_column} = {ph}",
+            f"(NOT {staff_origin} OR {issued_history_condition(ph, alias)})",
+        ], [user_id_value, *origin_params, *ISSUED_STAFF_DOCUMENT_STATUSES]
+
+    def client_created_quote_history_filter(cur, ph: str, user_id_value: Any) -> tuple[list[str], list[Any]]:
+        where_parts = [f"user_id = {ph}"]
         params: list[Any] = [user_id_value]
-        status_placeholders = ", ".join(ph for _ in HISTORY_DRAFT_STATUSES)
-        if column_exists(cur, "invoices", "source_admin_kaitori_id"):
-            where_parts.append(
-                f"(COALESCE(source_admin_kaitori_id, 0) = 0 OR COALESCE(status, '') NOT IN ({status_placeholders}))"
-            )
-            params.extend(HISTORY_DRAFT_STATUSES)
-        if column_exists(cur, "invoices", "document_scope"):
-            where_parts.append(
-                f"(COALESCE(document_scope, '') <> {ph} OR COALESCE(status, '') NOT IN ({status_placeholders}))"
-            )
-            params.append("admin_kaitori")
-            params.extend(HISTORY_DRAFT_STATUSES)
+        if column_exists(cur, "user_mitsumori", "created_by_admin_id"):
+            where_parts.append("COALESCE(created_by_admin_id, 0) = 0")
+        if column_exists(cur, "user_mitsumori", "document_scope"):
+            where_parts.append(f"TRIM(COALESCE(document_scope, '')) NOT IN ({ph}, {ph}, {ph})")
+            params.extend(["vendor_outgoing", "kaika_vendor_outgoing", "kaika_estimate"])
+        for prefix in ("MT-%", "KM-%"):
+            where_parts.append(f"UPPER(TRIM(COALESCE(document_no, ''))) NOT LIKE {ph}")
+            params.append(prefix)
         return where_parts, params
+
+    def user_consent_history_filter(cur, ph: str, user_id_value: Any) -> tuple[list[str], list[Any]]:
+        where_parts = [f"user_id = {ph}"]
+        if column_exists(cur, "user_kaitori_shoudaku", "document_scope"):
+            where_parts.append("COALESCE(NULLIF(TRIM(document_scope), ''), 'client_incoming') = 'client_incoming'")
+        return where_parts, [user_id_value]
 
     def is_user_created_invoice_history_row(row: dict[str, Any]) -> bool:
         checker = getattr(module, "is_user_created_invoice_document", None)
@@ -541,7 +577,7 @@ def apply(module: Any) -> None:
         admin_flag = row.get("is_admin_created")
         if isinstance(admin_flag, str):
             admin_flag = admin_flag.strip().lower() in {"1", "true", "t", "yes", "on"}
-        return not admin_flag and is_history_draft_status(row.get("status"))
+        return not admin_flag and not is_admin_delivered_keisan_history_row(row) and is_history_draft_status(row.get("status"))
 
     def is_truthy_db_value(value: Any) -> bool:
         if isinstance(value, bool):
@@ -553,11 +589,12 @@ def apply(module: Any) -> None:
         return bool(value)
 
     def is_admin_delivered_invoice_history_row(row: dict[str, Any]) -> bool:
-        document_no = str(row.get("invoice_no") or row.get("document_no") or "").strip().upper()
         return (
             bool(row.get("source_admin_kaitori_id"))
+            or bool(row.get("sales_agency_request_id"))
+            or bool(row.get("created_by_admin_id"))
             or (row.get("document_scope") or "").strip() == "admin_kaitori"
-            or document_no.startswith("KT-")
+            or any(str(row.get(column) or "").strip().upper().startswith("KT-") for column in ("invoice_no", "document_no"))
         )
 
     def is_admin_delivered_keisan_history_row(row: dict[str, Any]) -> bool:
@@ -575,44 +612,31 @@ def apply(module: Any) -> None:
             user_id_value = current_user.id
 
             if "kaitori" in categories and table_exists(cur, "invoices") and column_exists(cur, "invoices", "is_read"):
-                invoice_conditions = [f"COALESCE(invoice_no, '') LIKE {ph}"]
-                invoice_params: list[Any] = ["KT-%"]
-                if column_exists(cur, "invoices", "source_admin_kaitori_id"):
-                    invoice_conditions.append("COALESCE(source_admin_kaitori_id, 0) <> 0")
-                if column_exists(cur, "invoices", "document_scope"):
-                    invoice_conditions.append(f"COALESCE(document_scope, '') = {ph}")
-                    invoice_params.append("admin_kaitori")
+                staff_origin, origin_params = history_staff_origin_filter(cur, ph, "invoices")
                 cur.execute(
                     f"""
                     UPDATE invoices
                     SET is_read = 1
                     WHERE sender_id = {ph}
                       AND COALESCE(is_read, 0) = 0
-                      AND ({" OR ".join(invoice_conditions)})
+                      AND {staff_origin}
+                      AND {issued_history_condition(ph)}
                     """,
-                    tuple([user_id_value] + invoice_params),
+                    (user_id_value, *origin_params, *ISSUED_STAFF_DOCUMENT_STATUSES),
                 )
 
             if "keisan" in categories and table_exists(cur, "user_keisan") and column_exists(cur, "user_keisan", "is_read"):
-                keisan_conditions = [f"COALESCE(document_no, '') LIKE {ph}"]
-                keisan_params: list[Any] = ["AK-%"]
-                if column_exists(cur, "user_keisan", "is_admin_created"):
-                    keisan_conditions.append(
-                        "COALESCE(is_admin_created, FALSE) = TRUE"
-                        if DATABASE_URL
-                        else "COALESCE(is_admin_created, 0) = 1"
-                    )
-                status_placeholders = ", ".join(ph for _ in HISTORY_DRAFT_STATUSES)
+                staff_origin, origin_params = history_staff_origin_filter(cur, ph, "user_keisan")
                 cur.execute(
                     f"""
                     UPDATE user_keisan
                     SET is_read = 1
                     WHERE user_id = {ph}
                       AND COALESCE(is_read, 0) = 0
-                      AND ({" OR ".join(keisan_conditions)})
-                      AND COALESCE(status, 'sent') NOT IN ({status_placeholders})
+                      AND {staff_origin}
+                      AND {issued_history_condition(ph)}
                     """,
-                    tuple([user_id_value] + keisan_params + list(HISTORY_DRAFT_STATUSES)),
+                    (user_id_value, *origin_params, *ISSUED_STAFF_DOCUMENT_STATUSES),
                 )
 
             conn.commit()
@@ -632,46 +656,33 @@ def apply(module: Any) -> None:
         try:
             ph = placeholder()
             if table_exists(cur, "invoices") and column_exists(cur, "invoices", "is_read"):
-                invoice_conditions = [f"COALESCE(invoice_no, '') LIKE {ph}"]
-                invoice_params: list[Any] = ["KT-%"]
-                if column_exists(cur, "invoices", "source_admin_kaitori_id"):
-                    invoice_conditions.append("COALESCE(source_admin_kaitori_id, 0) <> 0")
-                if column_exists(cur, "invoices", "document_scope"):
-                    invoice_conditions.append(f"COALESCE(document_scope, '') = {ph}")
-                    invoice_params.append("admin_kaitori")
+                staff_origin, origin_params = history_staff_origin_filter(cur, ph, "invoices")
                 cur.execute(
                     f"""
                     SELECT COUNT(*) AS count
                     FROM invoices
                     WHERE sender_id = {ph}
                       AND COALESCE(is_read, 0) = 0
-                      AND ({" OR ".join(invoice_conditions)})
+                      AND {staff_origin}
+                      AND {issued_history_condition(ph)}
                     """,
-                    tuple([user_id_value] + invoice_params),
+                    (user_id_value, *origin_params, *ISSUED_STAFF_DOCUMENT_STATUSES),
                 )
                 row = cur.fetchone()
                 counts["kaitori"] = safe_int((row or [0])[0] if not isinstance(row, dict) else row.get("count"))
 
             if table_exists(cur, "user_keisan") and column_exists(cur, "user_keisan", "is_read"):
-                keisan_conditions = [f"COALESCE(document_no, '') LIKE {ph}"]
-                keisan_params: list[Any] = ["AK-%"]
-                if column_exists(cur, "user_keisan", "is_admin_created"):
-                    keisan_conditions.append(
-                        "COALESCE(is_admin_created, FALSE) = TRUE"
-                        if DATABASE_URL
-                        else "COALESCE(is_admin_created, 0) = 1"
-                    )
-                status_placeholders = ", ".join(ph for _ in HISTORY_DRAFT_STATUSES)
+                staff_origin, origin_params = history_staff_origin_filter(cur, ph, "user_keisan")
                 cur.execute(
                     f"""
                     SELECT COUNT(*) AS count
                     FROM user_keisan
                     WHERE user_id = {ph}
                       AND COALESCE(is_read, 0) = 0
-                      AND ({" OR ".join(keisan_conditions)})
-                      AND COALESCE(status, 'sent') NOT IN ({status_placeholders})
+                      AND {staff_origin}
+                      AND {issued_history_condition(ph)}
                     """,
-                    tuple([user_id_value] + keisan_params + list(HISTORY_DRAFT_STATUSES)),
+                    (user_id_value, *origin_params, *ISSUED_STAFF_DOCUMENT_STATUSES),
                 )
                 row = cur.fetchone()
                 counts["keisan"] = safe_int((row or [0])[0] if not isinstance(row, dict) else row.get("count"))
@@ -1081,6 +1092,9 @@ def apply(module: Any) -> None:
             if category in {"client_mitsumori", "vendor_mitsumori", "kaika_mitsumori"}:
                 if not table_exists(cur, "user_mitsumori"):
                     return 0
+                if category == "client_mitsumori" and not admin:
+                    where_parts, params_list = client_created_quote_history_filter(cur, ph, params_user)
+                    return count_from("user_mitsumori", where_parts, params_list)
                 where_parts: list[str] = []
                 params_list: list[Any] = []
                 has_document_scope = column_exists(cur, "user_mitsumori", "document_scope")
@@ -1112,12 +1126,11 @@ def apply(module: Any) -> None:
                 where_parts: list[str] = []
                 params: list[Any] = []
                 if not admin:
-                    where_parts, params = invoice_user_visible_filter(cur, ph, params_user)
+                    where_parts, params = user_visible_history_filter(cur, ph, "invoices", params_user)
                 return count_from("invoices", where_parts, params)
 
             if category == "user_shoudaku":
-                where_parts = [] if admin else [f"user_id = {ph}"]
-                params = [] if admin else [params_user]
+                where_parts, params = ([], []) if admin else user_consent_history_filter(cur, ph, params_user)
                 return count_from("user_kaitori_shoudaku", where_parts, params)
 
             if category == "kaika_shoudaku":
@@ -1131,19 +1144,12 @@ def apply(module: Any) -> None:
                 return count_from("admin_kaitori_shoudaku", where_parts, params)
 
             if category == "shikiriosho":
-                where_parts = [] if admin else [f"recipient_id = {ph}"]
+                where_parts = [] if admin else [f"recipient_id = {ph}", "status = 'sent'"]
                 params = [] if admin else [params_user]
                 return count_from("shikiriosho", where_parts, params)
 
             if category == "keisan":
-                where_parts = [] if admin else [f"user_id = {ph}"]
-                params = [] if admin else [params_user]
-                if not admin and table_exists(cur, "user_keisan") and column_exists(cur, "user_keisan", "is_admin_created"):
-                    where_parts.append(
-                        "(COALESCE(is_admin_created, FALSE) = FALSE OR COALESCE(status, 'sent') NOT IN ('draft', 'in_progress'))"
-                        if DATABASE_URL
-                        else "(COALESCE(is_admin_created, 0) = 0 OR COALESCE(status, 'sent') NOT IN ('draft', 'in_progress'))"
-                    )
+                where_parts, params = ([], []) if admin else user_visible_history_filter(cur, ph, "user_keisan", params_user)
                 return count_from("user_keisan", where_parts, params)
 
             if category == "vendor":
@@ -1200,16 +1206,14 @@ def apply(module: Any) -> None:
             has_mitsumori_scope = has_mitsumori and column_exists(cur, "user_mitsumori", "document_scope")
 
             if has_mitsumori and needs_client:
-                where_parts: list[str] = []
-                where_params: list[Any] = []
-                if not admin:
-                    where_parts.append(f"user_id = {ph}")
-                    where_params.append(params_user)
-                if has_mitsumori_scope:
-                    where_parts.append(f"COALESCE(document_scope, 'client_incoming') NOT IN ({ph}, {ph}, {ph})")
-                    where_params.extend(["vendor_outgoing", "kaika_vendor_outgoing", "kaika_estimate"])
-                where_parts.append(f"COALESCE(document_no, '') NOT LIKE {ph}")
-                where_params.append("MT-%")
+                if admin:
+                    where_parts = [f"COALESCE(document_no, '') NOT LIKE {ph}"]
+                    where_params = ["MT-%"]
+                    if has_mitsumori_scope:
+                        where_parts.append(f"COALESCE(document_scope, 'client_incoming') NOT IN ({ph}, {ph}, {ph})")
+                        where_params.extend(["vendor_outgoing", "kaika_vendor_outgoing", "kaika_estimate"])
+                else:
+                    where_parts, where_params = client_created_quote_history_filter(cur, ph, params_user)
                 add_count("client_mitsumori", "user_mitsumori", where_parts, where_params)
 
             if has_mitsumori and needs_vendor_estimate:
@@ -1240,11 +1244,12 @@ def apply(module: Any) -> None:
                 if admin:
                     add_count("kaitori", "invoices")
                 else:
-                    where_parts, where_params = invoice_user_visible_filter(cur, ph, params_user)
+                    where_parts, where_params = user_visible_history_filter(cur, ph, "invoices", params_user)
                     add_count("kaitori", "invoices", where_parts, where_params)
 
             if "user_shoudaku" in requested or (admin and needs_client):
-                add_count("user_shoudaku", "user_kaitori_shoudaku", [] if admin else [f"user_id = {ph}"], [] if admin else [params_user])
+                where_parts, where_params = ([], []) if admin else user_consent_history_filter(cur, ph, params_user)
+                add_count("user_shoudaku", "user_kaitori_shoudaku", where_parts, where_params)
 
             if "kaika_shoudaku" in requested:
                 where_parts = []
@@ -1255,17 +1260,10 @@ def apply(module: Any) -> None:
                 add_count("kaika_shoudaku", "admin_kaitori_shoudaku", where_parts, where_params)
 
             if "shikiriosho" in requested:
-                add_count("shikiriosho", "shikiriosho", [] if admin else [f"recipient_id = {ph}"], [] if admin else [params_user])
+                add_count("shikiriosho", "shikiriosho", [] if admin else [f"recipient_id = {ph}", "status = 'sent'"], [] if admin else [params_user])
 
             if "keisan" in requested:
-                where_parts = [] if admin else [f"user_id = {ph}"]
-                where_params = [] if admin else [params_user]
-                if not admin and table_exists(cur, "user_keisan") and column_exists(cur, "user_keisan", "is_admin_created"):
-                    where_parts.append(
-                        "(COALESCE(is_admin_created, FALSE) = FALSE OR COALESCE(status, 'sent') NOT IN ('draft', 'in_progress'))"
-                        if DATABASE_URL
-                        else "(COALESCE(is_admin_created, 0) = 0 OR COALESCE(status, 'sent') NOT IN ('draft', 'in_progress'))"
-                    )
+                where_parts, where_params = ([], []) if admin else user_visible_history_filter(cur, ph, "user_keisan", params_user)
                 add_count("keisan", "user_keisan", where_parts, where_params)
 
             if "vendor" in requested:
@@ -1344,6 +1342,7 @@ def apply(module: Any) -> None:
                 download_url: str | None = None,
                 delete_url: str | None = None,
                 source: str = "",
+                origin_label: str = "",
                 can_delete: bool = False,
                 is_unread: bool = False,
                 replacement_document_id: Any = None,
@@ -1364,6 +1363,7 @@ def apply(module: Any) -> None:
                         "download_url": download_url,
                         "delete_url": delete_url,
                         "source": source,
+                        "origin_label": origin_label,
                         "can_delete": can_delete,
                         "is_unread": is_unread,
                         "replacement_document_id": replacement_document_id,
@@ -1377,7 +1377,9 @@ def apply(module: Any) -> None:
                 where_parts: list[str] = []
                 params_list: list[Any] = []
                 has_document_scope = table_exists(cur, "user_mitsumori") and column_exists(cur, "user_mitsumori", "document_scope")
-                if not admin:
+                if category == "client_mitsumori" and not admin:
+                    where_parts, params_list = client_created_quote_history_filter(cur, ph, params_user)
+                elif not admin:
                     where_parts.append(f"user_id = {ph}")
                     params_list.append(params_user)
                 if category == "vendor_mitsumori":
@@ -1393,7 +1395,7 @@ def apply(module: Any) -> None:
                         params_list.extend(["kaika_vendor_outgoing", "kaika_estimate"])
                     else:
                         where_parts.append("1 = 0")
-                else:
+                elif admin:
                     if has_document_scope:
                         where_parts.append(f"COALESCE(document_scope, 'client_incoming') NOT IN ({ph}, {ph}, {ph})")
                         params_list.extend(["vendor_outgoing", "kaika_vendor_outgoing", "kaika_estimate"])
@@ -1411,6 +1413,7 @@ def apply(module: Any) -> None:
                             if category == "kaika_mitsumori"
                             else "見積依頼書"
                         ),
+                        origin_label="自分で作成",
                         document_no=doc.get("document_no") or f"ID:{doc.get('id')}",
                         client_name=doc.get("customer_name") or doc.get("user_name") or (current_user.display_name if not admin else ""),
                         issue_date=doc.get("issue_date") or doc.get("created_at"),
@@ -1436,7 +1439,7 @@ def apply(module: Any) -> None:
                 where_parts: list[str] = []
                 params_list: list[Any] = []
                 if not admin:
-                    where_parts, params_list = invoice_user_visible_filter(cur, ph, params_user)
+                    where_parts, params_list = user_visible_history_filter(cur, ph, "invoices", params_user, alias="i.")
                 where = "WHERE " + " AND ".join(where_parts) if where_parts else ""
                 cur.execute(
                     f"""
@@ -1451,8 +1454,10 @@ def apply(module: Any) -> None:
                 )
                 for doc in rows_to_dicts(cur.fetchall()):
                     can_user_delete = (not admin) and is_user_created_invoice_history_row(doc) and is_history_draft_status(doc.get("status"))
+                    received = is_admin_delivered_invoice_history_row(doc)
                     add_row(
                         document_type="買取明細書",
+                        origin_label="開花から受領" if received else "自分で作成",
                         document_no=doc.get("document_no") or doc.get("invoice_no") or f"ID:{doc.get('id')}",
                         client_name=doc.get("recipient_name") or doc.get("client_display_name") or doc.get("client_username"),
                         issue_date=doc.get("issue_date") or doc.get("created_at"),
@@ -1463,7 +1468,7 @@ def apply(module: Any) -> None:
                         delete_url=url_for("user_invoice_delete", id=doc["id"]) if can_user_delete else None,
                         source="invoices",
                         can_delete=can_user_delete,
-                        is_unread=(not admin) and is_admin_delivered_invoice_history_row(doc) and not is_truthy_db_value(doc.get("is_read")),
+                        is_unread=(not admin) and received and not is_truthy_db_value(doc.get("is_read")),
                         replacement_document_id=doc.get("replacement_document_id"),
                         replacement_detail_url=(
                             url_for("admin_kaitori_view", id=doc.get("replacement_document_id"))
@@ -1476,12 +1481,13 @@ def apply(module: Any) -> None:
                         rebuild_reason=doc.get("rebuild_reason"),
                     )
             elif category == "user_shoudaku":
-                where = "" if admin else f"WHERE user_id = {ph}"
-                params = () if admin else (params_user,)
-                cur.execute(f"SELECT * FROM user_kaitori_shoudaku {where} ORDER BY created_at DESC LIMIT {int(limit)}", params)
+                where_parts, params = ([], []) if admin else user_consent_history_filter(cur, ph, params_user)
+                where = "WHERE " + " AND ".join(where_parts) if where_parts else ""
+                cur.execute(f"SELECT * FROM user_kaitori_shoudaku {where} ORDER BY created_at DESC LIMIT {int(limit)}", tuple(params))
                 for doc in rows_to_dicts(cur.fetchall()):
                     add_row(
-                        document_type="ユーザー買取承諾書",
+                        document_type="ユーザー買取承諾書" if admin else "買取承諾書",
+                        origin_label="自分で作成",
                         document_no=doc.get("document_no") or f"ID:{doc.get('id')}",
                         client_name=doc.get("customer_name") or doc.get("user_name") or (current_user.display_name if not admin else ""),
                         issue_date=doc.get("issue_date") or doc.get("created_at"),
@@ -1514,7 +1520,7 @@ def apply(module: Any) -> None:
                             source="admin_kaitori_shoudaku",
                         )
             elif category == "shikiriosho":
-                where = "" if admin else f"WHERE s.recipient_id = {ph}"
+                where = "" if admin else f"WHERE s.recipient_id = {ph} AND s.status = 'sent'"
                 params = () if admin else (params_user,)
                 cur.execute(
                     f"""
@@ -1530,6 +1536,7 @@ def apply(module: Any) -> None:
                 for doc in rows_to_dicts(cur.fetchall()):
                     add_row(
                         document_type="精算書",
+                        origin_label="開花から受領",
                         document_no=doc.get("document_no") or f"ID:{doc.get('id')}",
                         client_name=doc.get("recipient_name") or doc.get("client_display_name") or doc.get("client_username"),
                         issue_date=doc.get("issue_date") or doc.get("created_at"),
@@ -1540,19 +1547,15 @@ def apply(module: Any) -> None:
                         source="shikiriosho",
                     )
             elif category == "keisan":
-                where = "" if admin else f"WHERE user_id = {ph}"
-                params = () if admin else (params_user,)
-                if not admin and table_exists(cur, "user_keisan") and column_exists(cur, "user_keisan", "is_admin_created"):
-                    where += (" AND " if where else "WHERE ") + (
-                        "(COALESCE(is_admin_created, FALSE) = FALSE OR COALESCE(status, 'sent') NOT IN ('draft', 'in_progress'))"
-                        if DATABASE_URL
-                        else "(COALESCE(is_admin_created, 0) = 0 OR COALESCE(status, 'sent') NOT IN ('draft', 'in_progress'))"
-                    )
-                cur.execute(f"SELECT * FROM user_keisan {where} ORDER BY created_at DESC LIMIT {int(limit)}", params)
+                where_parts, params = ([], []) if admin else user_visible_history_filter(cur, ph, "user_keisan", params_user)
+                where = "WHERE " + " AND ".join(where_parts) if where_parts else ""
+                cur.execute(f"SELECT * FROM user_keisan {where} ORDER BY created_at DESC LIMIT {int(limit)}", tuple(params))
                 for doc in rows_to_dicts(cur.fetchall()):
                     can_user_delete = (not admin) and is_user_deletable_keisan_history_row(doc)
+                    received = is_admin_delivered_keisan_history_row(doc)
                     add_row(
                         document_type="計算書",
+                        origin_label="開花から受領" if received else "自分で作成",
                         document_no=doc.get("document_no") or f"ID:{doc.get('id')}",
                         client_name=doc.get("customer_name") or doc.get("user_name") or (current_user.display_name if not admin else ""),
                         issue_date=doc.get("issue_date") or doc.get("created_at"),
@@ -1563,7 +1566,7 @@ def apply(module: Any) -> None:
                         delete_url=url_for("user_keisan_delete", id=doc["id"]) if can_user_delete else None,
                         source="user_keisan",
                         can_delete=can_user_delete,
-                        is_unread=(not admin) and is_admin_delivered_keisan_history_row(doc) and not is_truthy_db_value(doc.get("is_read")),
+                        is_unread=(not admin) and received and not is_truthy_db_value(doc.get("is_read")),
                     )
             elif category == "vendor":
                 where_parts = []
@@ -2396,6 +2399,8 @@ def apply(module: Any) -> None:
         )
 
     def documents_clean():
+        if not is_customer():
+            abort(403)
         ensure_schema()
         selected_category = normalize_history_category(request.args.get("category") or request.args.get("tab"), admin=False)
         if selected_category:
@@ -2409,6 +2414,8 @@ def apply(module: Any) -> None:
         )
 
     def documents_history_category(category: str):
+        if not is_customer():
+            abort(403)
         ensure_schema()
         selected_category = normalize_history_category(category, admin=False)
         if not selected_category:

@@ -21,16 +21,19 @@ HELD_DELETIONS = frozenset({
     'delete_user', 'admin_delete_client', 'admin_delete_operator',
     'delete_item', 'admin_delete_item',
 })
+CUSTOMER_DOCUMENT_MUTATIONS = frozenset({
+    'user_invoice_delete', 'user_mitsumori_delete', 'user_keisan_delete',
+    'user_kaitori_shoudaku_delete', 'user_invoice_send',
+})
 CONFIRMED_MUTATIONS = frozenset({
     'delete_customer', 'toggle_admin', 'toggle_tuition_exempt',
     'admin_delete_announcement', 'admin_toggle_announcement',
-    'admin_shikiriosho_delete', 'user_invoice_delete', 'user_mitsumori_delete',
-    'user_keisan_delete', 'admin_kaitori_delete', 'admin_seisan_delete',
-    'admin_mitsumori_delete', 'user_kaitori_shoudaku_delete',
+    'admin_shikiriosho_delete', 'admin_kaitori_delete', 'admin_seisan_delete',
+    'admin_mitsumori_delete',
     'admin_kaitori_shoudaku_delete', 'admin_vendor_document_delete',
-    'admin_set_role', 'user_invoice_send', 'admin_invoice_approve',
+    'admin_set_role', 'admin_invoice_approve',
     'admin_invoice_reject', 'admin_seisan_send', 'admin_shikiriosho_send',
-})
+}) | CUSTOMER_DOCUMENT_MUTATIONS
 MUTATIONS = HELD_DELETIONS | CONFIRMED_MUTATIONS
 
 CONFIRMATION = '''<!doctype html><html lang="ja"><meta charset="utf-8">
@@ -252,6 +255,8 @@ class SecurityAccess:
             return None
         if not current_user.is_authenticated:
             abort(401)
+        if endpoint in CUSTOMER_DOCUMENT_MUTATIONS and current_user.role != 'user':
+            abort(403)
         if endpoint.startswith('admin_') or endpoint in {'delete_user', 'toggle_admin', 'toggle_tuition_exempt'}:
             if not self.staff():
                 abort(403)
