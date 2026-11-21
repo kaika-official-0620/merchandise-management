@@ -1,4 +1,6 @@
+{% if current_user.has_permission('merchandise') %}
 <a href="{{ url_for('inventory_intakes') }}" class="{% if request.endpoint in ['inventory_intakes','inventory_intake_detail','inventory_received_register'] %}active{% endif %}">預け入れ・登録受付</a>
+{% endif %}
 {% if stage3_finance_available|default(false) and current_user.has_permission('merchandise') and current_user.has_permission('invoices') %}
 <a href="{{ url_for('finance_review.index') }}">利益・請求下書き</a>
 {% endif %}

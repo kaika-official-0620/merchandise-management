@@ -1,3 +1,60 @@
-{% extends 'base.html' %}{% block title %}預け入れ・登録受付 - 開花{% endblock %}{% block content %}
-{% include '_inventory_custody_styles.html' %}<div class="custody-page"><h1>預け入れ・登録受付</h1><p>{{ '到着した商品の受領と、ご依頼者の商品登録を行います。' if current_user.is_admin() else '開花への発送案内、受領、登録の進み具合を確認できます。' }}</p><div class="custody-actions">{% if not current_user.is_admin() %}<a class="btn btn-primary" href="{{ url_for('inventory_intake_new') }}">新しく預ける・登録を依頼</a>{% endif %}<a class="btn btn-secondary" href="{{ url_for('index') }}">商品一覧へ</a></div>
-{% for intake in intakes %}<article class="custody-card"><span class="custody-badge">{{ state_names.get(intake.status, intake.status) }}</span><h2>受付 #{{ intake.id }} · {{ '開花に商品登録を依頼' if intake.kind == 'registration' else '登録済みの商品を預ける' }}</h2><p>{% if current_user.is_admin() %}ご依頼者：{{ intake.display_name or intake.username }}<br>{% endif %}予定 {{ intake.expected_count }} 点{% if intake.received_count is not none %} ／ 受領 {{ intake.received_count }} 点{% endif %}</p><p class="custody-meta">受付日時：{{ intake.created_at }}</p><a class="btn btn-secondary" href="{{ url_for('inventory_intake_detail', intake_id=intake.id) }}">受付内容を確認</a></article>{% else %}<div class="custody-card"><h2>受付はまだありません</h2><p>自宅などで保管する商品は「自分の在庫を登録」からご自身で登録できます。開花に送る場合は、こちらで預け入れの受付を作成してください。</p></div>{% endfor %}</div>{% endblock %}
+{% extends 'base.html' %}
+{% block title %}預け入れ・登録受付 - 開花{% endblock %}
+{% block content %}
+{% include '_inventory_custody_styles.html' %}
+<div class="custody-page">
+  <h1>預け入れ・登録受付</h1>
+  <p>{{ '到着した商品の受領と、ご依頼者の商品登録を行います。' if staff else '開花への発送案内、受領、登録の進み具合を確認できます。' }}</p>
+  <div class="custody-actions">
+    {% if not staff %}<a class="btn btn-primary" href="{{ url_for('inventory_intake_new') }}">新しく預ける・登録を依頼</a>{% endif %}
+    <a class="btn btn-secondary" href="{{ url_for('index') }}">商品一覧へ</a>
+  </div>
+  <form method="get" action="{{ url_for('inventory_intakes') }}" class="custody-card">
+    <div class="custody-grid">
+      <div>
+        <label for="intake-list-search">受付を検索</label>
+        <input type="search" id="intake-list-search" name="q" maxlength="100" value="{{ q }}"
+               placeholder="{{ '受付番号・依頼者・商品名・管理番号' if staff else '受付番号・商品名・管理番号' }}">
+      </div>
+      <div>
+        <label for="intake-list-status">受付状況</label>
+        <select id="intake-list-status" name="status">
+          <option value="">すべて</option>
+          {% for value, label in state_names.items() %}<option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="custody-actions">
+      <button class="btn btn-primary" type="submit">絞り込む</button>
+      {% if q or status_filter %}<a class="btn btn-secondary" href="{{ url_for('inventory_intakes') }}">条件を解除</a>{% endif %}
+    </div>
+  </form>
+  {% for intake in intakes %}
+    {% set detail_url = url_for('inventory_intake_detail', intake_id=intake.id, q=q or none, status=status_filter or none, page=page if page > 1 else none) %}
+    <article class="custody-card">
+      <span class="custody-badge">{{ state_names.get(intake.status, intake.status) }}</span>
+      <h2>受付 #{{ intake.id }} · {{ '開花に商品登録を依頼' if intake.kind == 'registration' else '登録済みの商品を預ける' }}</h2>
+      <p>{% if staff %}ご依頼者：{{ intake.display_name or intake.username }}<br>{% endif %}
+        予定 {{ intake.expected_count }} 点{% if intake.received_count is not none %} ／ 受領 {{ intake.received_count }} 点{% endif %}</p>
+      <p class="custody-meta">受付日時（日本時間）：{{ intake_time(intake.created_at) }}</p>
+      <a class="btn btn-secondary" href="{{ detail_url }}">受付内容を確認</a>
+    </article>
+  {% else %}
+    <div class="custody-card">
+      {% if q or status_filter or page > 1 %}
+        <h2>条件に一致する受付はありません</h2>
+      {% else %}
+        <h2>受付はまだありません</h2>
+        {% if not staff %}<p>開花に商品を送る場合は、預け入れの受付を作成してください。</p>{% endif %}
+      {% endif %}
+    </div>
+  {% endfor %}
+  {% if page > 1 or has_next %}
+    <nav class="custody-actions" aria-label="受付一覧のページ">
+      {% if page > 1 %}<a class="btn btn-secondary" href="{{ url_for('inventory_intakes', q=q or none, status=status_filter or none, page=page-1) }}">前のページ</a>{% endif %}
+      <span>{{ page }} ページ</span>
+      {% if has_next %}<a class="btn btn-secondary" href="{{ url_for('inventory_intakes', q=q or none, status=status_filter or none, page=page+1) }}">次のページ</a>{% endif %}
+    </nav>
+  {% endif %}
+</div>
+{% endblock %}

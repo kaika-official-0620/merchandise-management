@@ -3,6 +3,7 @@
 {% set form_items = items if items else [] %}
 {% set is_edit = mitsumori is defined and mitsumori %}
 {% set source_mode = source_invoice is defined and source_invoice %}
+{% set issue_date_value = source_invoice.issue_date if source_mode else (mitsumori.issue_date if is_edit else today) %}
 
 {% block title %}{% if is_edit %}見積り依頼書編集{% else %}見積り依頼書作成{% endif %} - 株式会社 開花{% endblock %}
 
@@ -29,16 +30,17 @@
             <h2>基本情報</h2>
             <div class="form-grid">
                 <div class="form-group">
-                    <label>No.</label>
-                    <input type="text" value="{{ mitsumori.document_no if is_edit else document_no }}" readonly class="form-control readonly">
+                    <label for="document_no">No.</label>
+                    <input type="text" id="document_no" value="{{ mitsumori.document_no if is_edit else '保存時に採番' }}" readonly class="form-control readonly">
                 </div>
                 <div class="form-group">
                     <label for="issue_date">発行日 <span class="required">*</span></label>
-                    <input type="date" id="issue_date" name="issue_date" value="{{ source_invoice.issue_date if source_mode else (mitsumori.issue_date if is_edit else today) }}" required class="form-control{% if source_mode %} readonly{% endif %}" {% if source_mode %}readonly{% endif %}>
+                    <input type="date" id="issue_date" name="issue_date" value="{{ issue_date_value }}" required class="form-control{% if source_mode %} readonly{% endif %}" {% if source_mode %}readonly{% endif %}>
                 </div>
                 <div class="form-group">
                     <label for="valid_until">有効期限</label>
-                    <input type="date" id="valid_until" name="valid_until" value="{{ mitsumori.valid_until if is_edit else '' }}" class="form-control">
+                    <input type="date" id="valid_until" name="valid_until" value="{{ (mitsumori.valid_until or '') if is_edit else '' }}" min="{{ issue_date_value }}" aria-describedby="valid-until-help" class="form-control">
+                    <small id="valid-until-help">設定する場合は発行日以降の日付を入力してください。</small>
                 </div>
             </div>
         </section>
@@ -244,7 +246,7 @@
                         <div id="preview-contact-person" class="preview-muted"></div>
                     </div>
                     <div class="preview-meta">
-                        <div>No.：{{ mitsumori.document_no if is_edit else document_no }}</div>
+                        <div>No.：{{ mitsumori.document_no if is_edit else '保存時に採番' }}</div>
                         <div>発行日：<span id="preview-issue-date"></span></div>
                         <div id="preview-valid-row">有効期限：<span id="preview-valid-until"></span></div>
                     </div>
@@ -1137,6 +1139,7 @@
 }
 </style>
 
+<script src="{{ url_for('static', filename='js/quote-date-validation.js') }}" defer></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     const itemsBody = document.getElementById('items-body');
