@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% block title %}受け付けた{{ title }} - 開花{% endblock %}
 {% block content %}
-<a class="btn btn-secondary" href="{{ back_url }}">お客様から届いた書類へ戻る</a>
+<a class="btn btn-secondary" href="{{ back_url }}">{{ back_text }}</a>
 <h1>{{ title }}</h1>
 <p>送信者：{{ document.customer_display_name }} ／ 書類番号：{{ document.document_no or document.invoice_no }} ／ 受信状態：開花へ送信済み</p>
 <p>送付先：株式会社 開花（書類受付）</p>
