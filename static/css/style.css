@@ -1026,6 +1026,16 @@ body.sidebar-open {
     gap: 1.5rem;
 }
 
+/* Empty date inputs can have no content height in iOS WebKit. */
+.mitsumori-form .form-group input[type="date"].form-control {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    height: 2.75em;
+}
+
 .form-actions {
     display: flex;
     gap: 1rem;
