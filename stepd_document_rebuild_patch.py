@@ -364,15 +364,18 @@ def apply(module: Any) -> None:
         )
 
     def load_document_events(cur, document_kind: str, document_id: int) -> list[dict[str, Any]]:
+        from document_workflow import STAFF_INBOX_EVENT
+
         cur.execute(
             f"""
             SELECT e.*, u.username, u.display_name
             FROM final_document_events e
             LEFT JOIN users u ON e.actor_id = u.id
             WHERE e.document_kind = {mark()} AND e.document_id = {mark()}
+              AND e.action <> {mark()}
             ORDER BY e.created_at DESC, e.id DESC
             """,
-            (document_kind, document_id),
+            (document_kind, document_id, STAFF_INBOX_EVENT),
         )
         events = rows_to_dicts(cur.fetchall())
         for event in events:

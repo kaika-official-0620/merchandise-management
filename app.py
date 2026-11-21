@@ -27,7 +27,7 @@ from backup_restore_guard import legacy_restore_block_reason
 from runtime_security import require_session_secret, install_runtime_security, legacy_operation_disabled
 from recovery_runtime_guard import guard_new_connection
 from customer_navigation import customer_product_list_url
-from quote_documents import allocate_quote_number, validate_quote_dates
+from quote_documents import allocate_quote_number, ensure_quote_number_schema, validate_quote_dates
 from decimal import Decimal
 from datetime import datetime, timedelta, date, timezone
 from urllib.parse import quote, urlparse, urlsplit, urlunsplit
@@ -7772,6 +7772,7 @@ def create_targeted_system_announcement_once(
 
 # データベース初期化
 init_db()
+ensure_quote_number_schema(sys.modules[__name__])
 
 # Custody is explicit even for legacy entry points and scheduled reports.
 # Old merchandise stays in Kaika custody; only dedicated self registrations

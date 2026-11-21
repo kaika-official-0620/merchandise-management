@@ -33,6 +33,12 @@ FORMS = {
 }
 MAX_TOTAL = 2_000_000_000
 INBOX_PAGE_SIZE = 50
+STAFF_INBOX_EVENT = 'staff_inbox_update'
+INBOX_STATES = {'pending': '未対応', 'in_progress': '対応中', 'resolved': '対応済み'}
+
+
+def inbox_staff(user):
+    return user.is_admin() and (getattr(user, 'role', '') == 'owner' or user.has_permission('invoices'))
 
 
 class DocumentWorkflow:
@@ -267,9 +273,15 @@ class DocumentWorkflow:
                         (table, document_id, 'customer_submit', user_id, '開花の書類受付へ送信', 'completed', 'submitted', json.dumps({'destination': 'kaika', 'channel': 'in_app'}, ensure_ascii=False)))
         return True
 
-    def inbox(self, *, query, category, received_from, received_through, page):
+    def inbox_assignee_sql(self):
+        if self.pg:
+            return "p.metadata::jsonb ->> 'assignee_user_id'"
+        return "CAST(json_extract(p.metadata, '$.assignee_user_id') AS TEXT)"
+
+    def inbox(self, *, query, category, received_from, received_through, page, handling='', assignee=''):
         queries, values = [], []
         needle = '%' + query.lower().replace('!', '!!').replace('%', '!%').replace('_', '!_') + '%'
+        assignee_sql = self.inbox_assignee_sql()
         # The display dates are JST. SQLite writes its receipt timestamps in UTC.
         def storage_midnight(day):
             midnight = datetime.combine(day, time.min)
@@ -310,18 +322,82 @@ class DocumentWorkflow:
                 if received_through and received_through < date.max:
                     predicates.append(f'd.updated_at<{self.mark}')
                     values.append(storage_midnight(received_through + timedelta(days=1)))
+                if handling:
+                    predicates.append(f"COALESCE(p.after_status,'pending')={self.mark}")
+                    values.append(handling)
+                if assignee == 'unassigned':
+                    predicates.append(f'({assignee_sql}) IS NULL')
+                elif assignee:
+                    predicates.append(f'({assignee_sql})={self.mark}')
+                    values.append(assignee)
                 queries.append(f'SELECT CAST({self.mark} AS TEXT) AS kind,d.id,{number} AS number,'
-                               f'u.display_name AS customer,CAST(d.updated_at AS TEXT) AS sent_at '
-                               f'FROM {table} d JOIN users u ON u.id=d.{owner} WHERE ' + ' AND '.join(predicates))
-            cur.execute('SELECT * FROM (' + ' UNION ALL '.join(queries) + ') AS documents '
+                               f'u.display_name AS customer,CAST(d.updated_at AS TEXT) AS sent_at, '
+                               f"COALESCE(p.after_status,'pending') AS handling, ({assignee_sql}) AS assignee "
+                               f'FROM {table} d JOIN users u ON u.id=d.{owner} '
+                               f"LEFT JOIN inbox_latest l ON l.document_kind='{table}' AND l.document_id=d.id "
+                               'LEFT JOIN final_document_events p ON p.id=l.event_id WHERE ' + ' AND '.join(predicates))
+            cur.execute(f'WITH inbox_latest AS (SELECT document_kind,document_id,MAX(id) AS event_id '
+                        f'FROM final_document_events WHERE action={self.mark} GROUP BY document_kind,document_id) '
+                        'SELECT * FROM (' + ' UNION ALL '.join(queries) + ') AS documents '
                         'ORDER BY COALESCE(sent_at, \'\') DESC,id DESC,kind '
                         f'LIMIT {self.mark} OFFSET {self.mark}',
-                        (*values, INBOX_PAGE_SIZE + 1, (page - 1) * INBOX_PAGE_SIZE))
+                        (STAFF_INBOX_EVENT, *values, INBOX_PAGE_SIZE + 1, (page - 1) * INBOX_PAGE_SIZE))
             rows = self.rows(cur)
         for row in rows:
             row['title'] = KINDS[row['kind']][6]
             row['sent_at'] = database_event_time(row['sent_at'], postgres=self.pg)
         return rows[:INBOX_PAGE_SIZE], len(rows) > INBOX_PAGE_SIZE
+
+    def eligible_inbox_staff(self, cur, assignee_id=None):
+        sql = ("SELECT id,username,display_name,role,admin_permissions,NULL AS email FROM users "
+               "WHERE role IN ('admin','owner')")
+        params = ()
+        if assignee_id is not None:
+            sql += f' AND id={self.mark}'
+            params = (assignee_id,)
+        cur.execute(sql + ' ORDER BY display_name,username,id'
+                    + (' FOR SHARE' if self.pg and assignee_id is not None else ''), params)
+        return {str(row['id']): row['display_name'] or row['username']
+                for row in self.rows(cur) if inbox_staff(self.runtime.build_user_from_record(row))}
+
+    def received_document(self, cur, kind, document_id, *, lock=False):
+        if kind not in KINDS:
+            abort(404)
+        table, _, _, owner, *_ = KINDS[kind]
+        cur.execute(f'SELECT d.*,u.display_name AS customer_display_name FROM {table} d '
+                    f'JOIN users u ON u.id=d.{owner} WHERE d.id={self.mark}'
+                    + (' FOR UPDATE OF d' if self.pg and lock else ''), (document_id,))
+        doc = self.one(cur)
+        allowed = {'submitted'} if lock else SENT
+        if not doc or doc.get('status') not in allowed or not self.owned_customer_document(kind, doc, doc[owner]):
+            abort(404)
+        return doc
+
+    def inbox_history(self, cur, table, document_id, limit=20):
+        cur.execute(f'SELECT p.id,p.after_status AS handling,p.actor_id,p.created_at, '
+                    f'({self.inbox_assignee_sql()}) AS assignee FROM final_document_events p '
+                    f'WHERE p.document_kind={self.mark} AND p.document_id={self.mark} AND p.action={self.mark} '
+                    f'ORDER BY p.id DESC LIMIT {self.mark}', (table, document_id, STAFF_INBOX_EVENT, limit))
+        return self.rows(cur)
+
+    def update_inbox(self, kind, document_id, actor_id, revision, handling, assignee_id):
+        with self.db(write=True) as (_, cur):
+            self.received_document(cur, kind, document_id, lock=True)
+            table = KINDS[kind][0]
+            current = next(iter(self.inbox_history(cur, table, document_id, limit=1)), None)
+            if revision != (current['id'] if current else 0):
+                abort(409, description='別のスタッフが対応状況を更新しました。書類を開き直して確認してください。')
+            if assignee_id and assignee_id not in self.eligible_inbox_staff(cur, int(assignee_id)):
+                abort(400, description='書類受付を使えるスタッフから担当者を選んでください。')
+            old_handling = current['handling'] if current else 'pending'
+            if handling == old_handling and (assignee_id or None) == (current['assignee'] if current else None):
+                return False
+            cur.execute('INSERT INTO final_document_events '
+                        '(document_kind,document_id,action,actor_id,before_status,after_status,metadata) VALUES ('
+                        + ','.join([self.mark]*7) + ')',
+                        (table, document_id, STAFF_INBOX_EVENT, actor_id, old_handling, handling,
+                         json.dumps({'assignee_user_id': int(assignee_id) if assignee_id else None})))
+        return True
 
 
 def register_document_workflow(runtime):
@@ -365,19 +441,28 @@ def register_document_workflow(runtime):
 
     @login_required
     def inbox():
-        if not current_user.is_admin() or not (getattr(current_user, 'role', '') == 'owner' or current_user.has_permission('invoices')):
+        if not inbox_staff(current_user):
             abort(403)
         filters = inbox_filters()
         submissions, has_next = service.inbox(
             query=filters['q'], category=filters['category'],
             received_from=date.fromisoformat(filters['received_from']) if filters['received_from'] else None,
             received_through=date.fromisoformat(filters['received_through']) if filters['received_through'] else None,
-            page=filters['page'])
-        query_args = {key: value for key, value in filters.items() if value and (key != 'page' or value > 1)}
+            page=filters['page'], handling=filters['handling'], assignee=filters['assignee'])
+        with service.db() as (_, cur):
+            staff = service.eligible_inbox_staff(cur)
+        query_args = inbox_query_args(filters)
         for row in submissions:
             row['url'] = url_for('admin_customer_submission_detail', kind=row['kind'], document_id=row['id'], **query_args)
         return render_template('customer_documents/inbox.html', submissions=submissions, filters=filters,
-                               categories={kind: spec[6] for kind, spec in KINDS.items()}, has_next=has_next)
+                               categories={kind: spec[6] for kind, spec in KINDS.items()}, has_next=has_next,
+                               inbox_states=INBOX_STATES, staff=staff)
+
+    def inbox_query_args(filters):
+        return {key: value for key, value in filters.items() if value and (key != 'page' or value > 1)}
+
+    def staff_id(value):
+        return bool(re.fullmatch(r'[1-9][0-9]{0,9}', value) and int(value) <= 2_147_483_647)
 
     def inbox_filters():
         category = request.args.get('category', '')
@@ -396,26 +481,52 @@ def register_document_workflow(runtime):
             dates[key] = raw
         if all(dates.values()) and dates['received_from'] > dates['received_through']:
             abort(400, description='受信日の開始日は終了日以前にしてください。')
+        handling = request.args.get('handling', '')
+        assignee = request.args.get('assignee', '')
+        if (handling and handling not in INBOX_STATES) or (assignee not in {'', 'unassigned'} and not staff_id(assignee)):
+            abort(400, description='対応状況と担当者の条件を確認してください。')
         page = min(1_000_000, max(1, request.args.get('page', 1, type=int)))
-        return dict(q=request.args.get('q', '').replace('\x00', '').strip()[:100], category=category, page=page, **dates)
+        return dict(q=request.args.get('q', '').replace('\x00', '').strip()[:100], category=category, page=page,
+                    handling=handling, assignee=assignee, **dates)
 
     @login_required
     def received_detail(kind, document_id):
-        if not current_user.is_admin() or not (getattr(current_user, 'role', '') == 'owner' or current_user.has_permission('invoices')):
+        if not inbox_staff(current_user):
             abort(403)
         if kind not in KINDS:
             abort(404)
-        table, items, key, owner, *_ = KINDS[kind]
+        table, items, key, *_ = KINDS[kind]
         with service.db() as (_, cur):
-            cur.execute(f'SELECT d.*,u.display_name AS customer_display_name FROM {table} d JOIN users u ON u.id=d.{owner} WHERE d.id={service.mark}', (document_id,))
-            doc = service.one(cur)
-            if not doc or doc.get('status') not in SENT or not service.owned_customer_document(kind, doc, doc[owner]):
-                abort(404)
+            doc = service.received_document(cur, kind, document_id)
             cur.execute(f'SELECT * FROM {items} WHERE {key}={service.mark} ORDER BY item_no,id', (document_id,))
             details = service.rows(cur)
-        back_url = url_for('admin_customer_submissions', **{key: value for key, value in inbox_filters().items()
-                                                           if value and (key != 'page' or value > 1)})
-        return render_template('customer_documents/received_detail.html', document=doc, details=details, title=KINDS[kind][6], back_url=back_url)
+            staff = service.eligible_inbox_staff(cur)
+            history = service.inbox_history(cur, table, document_id)
+        for entry in history:
+            entry['time'] = database_event_time(entry['created_at'], postgres=service.pg)
+        current = history[0] if history else {'id': 0, 'handling': 'pending', 'assignee': None}
+        query_args = inbox_query_args(inbox_filters())
+        return render_template('customer_documents/received_detail.html', document=doc, details=details, title=KINDS[kind][6],
+                               back_url=url_for('admin_customer_submissions', **query_args),
+                               progress_url=url_for('admin_customer_submission_progress', kind=kind, document_id=document_id, **query_args),
+                               staff=staff, inbox_states=INBOX_STATES, progress=current, history=history)
+
+    @login_required
+    def received_progress(kind, document_id):
+        if not inbox_staff(current_user):
+            abort(403)
+        csrf()
+        handling = request.form.get('handling', '')
+        assignee = request.form.get('assignee', '')
+        revision = request.form.get('revision', '')
+        if (any(len(request.form.getlist(field)) != 1 for field in ('handling', 'assignee', 'revision'))
+                or handling not in INBOX_STATES or (assignee and not staff_id(assignee))
+                or not re.fullmatch(r'0|[1-9][0-9]{0,9}', revision)):
+            abort(400, description='担当者と対応状況を選び直してください。')
+        query_args = inbox_query_args(inbox_filters())
+        changed = service.update_inbox(kind, document_id, current_user.id, int(revision), handling, assignee)
+        flash('担当者と対応状況を保存しました。' if changed else '変更はありません。', 'success' if changed else 'info')
+        return redirect(url_for('admin_customer_submission_detail', kind=kind, document_id=document_id, **query_args))
 
     @login_required
     def product_candidates():
@@ -439,6 +550,8 @@ def register_document_workflow(runtime):
     app.add_url_rule('/documents/submit/<kind>/<int:document_id>', endpoint='customer_document_submit', view_func=submit, methods=['POST'])
     app.add_url_rule('/admin/customer-submissions', endpoint='admin_customer_submissions', view_func=inbox, methods=['GET'])
     app.add_url_rule('/admin/customer-submissions/<kind>/<int:document_id>', endpoint='admin_customer_submission_detail', view_func=received_detail, methods=['GET'])
+    app.add_url_rule('/admin/customer-submissions/<kind>/<int:document_id>/progress',
+                     endpoint='admin_customer_submission_progress', view_func=received_progress, methods=['POST'])
     app.add_url_rule('/api/document-products', endpoint='customer_document_products', view_func=product_candidates, methods=['GET'])
 
     # The old invoice sender must not bypass the same state and item checks.

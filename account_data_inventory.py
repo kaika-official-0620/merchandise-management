@@ -70,7 +70,7 @@ _register('contracts', 'business_customer_agreements stage3_agreements stage5_ca
 _register('contracts', 'stage5_card_consent_revocations', ())
 _register('documents', 'invoices', ('sender_id',))
 _register('documents', 'shikiriosho', ('sender_id', 'recipient_id'))
-_register('documents', 'service_documents user_mitsumori user_keisan user_kaitori_shoudaku', ('user_id',))
+_register('documents', 'service_documents user_mitsumori user_keisan user_kaitori_shoudaku quote_number_high_water', ('user_id',))
 _register('documents', 'admin_kaitori_shoudaku', ('admin_id',))
 _register('documents', '''invoice_items shikiriosho_items user_mitsumori_items user_keisan_items
     user_kaitori_shoudaku_items admin_kaitori_shoudaku_items''', ())

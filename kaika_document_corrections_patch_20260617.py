@@ -8,6 +8,7 @@ from datetime import datetime
 
 from flask import abort, flash, make_response, redirect, render_template, request, url_for
 from flask_login import current_user
+from document_workflow import STAFF_INBOX_EVENT
 from quote_documents import allocate_quote_number, validate_quote_dates
 
 
@@ -497,9 +498,10 @@ def apply(module):
             FROM final_document_events e
             LEFT JOIN users u ON e.actor_id = u.id
             WHERE e.document_kind = {mark()} AND e.document_id = {mark()}
+              AND e.action <> {mark()}
             ORDER BY e.created_at DESC, e.id DESC
             """,
-            (document_kind, document_id),
+            (document_kind, document_id, STAFF_INBOX_EVENT),
         )
         events = rows_to_dicts(cur.fetchall())
         for event in events:
