@@ -9,8 +9,10 @@
 <div class="card"><h2>日時（日本時間）</h2><p>受領：{{ registry_time(item.received_at) if item.received_at else '不明・未記録' }}<br>撮影・登録完了：{{ registry_time(item.registration_completed_at) if item.registration_completed_at else '不明・未記録' }}<br>売却：{{ registry_time(item.sold_at) if item.sold_at else '不明・未記録' }}<br>発送：{{ registry_time(item.shipped_at) if item.shipped_at else '不明・未記録' }}<br>返品再入庫：{{ registry_time(item.returned_at) if item.returned_at else '未記録' }}<br>顧客へ返送：{{ registry_time(item.return_shipped_at) if item.return_shipped_at else '未記録' }}</p><p class="muted">過去の日付が分からない場合、今日の日付を補完しません。期限は一律2か月に設定しません。</p></div>
 <section class="card"><h2>写真の容量記録</h2>{% if photos.count %}<p>{{ photos.count }}枚 / 確認できた容量 {{ photos.known_bytes }} バイト{% if photos.unknown_count %}（別に容量未確認 {{ photos.unknown_count }}枚）{% endif %}</p>{% else %}<p>枚数・容量は未記録です。以前の写真が削除されたことを意味しません。</p>{% endif %}<p class="muted">現在の所有者の写真記録を表示します。原本の自動削除は行いません。</p></section>
 {% if staff %}
-{% if stage2_staff_photos_available and item.custodian == 'kaika' and item.physical_state == 'received' and not item.held %}
+{% if can_add_staff_photos %}
 <a class="btn btn-primary" href="{{ url_for('stage2_staff_photos.manage',item_id=item.physical_item_id) }}">開花で撮影した写真を追加</a>
+{% elif staff_photo_error %}
+<p class="notice">写真を追加する前に、商品記録を確認してください。{{ staff_photo_error }} <a href="{{ url_for('inventory_registry.reconcile') }}">既存在庫の照合を開く</a></p>
 {% endif %}
 <p class="notice">開花への受領は預け入れ画面、自分の販売・発送は自己管理画面から記録できます。下記の作業記録だけで請求は発生しません。保留の理由と確認結果を残してください。</p>
 {% if stage4_commerce_available and current_user.has_permission('invoices') %}
