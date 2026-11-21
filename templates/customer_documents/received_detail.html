@@ -3,13 +3,43 @@
 {% block content %}
 <a class="btn btn-secondary" href="{{ back_url }}">お客様から届いた書類へ戻る</a>
 <h1>{{ title }}</h1>
-<p>送信者：{{ document.customer_display_name }} ／ 書類番号：{{ document.document_no or document.invoice_no }} ／ 状態：開花へ送信済み</p>
+<p>送信者：{{ document.customer_display_name }} ／ 書類番号：{{ document.document_no or document.invoice_no }} ／ 受信状態：開花へ送信済み</p>
 <p>送付先：株式会社 開花（書類受付）</p>
+{% if document.status == 'submitted' %}
+<section class="document-receipt-progress" aria-labelledby="receipt-progress-title">
+  <h2 id="receipt-progress-title">開花スタッフの対応</h2>
+  {% if progress.assignee and progress.assignee not in staff %}<p>以前の担当者の権限が変わっています。保存する前に担当者を選び直してください。</p>{% endif %}
+  <form method="post" action="{{ progress_url }}">
+    <input type="hidden" name="security_csrf_token" value="{{ security_form_token }}">
+    <input type="hidden" name="revision" value="{{ progress.id }}">
+    <label for="receipt-assignee">担当者</label>
+    <select id="receipt-assignee" name="assignee">
+      {% if progress.assignee and progress.assignee not in staff %}<option value="stale" selected>担当者を再確認</option>{% endif %}
+      <option value=""{% if not progress.assignee %} selected{% endif %}>未割り当て</option>
+      {% for id, name in staff.items() %}<option value="{{ id }}"{% if progress.assignee == id %} selected{% endif %}>{{ name }}（#{{ id }}）</option>{% endfor %}
+    </select>
+    <label for="receipt-handling">対応状況</label>
+    <select id="receipt-handling" name="handling" required>{% for code, label in inbox_states.items() %}<option value="{{ code }}"{% if progress.handling == code %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+    <button type="submit" class="btn btn-primary">担当と対応状況を保存</button>
+  </form>
+  {% if history %}<details><summary>対応の変更履歴（直近20件）</summary>
+    <ul>{% for change in history %}<li>{{ change.time }}（日本時間） ／ {{ inbox_states[change.handling] }} ／ 担当 {{ staff.get(change.assignee, '以前のスタッフ') if change.assignee else '未割り当て' }} ／ 更新 {{ staff.get(change.actor_id|string, '以前のスタッフ') }}</li>{% endfor %}</ul>
+  </details>{% endif %}
+</section>
+<style>
+.document-receipt-progress{margin:1rem 0;padding:1rem;border:1px solid #cbd5d1;border-radius:.6rem}
+.document-receipt-progress form{display:grid;grid-template-columns:max-content minmax(0,24rem);gap:.65rem 1rem;align-items:center}
+.document-receipt-progress select{min-height:44px;min-width:0;width:100%}
+.document-receipt-progress button{grid-column:1/-1;justify-self:start}
+.document-receipt-progress details{margin-top:.75rem}
+@media(max-width:560px){.document-receipt-progress form{grid-template-columns:minmax(0,1fr)}}
+</style>
+{% endif %}
 <p>{{ document.subject or '' }}</p>
 <div style="overflow-x:auto"><table class="table"><thead><tr><th>商品・内容</th><th>数量</th><th>単価</th><th>金額</th></tr></thead><tbody>
 {% for item in details %}<tr><td>{{ item.item_name or item.product_name }}</td><td>{{ item.quantity }}</td><td>{{ item.unit_price }}</td><td>{{ item.amount }}</td></tr>{% endfor %}
 </tbody></table></div>
 <p>書類に記載された合計：¥{{ '{:,}'.format(document.total_amount or 0) }}</p>
 <p style="white-space:pre-wrap">{{ document.notes or '' }}</p>
-<p>この画面は受領内容の確認用です。商品の売却・発送・料金の確定は行いません。</p>
+<p>ここで確認できるのは、受信した書類とスタッフの対応記録です。商品の作業や料金は、それぞれの業務画面で確認できます。</p>
 {% endblock %}

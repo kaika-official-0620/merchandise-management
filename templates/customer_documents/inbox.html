@@ -12,6 +12,15 @@
   <input type="date" id="doc-from" name="received_from" value="{{ filters.received_from }}">
   <label for="doc-through">受信日（終了）</label>
   <input type="date" id="doc-through" name="received_through" value="{{ filters.received_through }}">
+  <label for="doc-handling">対応状況</label>
+  <select id="doc-handling" name="handling"><option value="">すべて</option>{% for key, title in inbox_states.items() %}<option value="{{ key }}"{% if filters.handling == key %} selected{% endif %}>{{ title }}</option>{% endfor %}</select>
+  <label for="doc-assignee">担当者</label>
+  <select id="doc-assignee" name="assignee">
+    <option value="">すべて</option>
+    <option value="unassigned"{% if filters.assignee == 'unassigned' %} selected{% endif %}>未割り当て</option>
+    {% if filters.assignee and filters.assignee != 'unassigned' and filters.assignee not in staff %}<option value="{{ filters.assignee }}" selected>以前の担当者</option>{% endif %}
+    {% for id, name in staff.items() %}<option value="{{ id }}"{% if filters.assignee == id %} selected{% endif %}>{{ name }}（#{{ id }}）</option>{% endfor %}
+  </select>
   <div class="customer-documents-filter-actions"><button type="submit" class="btn btn-primary">絞り込む</button><a class="btn btn-secondary" href="{{ url_for('admin_customer_submissions') }}">条件をクリア</a></div>
 </form>
 <style>
@@ -19,17 +28,18 @@
 .customer-documents-filters input,.customer-documents-filters select{min-height:44px;min-width:0;width:100%;box-sizing:border-box}
 .customer-documents-filter-actions{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:.5rem}
 .customer-documents-page{display:flex;flex-wrap:wrap;align-items:center;gap:.75rem;margin:1rem 0}
+.customer-documents-handling{white-space:nowrap;font-weight:600}
 @media(max-width:560px){.customer-documents-filters{grid-template-columns:minmax(0,1fr);gap:.4rem}.customer-documents-filters label{margin-top:.35rem}}
 </style>
-<div style="overflow-x:auto"><table class="table"><thead><tr><th>受信日時（日本時間）</th><th>お客様</th><th>書類</th><th>書類番号</th><th>確認</th></tr></thead><tbody>
-{% for doc in submissions %}<tr><td>{{ doc.sent_at }}</td><td>{{ doc.customer or 'お客様' }}</td><td>{{ doc.title }}</td><td>{{ doc.number }}</td><td><a class="btn btn-secondary" href="{{ doc.url }}">内容を確認</a></td></tr>
-{% else %}<tr><td colspan="5">条件に合う書類はありません。</td></tr>{% endfor %}
+<div style="overflow-x:auto"><table class="table"><thead><tr><th>受信日時（日本時間）</th><th>お客様</th><th>書類</th><th>書類番号</th><th>担当者</th><th>対応状況</th><th>確認</th></tr></thead><tbody>
+{% for doc in submissions %}<tr><td>{{ doc.sent_at }}</td><td>{{ doc.customer or 'お客様' }}</td><td>{{ doc.title }}</td><td>{{ doc.number }}</td><td>{{ staff.get(doc.assignee, '担当者を再確認') if doc.assignee else '未割り当て' }}</td><td class="customer-documents-handling">{{ inbox_states[doc.handling] }}</td><td><a class="btn btn-secondary" href="{{ doc.url }}">内容を確認</a></td></tr>
+{% else %}<tr><td colspan="7">条件に合う書類はありません。</td></tr>{% endfor %}
 </tbody></table></div>
 {% if filters.page > 1 or has_next %}
 <nav class="customer-documents-page" aria-label="書類受付のページ">
-  {% if filters.page > 1 %}<a class="btn btn-secondary" href="{{ url_for('admin_customer_submissions', q=filters.q, category=filters.category, received_from=filters.received_from, received_through=filters.received_through, page=filters.page-1) }}">前のページ</a>{% endif %}
+  {% if filters.page > 1 %}<a class="btn btn-secondary" href="{{ url_for('admin_customer_submissions', q=filters.q, category=filters.category, received_from=filters.received_from, received_through=filters.received_through, handling=filters.handling, assignee=filters.assignee, page=filters.page-1) }}">前のページ</a>{% endif %}
   <span>{{ filters.page }}ページ</span>
-  {% if has_next %}<a class="btn btn-secondary" href="{{ url_for('admin_customer_submissions', q=filters.q, category=filters.category, received_from=filters.received_from, received_through=filters.received_through, page=filters.page+1) }}">次のページ</a>{% endif %}
+  {% if has_next %}<a class="btn btn-secondary" href="{{ url_for('admin_customer_submissions', q=filters.q, category=filters.category, received_from=filters.received_from, received_through=filters.received_through, handling=filters.handling, assignee=filters.assignee, page=filters.page+1) }}">次のページ</a>{% endif %}
 </nav>
 {% endif %}
 <p>「内容を確認」から受領した明細を確認できます。商品の作業記録や料金の確認は、それぞれの業務画面で行います。</p>
