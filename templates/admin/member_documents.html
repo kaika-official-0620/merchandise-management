@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}会員の書類・手続き - 株式会社開花{% endblock %}
+
+{% macro pagination(page, has_more, is_incoming) %}
+    {% if page > 1 or has_more %}
+    <nav class="member-doc-actions" aria-label="{{ '受信書類' if is_incoming else '開花作成書類' }}のページ">
+        {% if page > 1 %}
+        <a class="btn btn-secondary" href="{{ url_for('admin_member_documents', user_id=member.id, search=search or none, incoming=page-1 if is_incoming else incoming_page, outgoing=outgoing_page if is_incoming else page-1) }}#{{ 'incoming-docs' if is_incoming else 'outgoing-docs' }}">前のページ</a>
+        {% endif %}
+        <span>{{ page }}ページ</span>
+        {% if has_more %}
+        <a class="btn btn-secondary" href="{{ url_for('admin_member_documents', user_id=member.id, search=search or none, incoming=page+1 if is_incoming else incoming_page, outgoing=outgoing_page if is_incoming else page+1) }}#{{ 'incoming-docs' if is_incoming else 'outgoing-docs' }}">次のページ</a>
+        {% endif %}
+    </nav>
+    {% endif %}
+{% endmacro %}
+
+{% block content %}
+<div class="member-doc-page">
+    <a class="btn btn-secondary" href="{{ url_for('admin_users', search=search or none) }}">クライアント一覧へ戻る</a>
+    <header>
+        <h1>{{ member.display_name or member.username }}の書類・手続き</h1>
+        <p>会員ID {{ member.id }}</p>
+    </header>
+
+    <section class="member-doc-card" aria-labelledby="incoming-docs">
+        <h2 id="incoming-docs">会員から届いた書類</h2>
+        <div class="admin-table-container" tabindex="0" aria-label="会員から届いた書類の一覧">
+            <table class="admin-table">
+                <thead><tr><th scope="col">書類番号</th><th scope="col">種類</th><th scope="col">受信日時（日本時間）</th><th scope="col">担当者</th><th scope="col">対応状況</th></tr></thead>
+                <tbody>
+                {% for document in incoming %}
+                <tr>
+                    <td><a href="{{ document.url }}">{{ document.number or '書類を確認' }}</a></td>
+                    <td>{{ document.title }}</td>
+                    <td>{{ document.sent_at }}</td>
+                    <td>{{ staff.get(document.assignee, '担当者を再確認') if document.assignee else '未割り当て' }}</td>
+                    <td>{{ inbox_states.get(document.handling, '状態を確認') }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5">このページに受信書類はありません。</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {{ pagination(incoming_page, more_incoming, true) }}
+    </section>
+
+    <section class="member-doc-card" aria-labelledby="outgoing-docs">
+        <h2 id="outgoing-docs">開花がこの会員のために作成した書類</h2>
+        {% if can_prepare_quote or can_prepare_statement %}
+        <div class="member-doc-actions">
+            {% if can_prepare_quote %}<a class="btn btn-primary" href="{{ url_for('admin_vendor_mitsumori_create', user_id=member.id) }}">業者向け見積依頼書を作る</a>{% endif %}
+            {% if can_prepare_statement %}<a class="btn btn-secondary" href="{{ url_for('admin_step4_client_invoice_create', user_id=member.id) }}">この会員の買取明細書を作る</a>{% endif %}
+        </div>
+        {% else %}
+        <p>現在、見積依頼書や買取明細書の作成へ進める商品はありません。</p>
+        {% endif %}
+        <div class="admin-table-container" tabindex="0" aria-label="開花が作成した書類の一覧">
+            <table class="admin-table">
+                <thead><tr><th scope="col">書類番号</th><th scope="col">種類</th><th scope="col">発行日</th><th scope="col">状態</th></tr></thead>
+                <tbody>
+                {% for document in outgoing %}
+                <tr>
+                    <td><a href="{{ document.url }}">{{ document.number or '書類を確認' }}</a></td>
+                    <td>{{ document.kind }}</td>
+                    <td>{{ document.issue_date or '—' }}</td>
+                    <td>{{ document.state_label }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4">このページに開花が作成した書類はありません。</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {{ pagination(outgoing_page, more_outgoing, false) }}
+    </section>
+
+    <aside class="member-doc-card">
+        <h2>開花の商品・自社書類</h2>
+        <p>開花の在庫に関する書類は、開花管理の書類管理から作成できます。</p>
+        <a class="btn btn-secondary" href="{{ url_for('admin_documents_dashboard') }}">開花管理の書類を開く</a>
+    </aside>
+</div>
+<style>
+.member-doc-page { display:grid; gap:1rem; min-width:0; overflow-wrap:anywhere; }
+.member-doc-page > a { justify-self:start; }
+.member-doc-page h1, .member-doc-page h2 { margin-top:0; }
+.member-doc-card { min-width:0; padding:1rem; border:1px solid #dbe3df; border-radius:.6rem; background:#fff; }
+.member-doc-card .admin-table-container { overflow-x:auto; }
+.member-doc-actions { display:flex; flex-wrap:wrap; gap:.75rem; align-items:center; margin:.75rem 0; }
+</style>
+{% endblock %}

@@ -4,6 +4,9 @@
 {% block content %}
 <div class="page-header">
     <h1>{{ 'クライアント編集' if user else 'クライアント追加' }}</h1>
+    {% if user and member_documents_available|default(false) and current_user.has_permission('invoices') %}
+    <a href="{{ url_for('admin_member_documents', user_id=user.id) }}" class="btn btn-secondary">この会員の書類・手続き</a>
+    {% endif %}
     <a href="{{ url_for('admin_users') }}" class="btn btn-secondary">一覧へ戻る</a>
 </div>
 

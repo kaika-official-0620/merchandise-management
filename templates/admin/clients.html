@@ -48,7 +48,14 @@
                 <tr>
                     <td>{{ user.id }}</td>
                     <td><strong>{{ user.username }}</strong></td>
-                    <td>{{ user.display_name or '-' }}</td>
+                    <td>
+                        {{ user.display_name or '-' }}
+                        {% if member_documents_available|default(false) and current_user.has_permission('invoices') %}
+                        <div class="client-documents-link">
+                            <a href="{{ url_for('admin_member_documents', user_id=user.id, search=search_query or none) }}">書類・手続き</a>
+                        </div>
+                        {% endif %}
+                    </td>
                     <td>{{ user.email }}</td>
                     <td class="text-center">{{ user.monthly_item_count }}点</td>
                     <td class="text-center">
@@ -145,6 +152,17 @@
     color: #2563eb;
     font-size: 0.78rem;
     font-weight: 700;
+}
+
+.client-documents-link a {
+    display: inline-block;
+    padding: 0.35rem 0;
+    color: #254f4b;
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 0.15em;
+    white-space: nowrap;
 }
 </style>
 {% endblock %}
