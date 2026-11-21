@@ -952,7 +952,10 @@ def phase(args):
         verify_access(runtime, config, access, state, state_path, users, args.phase, check)
         verify_documents(runtime, state, state_path, users, clients, args.phase, check)
         verify_source_documents(runtime, state, state_path, users, clients, args.phase, check)
-        verify_product_list_return(clients['business'], args.phase, check)
+        if args.phase == 'restart':
+            # This end-to-end workflow creates its own test item. Run it after
+            # both phases have checked that seeding preserves the original rows.
+            verify_product_list_return(clients['business'], args.phase, check)
         try:
             with socket.socket() as denied:
                 denied.connect(('203.0.113.1', 443))
