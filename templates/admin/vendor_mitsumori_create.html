@@ -177,10 +177,9 @@
     <form method="post" class="vendor-create-page">
         <section class="vendor-panel">
             <h2>作成情報</h2>
-            <p class="vendor-muted">見積依頼書番号は保存時に採番されます。表示中の番号は作成予定番号です。</p>
             <div class="vendor-form-grid">
                 <div class="vendor-field">
-                    <label>作成予定番号</label>
+                    <label>見積依頼書番号</label>
                     <input type="text" class="form-control" value="{{ document_no }}" readonly>
                 </div>
                 <div class="vendor-field">
@@ -193,12 +192,12 @@
                     </select>
                 </div>
                 <div class="vendor-field">
-                    <label for="issue_date">作成日</label>
+                    <label for="issue_date">発行日</label>
                     <input type="date" id="issue_date" name="issue_date" class="form-control" value="{{ today }}" required>
                 </div>
                 <div class="vendor-field">
                     <label for="valid_until">回答期限</label>
-                    <input type="date" id="valid_until" name="valid_until" class="form-control" value="{{ default_valid_until }}">
+                    <input type="date" id="valid_until" name="valid_until" class="form-control" value="{{ default_valid_until }}" min="{{ today }}">
                 </div>
                 <div class="vendor-field full">
                     <label for="subject">件名</label>
@@ -246,4 +245,5 @@
         </section>
     </form>
 </div>
+<script src="{{ url_for('static', filename='js/quote-date-validation.js') }}" defer></script>
 {% endblock %}

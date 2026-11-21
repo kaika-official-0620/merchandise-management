@@ -53,7 +53,7 @@
             </div>
             <div class="form-group">
                 <label for="valid_until">有効期限</label>
-                <input type="date" id="valid_until" name="valid_until" value="{{ mitsumori.valid_until if mitsumori else default_valid_until|default('', true) }}" class="form-control">
+                <input type="date" id="valid_until" name="valid_until" value="{{ (mitsumori.valid_until or '') if mitsumori else default_valid_until|default('', true) }}" min="{{ mitsumori.issue_date if mitsumori else today }}" class="form-control">
             </div>
             {% if not has_source_request and not is_kaika_scope %}
             <div class="form-group">
@@ -864,6 +864,7 @@
 {% if is_kaika_scope %}
 <script src="{{ url_for('static', filename='js/kaika_document_product_picker.js') }}"></script>
 {% endif %}
+<script src="{{ url_for('static', filename='js/quote-date-validation.js') }}" defer></script>
 <script>
 const hasSourceRequest = {{ 'true' if has_source_request else 'false' }};
 const isKaikaScope = {{ is_kaika_scope|tojson }};
