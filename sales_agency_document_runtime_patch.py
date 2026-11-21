@@ -6,10 +6,11 @@ import sqlite3
 from datetime import datetime, timedelta
 from typing import Any
 
-from flask import flash, redirect, render_template, request, url_for
+from flask import abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 from werkzeug.routing import BuildError
 from werkzeug.utils import secure_filename
+from quote_documents import allocate_quote_number, validate_quote_dates
 
 
 SALES_AGENCY_DOCUMENT_FLOW_STEPS = [
@@ -1885,6 +1886,10 @@ def apply(module: Any) -> None:
             target_user_id = request.form.get("target_user_id", type=int)
             issue_date = request.form.get("issue_date")
             valid_until = request.form.get("valid_until") or None
+            try:
+                validate_quote_dates(issue_date, valid_until)
+            except ValueError as exc:
+                abort(400, description=str(exc))
             company_name = (request.form.get("company_name") or "").strip()
             department = (request.form.get("department") or "").strip()
             contact_person = (request.form.get("contact_person") or "").strip()
@@ -1913,7 +1918,7 @@ def apply(module: Any) -> None:
             conn, cur = open_cursor()
             try:
                 now = datetime.now()
-                document_no = module.generate_admin_mitsumori_document_no()
+                document_no = allocate_quote_number(conn, cur, module.get_jst_now(), postgres=bool(DATABASE_URL), prefix="MT")
                 if DATABASE_URL:
                     cur.execute(
                         """
@@ -2046,7 +2051,7 @@ def apply(module: Any) -> None:
             mitsumori=None,
             items=[],
             today=today.strftime("%Y-%m-%d"),
-            document_no=module.generate_admin_mitsumori_document_no(),
+            document_no="保存時に採番",
             default_valid_until=(today + timedelta(days=30)).strftime("%Y-%m-%d"),
             company_name_default=source_request.get("client_name") if source_request else "",
             department_default="",

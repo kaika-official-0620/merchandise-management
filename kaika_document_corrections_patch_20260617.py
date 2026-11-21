@@ -8,6 +8,7 @@ from datetime import datetime
 
 from flask import abort, flash, make_response, redirect, render_template, request, url_for
 from flask_login import current_user
+from quote_documents import allocate_quote_number, validate_quote_dates
 
 
 TERMINAL_SALES_STATUSES = {"cancelled", "rejected", "deal_failed"}
@@ -527,19 +528,6 @@ def apply(module):
 
     app.jinja_env.globals["load_final_document_events"] = load_final_document_events_for_template
 
-    def generate_user_mitsumori_no(cur, user_id):
-        now = get_jst_now()
-        cur.execute(
-            f"""
-            SELECT COUNT(*) AS count
-            FROM user_mitsumori
-            WHERE user_id = {mark()} AND issue_date >= {mark()}
-            """,
-            (user_id, now.strftime("%Y-%m-01")),
-        )
-        result = fetch_one_dict(cur) or {}
-        return f"UM-{now.strftime('%Y%m')}-{user_id}-{int(result.get('count') or 0) + 1:04d}"
-
     def load_invoice_for_current_user(invoice_id):
         conn, cur = open_cursor()
         try:
@@ -754,25 +742,17 @@ def apply(module):
         annotate_document_lists([invoice], [], [], [])
         return render_template("invoice_view.html", invoice=invoice, items=items)
 
-    def load_source_invoice(invoice_id):
-        conn, cur = open_cursor()
-        try:
-            cur.execute(
-                f"""
-                SELECT *
-                FROM invoices
-                WHERE id = {mark()} AND sender_id = {mark()}
-                """,
-                (invoice_id, current_user.id),
-            )
-            invoice = fetch_one_dict(cur)
-            if not source_invoice_is_actionable(invoice):
-                return None, []
-            cur.execute(f"SELECT * FROM invoice_items WHERE invoice_id = {mark()} ORDER BY item_no, id", (invoice_id,))
-            return invoice, rows_to_dicts(cur.fetchall())
-        finally:
-            cur.close()
-            conn.close()
+    def load_source_invoice(cur, invoice_id, *, lock=False):
+        cur.execute(
+            f"SELECT * FROM invoices WHERE id = {mark()} AND sender_id = {mark()}"
+            + (" FOR UPDATE" if DATABASE_URL and lock else ""),
+            (invoice_id, current_user.id),
+        )
+        invoice = fetch_one_dict(cur)
+        if not source_invoice_is_actionable(invoice):
+            return None, []
+        cur.execute(f"SELECT * FROM invoice_items WHERE invoice_id = {mark()} ORDER BY item_no, id", (invoice_id,))
+        return invoice, rows_to_dicts(cur.fetchall())
 
     def normalize_source_items(rows):
         normalized = []
@@ -877,20 +857,21 @@ def apply(module):
             flash("見積依頼書作成画面を表示できません。", "error")
             return redirect(url_for("user_document_list"))
 
-        source_invoice, source_invoice_items = load_source_invoice(source_invoice_id)
-        source_items = normalize_source_items(source_invoice_items)
-        if not source_invoice:
-            flash("元の買取明細書が見つからないか、見積依頼書を作成できない状態です。", "error")
-            return redirect(url_for("user_document_list"))
-
         conn, cur = open_cursor()
         try:
+            is_post = request.method == "POST"
+            if is_post and not DATABASE_URL:
+                cur.execute("BEGIN IMMEDIATE")
+            source_invoice, source_invoice_items = load_source_invoice(cur, source_invoice_id, lock=is_post)
+            if not source_invoice:
+                flash("元の買取明細書が見つからないか、見積依頼書を作成できない状態です。", "error")
+                return redirect(url_for("user_document_list"))
+            source_items = normalize_source_items(source_invoice_items)
             existing_id = linked_mitsumori_id_for_invoice(cur, source_invoice_id, current_user.id)
             if existing_id:
                 return redirect(url_for("user_mitsumori_view", id=existing_id))
-            document_no = generate_user_mitsumori_no(cur, current_user.id)
 
-            if request.method == "POST":
+            if is_post:
                 selected_ids = request.form.getlist("source_invoice_item_id[]") or request.form.getlist("source_invoice_item_choice[]")
                 selected_ids = [int(value) for value in selected_ids if str(value).isdigit()]
                 if not selected_ids:
@@ -900,7 +881,6 @@ def apply(module):
                         mitsumori=None,
                         items=[],
                         today=source_invoice.get("issue_date"),
-                        document_no=document_no,
                         my_merchandise=[],
                         source_invoice=source_invoice,
                         source_items=source_items,
@@ -915,6 +895,10 @@ def apply(module):
                 total_amount = sum(int(item.get("amount") or 0) for item in selected_items)
                 issue_date = source_invoice.get("issue_date") or get_jst_now().strftime("%Y-%m-%d")
                 valid_until = request.form.get("valid_until") or None
+                try:
+                    validate_quote_dates(issue_date, valid_until)
+                except ValueError as exc:
+                    abort(400, description=str(exc))
                 notes = (request.form.get("notes") or "").strip()
                 raw_status = request.form.get("status") or "draft"
                 status = "completed" if raw_status == "completed" else "draft"
@@ -924,6 +908,7 @@ def apply(module):
                 contact_person = (request.form.get("contact_person") or "").strip()
                 address = (request.form.get("address") or "").strip()
 
+                document_no = allocate_quote_number(conn, cur, get_jst_now(), postgres=bool(DATABASE_URL), user_id=current_user.id)
                 cur.execute(
                     f"""
                     INSERT INTO user_mitsumori
@@ -993,6 +978,9 @@ def apply(module):
                 if status == "draft":
                     return redirect(url_for("user_mitsumori_list"))
                 return redirect(url_for("user_mitsumori_view", id=mitsumori_id))
+        except Exception:
+            conn.rollback()
+            raise
         finally:
             cur.close()
             conn.close()
@@ -1002,7 +990,6 @@ def apply(module):
             mitsumori=None,
             items=[],
             today=source_invoice.get("issue_date"),
-            document_no=document_no,
             my_merchandise=[],
             source_invoice=source_invoice,
             source_items=source_items,

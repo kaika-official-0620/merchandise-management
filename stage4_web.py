@@ -12,7 +12,7 @@ from flask import Blueprint,abort,flash,redirect,render_template,request,send_fi
 from flask_login import current_user,login_required
 from werkzeug.exceptions import HTTPException
 
-from inventory_registry_web import RegistryWeb,JST,_text,_time
+from inventory_registry_web import RegistryWeb,JST,_datetime_local,_text,_time
 from item_registry import Actor,RegistryError,_now
 from stage3_web import _amount
 from stage4_common import Stage4Store
@@ -32,6 +32,7 @@ ERROR_MESSAGES={
     'listing_superseded':'新しい出品案があります。最新の版を開いてください。',
     'listing_rejected':'この版は差戻し済みです。修正した新しい版を作成してください。',
     'order_price_requires_reapproval':'訂正した販売額が承認済みの価格と異なるため、発送を保留しました。原資料と承認内容を確認してください。',
+    'task_changed_since_open':'画面を開いた後に作業状況が更新されました。販路・受注・発送を開き直して、現在の担当と期限を確認してください。',
 }
 
 
@@ -424,9 +425,15 @@ def register_stage4_commerce(runtime):
         raw=_text('assignee_user_id',20)
         if raw and not raw.isdigit():
             abort(400)
+        revision=_text('task_revision',20)
+        if revision and (not revision.isascii() or not revision.isdecimal()):
+            abort(400)
+        clear_deadline=request.form.get('clear_deadline')=='yes'
+        deadline=_text('deadline_at',40)
         with service.db(True) as store:
             ChannelService(store).update_task(service.actor(),task_id,status=_text('status',20,True),note=_text('note',1000,True),
-                assignee_user_id=int(raw) if raw else None,deadline_at=_time(request.form['deadline_at']) if request.form.get('deadline_at') else None,
+                assignee_user_id=int(raw) if raw else None,deadline_at=_time(deadline) if deadline and not clear_deadline else None,
+                clear_deadline=clear_deadline,expected_revision=int(revision) if revision else None,
                 occurred_at=when,source_key=key,evidence_reference=_text('evidence_reference',1000,True))
         return redirect(url_for('commerce.channels'))
 
@@ -449,6 +456,7 @@ def register_stage4_commerce(runtime):
     def context():
         return dict(stage4_commerce_available=all(app.config.get(f) is True for f in ('STAGE2_INVENTORY_ENABLED','STAGE3_FINANCE_ENABLED','STAGE4_COMMERCE_ENABLED')),
             commerce_csrf=service.csrf,commerce_operation=service.operation,commerce_channels=CHANNEL_NAMES,
+            commerce_task_datetime=_datetime_local,
             commerce_expiry=(datetime.now(JST)+timedelta(days=7)).strftime('%Y-%m-%dT%H:%M'),
             commerce_ownership_rule=app.config.get('STAGE4_OWNERSHIP_RULE','undecided'))
     app.register_blueprint(bp)

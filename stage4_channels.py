@@ -469,7 +469,8 @@ class ChannelService:
             'channel-legacy-stop:' + source_key)
         self.store.execute("UPDATE business_item_profiles SET sales_state='unlisted' WHERE physical_item_id=? AND sales_state='listed'", (item_id,))
 
-    def update_task(self, actor, task_id, *, status, note, evidence_reference, occurred_at, source_key, assignee_user_id=None, deadline_at=None):
+    def update_task(self, actor, task_id, *, status, note, evidence_reference, occurred_at, source_key,
+                    assignee_user_id=None, deadline_at=None, clear_deadline=False, expected_revision=None):
         self.store.authorize(actor, staff_required=True, finance=True)
         task = self._one('stage4_order_tasks', 'task_id', task_id)
         order = self._order(actor, task['order_id'], write=True)
@@ -483,15 +484,30 @@ class ChannelService:
                 raise RegistryError('task_staff_assignee_required')
         payload = dict(action='fulfillment_task', task=task_id, status=status, note=note, evidence=evidence,
                        when=when, assignee=assignee_user_id, deadline=deadline)
+        if clear_deadline:
+            payload['clear_deadline'] = True
+        if expected_revision is not None:
+            payload['expected_revision'] = expected_revision
         def create():
             history = self.store.query('SELECT * FROM stage4_order_task_events WHERE task_id=? ORDER BY revision', (task_id,))
+            if expected_revision is not None and expected_revision != len(history):
+                raise RegistryError('task_changed_since_open', status=409)
             if when < (history[-1]['occurred_at'] if history else task['created_at']):
                 raise RegistryError('task_time_reversed')
             if task['kind'] == 'shipping' and status == 'done' and not self.store.query('SELECT shipment_id FROM stage4_order_shipments WHERE order_id=?', (order['order_id'],)):
                 raise RegistryError('shipment_evidence_required', status=409)
+            previous_deadline = history[-1]['deadline_at'] if history else None
+            effective_deadline = deadline or previous_deadline
+            if deadline and previous_deadline:
+                # A browser can show three decimal places. An unchanged
+                # prefilled value should keep any finer stored precision.
+                previous_instant = datetime.fromisoformat(previous_deadline)
+                if datetime.fromisoformat(deadline) == previous_instant.replace(
+                        microsecond=previous_instant.microsecond // 1000 * 1000):
+                    effective_deadline = previous_deadline
             record = dict(event_id=_id('te4'), task_id=task_id, revision=len(history) + 1, status=status, note=note,
-                assignee_user_id=assignee_user_id, deadline_at=deadline, evidence_reference=evidence, occurred_at=when,
-                recorded_at=_now(), actor_user_id=actor.user_id, source_key=source_key)
+                assignee_user_id=assignee_user_id, deadline_at=None if clear_deadline else effective_deadline,
+                evidence_reference=evidence, occurred_at=when, recorded_at=_now(), actor_user_id=actor.user_id, source_key=source_key)
             self._insert('stage4_order_task_events', record)
             return record
         return self._operation(actor, source_key, payload, create, customer_id=order['customer_id'])

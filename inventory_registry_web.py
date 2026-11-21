@@ -81,6 +81,17 @@ def _display_time(value):
         return '未確認'
 
 
+def _datetime_local(value):
+    """Format an instant as a Japan-time value accepted by datetime-local."""
+    try:
+        instant = datetime.fromisoformat(value) if isinstance(value, str) else value
+        if not isinstance(instant, datetime) or instant.utcoffset() is None:
+            return ''
+        return instant.astimezone(JST).replace(tzinfo=None).isoformat(timespec='milliseconds')
+    except (ValueError, OverflowError):
+        return ''
+
+
 class RegistryWeb:
     def __init__(self, runtime):
         self.runtime, self.app = runtime, runtime.app
@@ -231,8 +242,16 @@ def register_inventory_registry(runtime):
         return render_item_detail(item_id)
 
     def render_item_detail(item_id, **extra):
+        can_add_staff_photos = False
+        staff_photo_error = None
         with service.db() as registry:
             item = registry.detail(service.actor(), item_id)
+            photo_service = app.extensions.get('stage2_staff_photos')
+            if (_staff() and photo_service and item['custodian'] == 'kaika'
+                    and item['physical_state'] == 'received' and not item['held']
+                    and item['sales_state'] not in {'sold', 'shipped'}):
+                staff_photo_error = photo_service.entry_error(registry, item)
+                can_add_staff_photos = staff_photo_error is None
             from stage2_self_management import require_schema
             cur = registry.connection.cursor()
             try:
@@ -250,7 +269,8 @@ def register_inventory_registry(runtime):
                       'unknown_count': sum(row['measurement_status'] != 'measured' for row in photo_rows)}
         return render_template('inventory_registry/detail.html', item=item, staff=_staff(),
                                event_labels=EVENT_LABELS, work_labels=WORK_LABELS, photos=photos,
-                               now_local=datetime.now(JST).strftime('%Y-%m-%dT%H:%M:%S.%f'), **extra)
+                               can_add_staff_photos=can_add_staff_photos, staff_photo_error=staff_photo_error,
+                               now_local=_datetime_local(datetime.now(JST)), **extra)
 
     @bp.post('/inventory/items/<item_id>/events')
     @allowed(staff=True)

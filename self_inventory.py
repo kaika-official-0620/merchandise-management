@@ -152,34 +152,35 @@ class SelfInventory:
         cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,))
         return cur.fetchone() is not None
 
-    def locked(self, cur, item):
+    def workflow_lock_queries(self, cur, item_id_sql):
+        queries = []
         if stage2_enabled(self.app):
             require_schema(cur, self.postgres)
-            cur.execute(f'''SELECT 1 FROM business_item_links l JOIN business_item_profiles p
-                ON p.physical_item_id=l.physical_item_id WHERE l.merchandise_id={self.mark} AND p.held=1''', (item['id'],))
-            if cur.fetchone():
-                return True
+            queries.append(f'''SELECT 1 FROM business_item_links l JOIN business_item_profiles p
+                ON p.physical_item_id=l.physical_item_id WHERE l.merchandise_id={item_id_sql} AND p.held=1''')
+        for table in ("sale_requests", "item_disposal_requests"):
+            if self._table_exists(cur, table):
+                queries.append(f"""SELECT 1 FROM {table} WHERE merchandise_id = {item_id_sql}
+                    AND COALESCE(status, 'pending') NOT IN ('cancelled', 'rejected', 'deal_failed')""")
+        if self._table_exists(cur, "sales_agency_request_items") and self._table_exists(cur, "sales_agency_requests"):
+            queries.append(f"""SELECT 1 FROM sales_agency_request_items sari
+                JOIN sales_agency_requests sar ON sar.id = sari.request_id
+                WHERE sari.merchandise_id = {item_id_sql}
+                  AND COALESCE(sar.status, 'pending') NOT IN ('cancelled', 'rejected', 'deal_failed')""")
+        return queries
+
+    def locked(self, cur, item):
+        queries = self.workflow_lock_queries(cur, self.mark)
         custody = self.app.extensions.get('inventory_custody')
         own = custody and item.get('custody_location') == 'self'
-        if custody and (item.get('custody_location', 'kaika') != 'self' or custody.active_for_item(cur,item['id'])):
+        if custody and (not own or custody.active_for_item(cur,item['id'])):
             return True
         if _financially_locked(item) and not own:
             return True
-        # Never change merchandise already used by a pending/completed workflow.
-        # Rejected/cancelled requests may be corrected and submitted again.
-        for table in ("sale_requests", "item_disposal_requests"):
-            if self._table_exists(cur, table):
-                cur.execute(f"""SELECT 1 FROM {table} WHERE merchandise_id = {self.mark}
-                    AND COALESCE(status, 'pending') NOT IN ('cancelled', 'rejected', 'deal_failed') LIMIT 1""",
-                    (item["id"],))
-                if cur.fetchone():
-                    return True
-        if self._table_exists(cur, "sales_agency_request_items") and self._table_exists(cur, "sales_agency_requests"):
-            cur.execute(f"""SELECT 1 FROM sales_agency_request_items sari
-                JOIN sales_agency_requests sar ON sar.id = sari.request_id
-                WHERE sari.merchandise_id = {self.mark}
-                  AND COALESCE(sar.status, 'pending') NOT IN ('cancelled', 'rejected', 'deal_failed') LIMIT 1""",
-                (item["id"],))
+        # Pending/completed workflows lock the item. Rejected/cancelled
+        # requests may be corrected and submitted again.
+        for query in queries:
+            cur.execute(query + ' LIMIT 1', (item["id"],))
             if cur.fetchone():
                 return True
         return False
@@ -291,17 +292,20 @@ class SelfInventory:
         if (selected_main and selected_main.filename) or selected_additional:
             if not callable(helper):
                 raise ValueError("写真の保存を利用できません。管理者にお問い合わせください。")
-        if selected_main and selected_main.filename:
-            main = helper(selected_main, prefix="self_")
-            if not main:
-                raise ValueError("メイン写真を保存できませんでした。")
-            created.append(main)
-        for photo in selected_additional:
-            path = helper(photo, prefix="self_")
+        def save_photo(photo, label):
+            try:
+                path = helper(photo, prefix="self_")
+            except ValueError as error:
+                raise ValueError(f"{label}　{error}") from error
             if not path:
-                raise ValueError("追加写真を保存できませんでした。")
+                raise ValueError(f"{label}を保存できませんでした。")
             created.append(path)
-            additional.append(path)
+            return path
+
+        if selected_main and selected_main.filename:
+            main = save_photo(selected_main, "メイン写真")
+        for index, photo in enumerate(selected_additional, start=1):
+            additional.append(save_photo(photo, f"追加写真の{index}枚目"))
         return {"photo_path": main, "additional_photos": json.dumps(additional) if additional else None}
 
     def form(self, item=None, error=None, locked=False, status=200):
@@ -320,6 +324,8 @@ class SelfInventory:
                                locked=locked, additional_photos=self.photos(item),
                                submission_token=self.token(item), csrf_token_value=self.plans.csrf_token(),
                                stage2_quota=quota, photos_usage=photos_usage,
+                               photo_max_bytes=getattr(self.runtime, 'GOOGLE_DRIVE_IMAGE_MAX_BYTES', 15 * 1024 * 1024),
+                               photo_max_pixels=getattr(self.runtime, 'PRODUCT_IMAGE_MAX_PIXELS', 40_000_000),
                                photos_enabled=callable(getattr(self.runtime, "save_validated_product_image", None))), status
 
     def handle(self, item_id=None):

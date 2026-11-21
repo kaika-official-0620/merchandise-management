@@ -10,8 +10,9 @@ import uuid
 from datetime import date, datetime, timedelta
 from typing import Any
 from kaika_fee_counts import is_kaika_fee_item, is_kaika_fee_client
+from quote_documents import allocate_quote_number, validate_quote_dates
 
-from flask import flash, jsonify, redirect, render_template, request, url_for
+from flask import abort, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user
 from werkzeug.utils import secure_filename
 
@@ -59,11 +60,6 @@ def apply(module: Any) -> None:
     get_db = module.get_db
     get_jst_now = getattr(module, "get_jst_now", datetime.now)
     fetch_sales_agency_request_source = getattr(module, "fetch_sales_agency_request_source", None)
-    generate_admin_mitsumori_document_no = getattr(
-        module,
-        "generate_admin_mitsumori_document_no",
-        lambda: f"MIT-{datetime.now().strftime('%Y%m%d%H%M%S')}",
-    )
     generate_admin_kaitori_document_no = getattr(
         module,
         "generate_admin_kaitori_document_no",
@@ -2463,6 +2459,10 @@ def apply(module: Any) -> None:
             source_service_type = (request.form.get("source_service_type") or "normal").strip() or "normal"
             issue_date = request.form.get("issue_date")
             valid_until = request.form.get("valid_until") or None
+            try:
+                validate_quote_dates(issue_date, valid_until)
+            except ValueError as exc:
+                abort(400, description=str(exc))
             company_name = request.form.get("company_name", "").strip()
             department = request.form.get("department", "").strip()
             contact_person = request.form.get("contact_person", "").strip()
@@ -2490,7 +2490,7 @@ def apply(module: Any) -> None:
             conn, cur = open_cursor()
             try:
                 now = datetime.now()
-                document_no = generate_admin_mitsumori_document_no()
+                document_no = allocate_quote_number(conn, cur, get_jst_now(), postgres=bool(DATABASE_URL), prefix="MT")
                 invoice_no = generate_admin_kaitori_document_no()
                 auto_note = f"見積依頼書 {document_no} の内容から自動作成"
                 placeholder = "%s" if DATABASE_URL else "?"
@@ -2670,7 +2670,7 @@ def apply(module: Any) -> None:
             mitsumori=None,
             items=[],
             today=today.strftime("%Y-%m-%d"),
-            document_no=generate_admin_mitsumori_document_no(),
+            document_no="保存時に採番",
             default_valid_until=default_valid_until,
             company_name_default=source_request.get("client_name") if source_request else "",
             department_default="",

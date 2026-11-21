@@ -8,7 +8,7 @@ from flask import Blueprint, abort, flash, redirect, render_template, request, R
 from flask_login import current_user, login_required
 from werkzeug.exceptions import HTTPException
 
-from inventory_registry_web import RegistryWeb, JST, _time, _text
+from inventory_registry_web import RegistryWeb, JST, _datetime_local, _time, _text
 from item_registry import Actor, RegistryError
 from stage3_common import FinanceStore, yen
 
@@ -303,7 +303,7 @@ def register_stage3_finance(runtime):
                     finance_csrf=service.csrf, finance_operation=service.operation,
                     finance_amounts=AMOUNTS, finance_channels=CHANNELS, finance_buckets=BUCKETS,
                     finance_kinds=KINDS, finance_status=STATUS, finance_fee_kinds=FEE_KINDS, finance_reason=reason_label,
-                    finance_now=datetime.now(JST).strftime('%Y-%m-%dT%H:%M:%S.%f'),
+                    finance_now=_datetime_local(datetime.now(JST)),
                     finance_test_ledger=app.config.get('STAGE3_TEST_LEDGER_ENABLED') is True)
 
     app.register_blueprint(bp)

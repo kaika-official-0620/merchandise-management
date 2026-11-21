@@ -6,7 +6,7 @@ submission transaction locks the actual items and checks again.
 """
 from contextlib import contextmanager
 from collections import Counter
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from functools import wraps
 import hmac
 import json
@@ -14,6 +14,8 @@ import re
 
 from flask import abort, before_render_template, flash, jsonify, redirect, render_template, request, session, url_for
 from flask_login import current_user, login_required
+
+from business_display_time import database_event_time
 
 
 SENT = frozenset({'sent', 'submitted', 'approved', 'pending', 'accepted'})
@@ -30,6 +32,7 @@ FORMS = {
     'user_invoice_add': 'purchase_statement', 'user_invoice_edit': 'purchase_statement',
 }
 MAX_TOTAL = 2_000_000_000
+INBOX_PAGE_SIZE = 50
 
 
 class DocumentWorkflow:
@@ -264,16 +267,61 @@ class DocumentWorkflow:
                         (table, document_id, 'customer_submit', user_id, '開花の書類受付へ送信', 'completed', 'submitted', json.dumps({'destination': 'kaika', 'channel': 'in_app'}, ensure_ascii=False)))
         return True
 
-    def inbox(self):
-        result = []
+    def inbox(self, *, query, category, received_from, received_through, page):
+        queries, values = [], []
+        needle = '%' + query.lower().replace('!', '!!').replace('%', '!%').replace('_', '!_') + '%'
+        # The display dates are JST. SQLite writes its receipt timestamps in UTC.
+        def storage_midnight(day):
+            midnight = datetime.combine(day, time.min)
+            if not self.pg:
+                midnight -= timedelta(hours=9)
+            return midnight.isoformat(sep=' ')
+
         with self.db() as (_, cur):
-            for kind, (table, _, _, owner, _, admin_view, title) in KINDS.items():
-                cur.execute(f"SELECT d.*, u.display_name AS customer_display_name FROM {table} d JOIN users u ON u.id=d.{owner} WHERE d.status='submitted' ORDER BY d.updated_at DESC, d.id DESC LIMIT 200")
-                for row in self.rows(cur):
-                    if not self.owned_customer_document(kind, row, row[owner]):
-                        continue
-                    result.append({'kind':kind, 'title':title, 'id':row['id'], 'number':row.get('document_no') or row.get('invoice_no'), 'customer':row.get('customer_display_name'), 'sent_at':row.get('updated_at'), 'url':url_for('admin_customer_submission_detail', kind=kind, document_id=row['id'])})
-        return sorted(result, key=lambda row:str(row['sent_at'] or ''), reverse=True)
+            for kind, (table, _, _, owner, *_) in KINDS.items():
+                if category and kind != category:
+                    continue
+                columns = self.columns(cur, table)
+                number_columns = [f'd.{name}' for name in ('document_no', 'invoice_no') if name in columns]
+                number = 'COALESCE(' + ', '.join(f"NULLIF({column}, '')" for column in number_columns) + ", '')" if number_columns else "''"
+                predicates = ["d.status='submitted'"]
+                if 'is_admin_created' in columns:
+                    predicates.append('COALESCE(d.is_admin_created, FALSE)=FALSE')
+                if 'created_by_admin_id' in columns:
+                    predicates.append('COALESCE(d.created_by_admin_id, 0)=0')
+                if kind in {'estimate', 'consent'} and 'document_scope' in columns:
+                    predicates.append("COALESCE(NULLIF(d.document_scope, ''), 'client_incoming')='client_incoming'")
+                if kind == 'calculation' and 'proxy_service_auction_id' in columns:
+                    predicates.append('COALESCE(d.proxy_service_auction_id, 0)=0')
+                if kind == 'purchase_statement':
+                    if 'document_scope' in columns:
+                        predicates.append("COALESCE(NULLIF(d.document_scope, ''), 'user_created') IN ('client_outgoing','user_created')")
+                    if 'source_admin_kaitori_id' in columns:
+                        predicates.append('COALESCE(d.source_admin_kaitori_id, 0)=0')
+                    if 'invoice_no' in columns:
+                        predicates.append("SUBSTR(UPPER(COALESCE(d.invoice_no, '')),1,3)<>'KT-'")
+                values.append(kind)
+                if query:
+                    predicates.append(f"(LOWER(COALESCE(u.display_name,'')) LIKE {self.mark} ESCAPE '!' OR LOWER({number}) LIKE {self.mark} ESCAPE '!')")
+                    values.extend((needle, needle))
+                if received_from:
+                    predicates.append(f'd.updated_at>={self.mark}')
+                    values.append(storage_midnight(received_from))
+                if received_through and received_through < date.max:
+                    predicates.append(f'd.updated_at<{self.mark}')
+                    values.append(storage_midnight(received_through + timedelta(days=1)))
+                queries.append(f'SELECT CAST({self.mark} AS TEXT) AS kind,d.id,{number} AS number,'
+                               f'u.display_name AS customer,CAST(d.updated_at AS TEXT) AS sent_at '
+                               f'FROM {table} d JOIN users u ON u.id=d.{owner} WHERE ' + ' AND '.join(predicates))
+            cur.execute('SELECT * FROM (' + ' UNION ALL '.join(queries) + ') AS documents '
+                        'ORDER BY COALESCE(sent_at, \'\') DESC,id DESC,kind '
+                        f'LIMIT {self.mark} OFFSET {self.mark}',
+                        (*values, INBOX_PAGE_SIZE + 1, (page - 1) * INBOX_PAGE_SIZE))
+            rows = self.rows(cur)
+        for row in rows:
+            row['title'] = KINDS[row['kind']][6]
+            row['sent_at'] = database_event_time(row['sent_at'], postgres=self.pg)
+        return rows[:INBOX_PAGE_SIZE], len(rows) > INBOX_PAGE_SIZE
 
 
 def register_document_workflow(runtime):
@@ -319,7 +367,37 @@ def register_document_workflow(runtime):
     def inbox():
         if not current_user.is_admin() or not (getattr(current_user, 'role', '') == 'owner' or current_user.has_permission('invoices')):
             abort(403)
-        return render_template('customer_documents/inbox.html', submissions=service.inbox())
+        filters = inbox_filters()
+        submissions, has_next = service.inbox(
+            query=filters['q'], category=filters['category'],
+            received_from=date.fromisoformat(filters['received_from']) if filters['received_from'] else None,
+            received_through=date.fromisoformat(filters['received_through']) if filters['received_through'] else None,
+            page=filters['page'])
+        query_args = {key: value for key, value in filters.items() if value and (key != 'page' or value > 1)}
+        for row in submissions:
+            row['url'] = url_for('admin_customer_submission_detail', kind=row['kind'], document_id=row['id'], **query_args)
+        return render_template('customer_documents/inbox.html', submissions=submissions, filters=filters,
+                               categories={kind: spec[6] for kind, spec in KINDS.items()}, has_next=has_next)
+
+    def inbox_filters():
+        category = request.args.get('category', '')
+        if category and category not in KINDS:
+            abort(400, description='書類の種類を選び直してください。')
+        dates = {}
+        for key in ('received_from', 'received_through'):
+            raw = request.args.get(key, '')
+            try:
+                if raw:
+                    value = date.fromisoformat(raw)
+                    if value.isoformat() != raw or value == date.min:
+                        raise ValueError
+            except ValueError:
+                abort(400, description='受信日を確認してください。')
+            dates[key] = raw
+        if all(dates.values()) and dates['received_from'] > dates['received_through']:
+            abort(400, description='受信日の開始日は終了日以前にしてください。')
+        page = min(1_000_000, max(1, request.args.get('page', 1, type=int)))
+        return dict(q=request.args.get('q', '').replace('\x00', '').strip()[:100], category=category, page=page, **dates)
 
     @login_required
     def received_detail(kind, document_id):
@@ -335,7 +413,9 @@ def register_document_workflow(runtime):
                 abort(404)
             cur.execute(f'SELECT * FROM {items} WHERE {key}={service.mark} ORDER BY item_no,id', (document_id,))
             details = service.rows(cur)
-        return render_template('customer_documents/received_detail.html', document=doc, details=details, title=KINDS[kind][6])
+        back_url = url_for('admin_customer_submissions', **{key: value for key, value in inbox_filters().items()
+                                                           if value and (key != 'page' or value > 1)})
+        return render_template('customer_documents/received_detail.html', document=doc, details=details, title=KINDS[kind][6], back_url=back_url)
 
     @login_required
     def product_candidates():

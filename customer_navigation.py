@@ -189,6 +189,7 @@ def register_customer_navigation(runtime):
         return render_template('customer_navigation/guide.html', guide_sections=sections,
                                inquiry_url=destination('inquiry_new'),
                                history_url=destination('inquiry_list'),
+                               deletion_url=destination('account_lifecycle.page') if current_app.config.get('ACCOUNT_LIFECYCLE_ENABLED') is True else None,
                                private_preview=bool(current_app.extensions.get('kaika_staging_review')),
                                home_url=destination('workspace_home.home') if stage_available(6) else destination('user_home'))
 

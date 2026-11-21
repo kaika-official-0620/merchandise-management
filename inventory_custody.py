@@ -18,6 +18,7 @@ from flask_login import current_user, login_required
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from werkzeug.exceptions import HTTPException
 
+from business_display_time import database_event_time
 from customer_navigation import customer_product_detail_url, customer_product_list_url
 from self_inventory import _row, _truthy, _lock_submission
 from stage2_self_management import (basic_self_management_allowed, enabled as stage2_enabled,
@@ -27,6 +28,7 @@ ACTIVE_INTAKES = ('requested', 'approved', 'shipped', 'received')
 STATE_NAMES = {'requested': '開花の受付待ち', 'approved': '発送のご案内済み',
                'shipped': '開花へ配送中', 'received': '開花で受領・登録中',
                'completed': '開花での登録完了', 'cancelled': '取り消し済み'}
+INTAKE_PAGE_SIZE = 30
 
 
 def custody_location(item):
@@ -36,6 +38,11 @@ def custody_location(item):
 def custody_label(item):
     return {'self': '自己保管（自宅など）', 'transit': '開花へ配送中',
             'kaika': '開花で保管・管理'}.get(custody_location(item), '保管先を確認してください')
+
+
+def custody_staff_allowed():
+    return (current_user.is_authenticated and current_user.is_admin()
+            and current_user.has_permission('merchandise'))
 
 
 def ensure_schema(runtime):
@@ -156,6 +163,13 @@ class InventoryCustody:
         if feature and (not self.plans.has_feature('inventory_manage') or not current_user.can_edit_merchandise()):
             abort(403, description='この操作には在庫管理を利用できる契約が必要です。利用プランをご確認ください。')
 
+    def require_intake_viewer(self, *, staff_only=False):
+        if custody_staff_allowed():
+            return True
+        if not staff_only and current_user.role == 'user':
+            return False
+        abort(403, description='預け入れの確認・受領には開花の在庫管理権限が必要です。')
+
     def guard_legacy_operations(self):
         """Kaika operations cannot modify goods which have not been received.
 
@@ -242,21 +256,26 @@ class InventoryCustody:
             except Exception:
                 self.app.logger.exception('Could not queue inventory intake notification')
 
-    def intake(self, cur, intake_id, lock=False):
+    def intake(self, cur, intake_id, *, staff, lock=False):
         suffix = ' FOR UPDATE' if lock and self.pg else ''
-        cur.execute(f'SELECT * FROM inventory_intakes WHERE id={self.mark}{suffix}', (intake_id,))
+        scope = '' if staff else f' AND user_id={self.mark}'
+        params = (intake_id,) if staff else (intake_id, current_user.id)
+        cur.execute(f'SELECT * FROM inventory_intakes WHERE id={self.mark}{scope}{suffix}', params)
         row = _row(cur.fetchone(), cur)
-        if not row or (not current_user.is_admin() and row['user_id'] != current_user.id):
+        if not row:
             abort(404)
         return row
 
-    def active_for_item(self, cur, item_id):
+    def active_intake_query(self, item_id_sql):
         returned = (" AND NOT EXISTS(SELECT 1 FROM inventory_custody_events re WHERE re.intake_id=i.id "
                     "AND re.merchandise_id=ii.merchandise_id AND re.event_type='return_received')") if stage2_enabled(self.app) else ''
-        cur.execute(f'''SELECT i.* FROM inventory_intakes i
+        return f'''SELECT i.* FROM inventory_intakes i
             JOIN inventory_intake_items ii ON ii.intake_id=i.id
-            WHERE ii.merchandise_id={self.mark} AND i.status IN ('requested','approved','shipped','received')
-            {returned} ORDER BY i.id DESC LIMIT 1''', (item_id,))
+            WHERE ii.merchandise_id={item_id_sql} AND i.status IN ('requested','approved','shipped','received')
+            {returned}'''
+
+    def active_for_item(self, cur, item_id):
+        cur.execute(self.active_intake_query(self.mark) + ' ORDER BY i.id DESC LIMIT 1', (item_id,))
         return _row(cur.fetchone(), cur)
 
     def own_item(self, cur, item_id, lock=False):
@@ -281,16 +300,17 @@ class InventoryCustody:
         item = dict(item)
         location = custody_location(item)
         active = None
-        if location != 'kaika' and current_user.is_authenticated:
+        staff = custody_staff_allowed()
+        if location != 'kaika' and current_user.is_authenticated and (staff or current_user.role == 'user'):
             cache = getattr(g, '_custody_intake_cache', None)
             if cache is None:
                 with self.db() as (_, cur):
-                    condition = '' if current_user.is_admin() else f' AND i.user_id={self.mark}'
+                    condition = '' if staff else f' AND i.user_id={self.mark}'
                     if stage2_enabled(self.app):
                         condition += (" AND NOT EXISTS(SELECT 1 FROM inventory_custody_events re WHERE re.intake_id=i.id "
                                       "AND re.merchandise_id=ii.merchandise_id AND re.event_type='return_received')")
                     cur.execute("SELECT i.id,i.status,ii.merchandise_id FROM inventory_intakes i JOIN inventory_intake_items ii ON ii.intake_id=i.id WHERE i.status IN ('requested','approved','shipped','received')" + condition,
-                                () if current_user.is_admin() else (current_user.id,))
+                                () if staff else (current_user.id,))
                     cache = {row['merchandise_id']: row for row in (_row(r,cur) for r in cur.fetchall())}
                 g._custody_intake_cache = cache
             active = cache.get(item.get('id'))
@@ -385,12 +405,21 @@ class InventoryCustody:
             if state.get('plan_code') not in ('normal', 'business'):
                 abort(403, description='自己管理は無料で続けられます。新しい開花への依頼は、追加サービスの利用条件を確認してから受け付けます。')
         helper = self.app.extensions.get('kaika_self_inventory')
-        with self.db() as (_, cur):
-            cur.execute(f"SELECT * FROM merchandise WHERE user_id={self.mark} AND scope='user' AND custody_location='self' AND sale_date IS NULL ORDER BY id DESC", (current_user.id,))
-            items = [_row(row,cur) for row in cur.fetchall()]
-            items = [item for item in items if not self.active_for_item(cur,item['id']) and not helper.locked(cur,item)] if helper else []
         if request.method == 'GET':
-            return render_template('inventory_intake_new.html', items=items, selected_id=request.args.get('item_id',type=int),
+            items = []
+            if helper:
+                with self.db() as (_, cur):
+                    locks = [self.active_intake_query('m.id'), *helper.workflow_lock_queries(cur, 'm.id')]
+                    unlocked = ''.join(f' AND NOT EXISTS ({query})' for query in locks)
+                    cur.execute(f'''SELECT m.* FROM merchandise m
+                        WHERE m.user_id={self.mark} AND m.scope='user' AND m.custody_location='self'
+                        AND m.sale_date IS NULL AND NOT COALESCE(m.is_shipped, FALSE)
+                        {unlocked} ORDER BY m.id DESC''', (current_user.id,))
+                    items = [_row(row, cur) for row in cur.fetchall()]
+            selected_id = request.args.get('item_id', type=int)
+            if not any(item['id'] == selected_id for item in items):
+                selected_id = None
+            return render_template('inventory_intake_new.html', items=items, selected_id=selected_id,
                                    operation_token=self.token('new_intake'), csrf_token_value=self.plans.csrf_token())
         token = self.verify('new_intake')
         kind = request.form.get('kind')
@@ -399,7 +428,9 @@ class InventoryCustody:
         note = self.text('client_note',2000)
         ids = request.form.getlist('item_ids')
         if kind == 'transfer':
-            if not ids or len(ids)>100 or any(not re.fullmatch(r'\d{1,10}',v) for v in ids) or len(set(ids))!=len(ids):
+            if (not ids or len(ids) > 100 or len(set(ids)) != len(ids)
+                    or any(not re.fullmatch(r'[1-9][0-9]{0,9}', value) or int(value) > 2_147_483_647
+                           for value in ids)):
                 abort(400,description='預ける商品を1〜100点選択してください。')
             ids = sorted(int(v) for v in ids)
             expected = len(ids)
@@ -430,28 +461,76 @@ class InventoryCustody:
         return redirect(url_for('inventory_intake_detail',intake_id=intake_id))
 
     def intake_list(self):
-        if not current_user.is_admin():
-            self.require_user(feature=False)
-        with self.db() as (_,cur):
-            condition='' if current_user.is_admin() else f' WHERE i.user_id={self.mark}'
-            cur.execute('SELECT i.*,u.display_name,u.username FROM inventory_intakes i JOIN users u ON u.id=i.user_id'+condition+' ORDER BY i.id DESC',
-                        () if current_user.is_admin() else (current_user.id,))
-            rows=[_row(r,cur) for r in cur.fetchall()]
-        return render_template('inventory_intakes.html',intakes=rows,state_names=STATE_NAMES)
+        staff = self.require_intake_viewer()
+        q = request.args.get('q', '').replace('\x00', '').strip()[:100]
+        status = request.args.get('status', '')
+        if status not in STATE_NAMES:
+            status = ''
+        page = max(1, min(10_000, request.args.get('page', 1, type=int)))
+        conditions = []
+        params = []
+        if not staff:
+            conditions.append(f'i.user_id={self.mark}')
+            params.append(current_user.id)
+        if status:
+            conditions.append(f'i.status={self.mark}')
+            params.append(status)
+        if q:
+            term = '%' + q.lower().replace('!', '!!').replace('%', '!%').replace('_', '!_') + '%'
+            matches = []
+            number = re.fullmatch(r'#?(\d{1,10})', q)
+            if number and int(number[1]) <= 2_147_483_647:
+                matches.append(f'i.id={self.mark}')
+                params.append(int(number[1]))
+            if staff:
+                for field in ('u.display_name', 'u.username'):
+                    matches.append(f"LOWER(COALESCE({field}, '')) LIKE {self.mark} ESCAPE '!'")
+                    params.append(term)
+            matches.append(f'''EXISTS (
+                SELECT 1 FROM inventory_intake_items ii JOIN merchandise m ON m.id=ii.merchandise_id
+                WHERE ii.intake_id=i.id AND m.user_id=i.user_id
+                AND (LOWER(m.product_name) LIKE {self.mark} ESCAPE '!'
+                     OR LOWER(COALESCE(m.kaika_product_code, '')) LIKE {self.mark} ESCAPE '!'))''')
+            params.extend((term, term))
+            conditions.append('(' + ' OR '.join(matches) + ')')
+        where = ' WHERE ' + ' AND '.join(conditions) if conditions else ''
+        with self.db() as (_, cur):
+            cur.execute(f'''SELECT i.*,u.display_name,u.username
+                FROM inventory_intakes i JOIN users u ON u.id=i.user_id{where}
+                ORDER BY i.id DESC LIMIT {self.mark} OFFSET {self.mark}''',
+                (*params, INTAKE_PAGE_SIZE + 1, (page - 1) * INTAKE_PAGE_SIZE))
+            rows = [_row(row, cur) for row in cur.fetchall()]
+        return render_template('inventory_intakes.html', intakes=rows[:INTAKE_PAGE_SIZE],
+                               staff=staff, state_names=STATE_NAMES, q=q, status_filter=status, page=page,
+                               has_next=len(rows) > INTAKE_PAGE_SIZE and page < 10_000,
+                               intake_time=self.event_time)
+
+    def event_time(self, value):
+        return database_event_time(value, postgres=self.pg)
 
     def detail(self,intake_id):
-        if not current_user.is_admin():
-            self.require_user(feature=False)
+        staff = self.require_intake_viewer()
         if request.method=='POST':
             token=self.verify('intake',intake_id)
             with self.db(write=True) as (conn,cur):
                 if stage2_enabled(self.app):
                     require_schema(cur, self.pg)
-                intake=self.intake(cur,intake_id,lock=True)
+                intake=self.intake(cur,intake_id,staff=staff,lock=True)
                 self.version(intake,token)
                 action=request.form.get('action')
                 state=intake['status']
-                staff=current_user.is_admin()
+                if action == 'report_discrepancy':
+                    if not staff or state not in ('approved', 'shipped'):
+                        abort(409, description='現在の受付状況では受領差異を記録できません。')
+                    details = {'observed_count': self.number('observed_count', 1000),
+                               'note': self.text('discrepancy_note', 2000, required=True)}
+                    self.event(cur, 'intake_discrepancy', intake=intake_id, user_id=intake['user_id'],
+                               details=json.dumps(details, ensure_ascii=False))
+                    # Advance the version so a replay cannot create a second
+                    # record, without changing the custody or receipt status.
+                    cur.execute(f'UPDATE inventory_intakes SET version=version+1 WHERE id={self.mark}', (intake_id,))
+                    flash('差異を記録しました。受領状況と商品は変更していません。', 'success')
+                    return redirect(url_for('inventory_intake_detail', intake_id=intake_id))
                 if action=='cancel' and not staff and state in ('requested','approved'):
                     updates={'status':'cancelled'}
                 elif action=='approve' and staff and state=='requested':
@@ -502,25 +581,32 @@ class InventoryCustody:
             flash('受付状況を更新しました。','success')
             return redirect(url_for('inventory_intake_detail',intake_id=intake_id))
         with self.db() as (_,cur):
-            intake=self.intake(cur,intake_id)
+            intake=self.intake(cur,intake_id,staff=staff)
             cur.execute(f'SELECT m.* FROM merchandise m JOIN inventory_intake_items ii ON ii.merchandise_id=m.id WHERE ii.intake_id={self.mark} ORDER BY m.id',(intake_id,))
             items=[_row(r,cur) for r in cur.fetchall()]
-            cur.execute(f'SELECT e.*,u.display_name,u.username FROM inventory_custody_events e JOIN users u ON u.id=e.actor_id WHERE e.intake_id={self.mark} ORDER BY e.id',(intake_id,))
+            public_events = '' if staff else " AND e.event_type<>'intake_discrepancy'"
+            cur.execute(f'''SELECT e.*,u.display_name,u.username FROM inventory_custody_events e
+                JOIN users u ON u.id=e.actor_id
+                WHERE e.intake_id={self.mark}{public_events} ORDER BY e.id''', (intake_id,))
             events=[_row(r,cur) for r in cur.fetchall()]
             cur.execute(f'SELECT display_name,username FROM users WHERE id={self.mark}',(intake['user_id'],))
             owner=_row(cur.fetchone(),cur)
+        discrepancies = []
+        for event in events:
+            if event['event_type'] == 'intake_discrepancy':
+                discrepancies.append({**event, 'observation': json.loads(event['details'])})
         return render_template('inventory_intake_detail.html',intake=intake,items=items,events=events,owner=owner,state_names=STATE_NAMES,
+                               discrepancies=discrepancies, intake_time=self.event_time,
                                operation_token=self.token('intake',intake_id,intake['version']),csrf_token_value=self.plans.csrf_token())
 
     def register_received(self,intake_id):
-        if not current_user.is_admin():
-            abort(403)
+        self.require_intake_viewer(staff_only=True)
         helper=self.app.extensions.get('kaika_self_inventory')
         if not helper:
             abort(503)
         created=[]
         with self.db() as (_,cur):
-            intake=self.intake(cur,intake_id)
+            intake=self.intake(cur,intake_id,staff=True)
         if intake['kind']!='registration' or intake['status']!='received':
             abort(409,description='開花での受領確認後に登録できます。')
         if request.method=='GET':
@@ -541,7 +627,7 @@ class InventoryCustody:
             with self.db(write=True) as (conn,cur):
                 if stage2_enabled(self.app):
                     require_schema(cur, self.pg)
-                intake=self.intake(cur,intake_id,lock=True)
+                intake=self.intake(cur,intake_id,staff=True,lock=True)
                 registration_key=hashlib.sha256(token['nonce'].encode()).hexdigest()
                 cur.execute(f'SELECT merchandise_id FROM inventory_intake_items WHERE registration_key={self.mark}',(registration_key,))
                 previous=_row(cur.fetchone(),cur)
@@ -606,7 +692,8 @@ def register_inventory_custody(runtime):
                 if not any(ord(char)>127 for char in detail):
                     detail = messages[error.code]
                 return render_template('inventory_custody_error.html', message=detail,
-                                       retry_path=request.path, error_code=error.code), error.code
+                                       retry_path=request.path, error_code=error.code,
+                                       can_view_intakes=current_user.role == 'user' or custody_staff_allowed()), error.code
         return wrapped
     for rule,endpoint,view,methods in [
         ('/inventory/self/<int:item_id>/sale','self_inventory_sale',service.sale,['GET','POST']),

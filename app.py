@@ -27,6 +27,7 @@ from backup_restore_guard import legacy_restore_block_reason
 from runtime_security import require_session_secret, install_runtime_security, legacy_operation_disabled
 from recovery_runtime_guard import guard_new_connection
 from customer_navigation import customer_product_list_url
+from quote_documents import allocate_quote_number, validate_quote_dates
 from decimal import Decimal
 from datetime import datetime, timedelta, date, timezone
 from urllib.parse import quote, urlparse, urlsplit, urlunsplit
@@ -28177,13 +28178,13 @@ def user_mitsumori_list():
 @login_required
 def user_mitsumori_add():
     """見積依頼書作成（ユーザー用）"""
-    from datetime import datetime
-    
-    conn = get_db()
-    
     if request.method == 'POST':
         issue_date = request.form.get('issue_date')
         valid_until = request.form.get('valid_until') or None
+        try:
+            validate_quote_dates(issue_date, valid_until)
+        except ValueError as exc:
+            abort(400, description=str(exc))
         company_name = request.form.get('company_name', '')
         department = request.form.get('department', '')
         contact_person = request.form.get('contact_person', '')
@@ -28218,51 +28219,28 @@ def user_mitsumori_add():
                     'amount': amount
                 })
         
-        now = get_jst_now()
-        
-        if DATABASE_URL:
-            cur = conn.cursor(cursor_factory=RealDictCursor)
-            cur.execute("SELECT COUNT(*) as count FROM user_mitsumori WHERE user_id = %s AND issue_date >= %s", 
-                       (current_user.id, now.strftime('%Y-%m-01')))
-            result = cur.fetchone()
-            count = (result['count'] if result else 0) + 1
-            document_no = f"UM-{now.strftime('%Y%m')}-{current_user.id}-{count:04d}"
-            
-            cur.execute("""
+        conn = get_db()
+        cur = conn.cursor(cursor_factory=RealDictCursor) if DATABASE_URL else conn.cursor()
+        marker = '%s' if DATABASE_URL else '?'
+        try:
+            document_no = allocate_quote_number(conn, cur, get_jst_now(), postgres=bool(DATABASE_URL), user_id=current_user.id)
+            cur.execute(f"""
                 INSERT INTO user_mitsumori (document_no, user_id, issue_date, valid_until, company_name, department, contact_person, address, subject, total_amount, notes, status)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                RETURNING id
-            """, (document_no, current_user.id, issue_date, valid_until, company_name, department, contact_person, address, subject, total_amount, notes, status))
-            mitsumori_id = cur.fetchone()['id']
-            
+                VALUES ({', '.join([marker] * 12)})
+            """ + (' RETURNING id' if DATABASE_URL else ''), (document_no, current_user.id, issue_date, valid_until, company_name, department, contact_person, address, subject, total_amount, notes, status))
+            mitsumori_id = cur.fetchone()['id'] if DATABASE_URL else cur.lastrowid
             for item in items_data:
-                cur.execute("""
+                cur.execute(f"""
                     INSERT INTO user_mitsumori_items (mitsumori_id, item_no, item_name, merchandise_id, quantity, unit, unit_price, amount)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES ({', '.join([marker] * 8)})
                 """, (mitsumori_id, item['item_no'], item['item_name'], item['merchandise_id'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
-        else:
-            cur = conn.cursor()
-            cur.execute("SELECT COUNT(*) as count FROM user_mitsumori WHERE user_id = ? AND issue_date >= ?", 
-                       (current_user.id, now.strftime('%Y-%m-01')))
-            result = dict(cur.fetchone())
-            count = (result['count'] if result else 0) + 1
-            document_no = f"UM-{now.strftime('%Y%m')}-{current_user.id}-{count:04d}"
-            
-            cur.execute("""
-                INSERT INTO user_mitsumori (document_no, user_id, issue_date, valid_until, company_name, department, contact_person, address, subject, total_amount, notes, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (document_no, current_user.id, issue_date, valid_until, company_name, department, contact_person, address, subject, total_amount, notes, status))
-            mitsumori_id = cur.lastrowid
-            
-            for item in items_data:
-                cur.execute("""
-                    INSERT INTO user_mitsumori_items (mitsumori_id, item_no, item_name, merchandise_id, quantity, unit, unit_price, amount)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, (mitsumori_id, item['item_no'], item['item_name'], item['merchandise_id'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
-        
-        conn.commit()
-        cur.close()
-        conn.close()
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()
+            conn.close()
         
         flash('見積依頼書を作成しました', 'success')
         if status == 'draft':
@@ -28271,25 +28249,14 @@ def user_mitsumori_add():
     
     # GETリクエスト
     today = get_jst_now().strftime('%Y-%m-%d')
-    now = get_jst_now()
     my_merchandise = []
-    
+    conn = get_db()
     try:
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
-            cur.execute("SELECT COUNT(*) as count FROM user_mitsumori WHERE user_id = %s AND issue_date >= %s", 
-                       (current_user.id, now.strftime('%Y-%m-01')))
-            result = cur.fetchone()
-            count = (result['count'] if result else 0) + 1
         else:
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
-            cur.execute("SELECT COUNT(*) as count FROM user_mitsumori WHERE user_id = ? AND issue_date >= ?", 
-                       (current_user.id, now.strftime('%Y-%m-01')))
-            result = cur.fetchone()
-            count = (dict(result)['count'] if result else 0) + 1
-        
-        document_no = f"UM-{now.strftime('%Y%m')}-{current_user.id}-{count:04d}"
         
         # ユーザーの商品一覧を取得（未売却のみ）
         if DATABASE_URL:
@@ -28315,19 +28282,22 @@ def user_mitsumori_add():
                 ORDER BY id DESC
             """, (current_user.id,))
         my_merchandise = [dict(row) for row in cur.fetchall()]
-        
         cur.close()
-        conn.close()
     except Exception as e:
         print(f"[ERROR] user_mitsumori_add GET: {e}", flush=True)
-        document_no = f"UM-{now.strftime('%Y%m')}-{current_user.id}-0001"
-    
-    return render_template('mitsumori_form.html', mitsumori=None, items=[], today=today, document_no=document_no, my_merchandise=my_merchandise)
+    finally:
+        conn.close()
+    return render_template('mitsumori_form.html', mitsumori=None, items=[], today=today, my_merchandise=my_merchandise)
 
 @app.route('/mitsumori/edit/<int:id>', methods=['GET', 'POST'])
 @login_required
 def user_mitsumori_edit(id):
     """見積依頼書編集（ユーザー用）"""
+    if request.method == 'POST':
+        try:
+            validate_quote_dates(request.form.get('issue_date'), request.form.get('valid_until'))
+        except ValueError as exc:
+            abort(400, description=str(exc))
     conn = get_db()
     
     if DATABASE_URL:
@@ -31084,14 +31054,12 @@ def admin_mitsumori_list():
 @admin_required
 def admin_mitsumori_add():
     """見積依頼書作成"""
-    from datetime import datetime
     today = get_jst_now().strftime('%Y-%m-%d')
-    document_no = f"MT-{get_jst_now().strftime('%Y%m%d')}-001"
     
     return render_template('admin/mitsumori_form.html', 
         mitsumori=None, 
         today=today,
-        document_no=document_no,
+        document_no='保存時に採番',
         items=None
     )
 
@@ -43492,6 +43460,10 @@ def admin_mitsumori_add_from_documents():
     if request.method == "POST":
         issue_date = request.form.get("issue_date")
         valid_until = request.form.get("valid_until") or None
+        try:
+            validate_quote_dates(issue_date, valid_until)
+        except ValueError as exc:
+            abort(400, description=str(exc))
         vendor_id = request.form.get("vendor_id", type=int)
         vendors = _docs_load_vendors()
         selected_vendor = next((vendor for vendor in vendors if vendor.get("id") == vendor_id), None)
@@ -43585,7 +43557,8 @@ def admin_mitsumori_add_from_documents():
                 conn.rollback()
                 flash("選択商品の所属が書類種別と一致しません。商品一覧を再選択してください。", "error")
                 return redirect(request.url)
-            document_no = _generate_prefixed_document_no("KM" if document_scope == "kaika_estimate" else "MT", "user_mitsumori", "document_no")
+            document_no = allocate_quote_number(conn, cur, get_jst_now(), postgres=bool(DATABASE_URL),
+                                                prefix="KM" if document_scope == "kaika_estimate" else "MT")
             save_user_id = current_user.id if is_kaika_scope else (target_user_id or current_user.id)
             if DATABASE_URL:
                 cur.execute(
@@ -43646,7 +43619,7 @@ def admin_mitsumori_add_from_documents():
         "admin/mitsumori_form.html",
         mitsumori=None,
         today=get_jst_now().strftime("%Y-%m-%d"),
-        document_no=_generate_prefixed_document_no("KM" if is_kaika_estimate_scope else "MT", "user_mitsumori", "document_no"),
+        document_no="保存時に採番",
         items=items,
         source_request=source_request,
         source_request_products=items,
@@ -45678,15 +45651,19 @@ def admin_vendor_mitsumori_create(user_id):
 
         defaults = _stepa_build_vendor_document_defaults(user_id, selected_items, selected_vendor)
         issue_date = request.form.get("issue_date") or get_jst_now().strftime("%Y-%m-%d")
-        valid_until = request.form.get("valid_until") or (get_jst_now() + timedelta(days=7)).strftime("%Y-%m-%d")
+        valid_until = request.form.get("valid_until") or None
+        try:
+            validate_quote_dates(issue_date, valid_until)
+        except ValueError as exc:
+            abort(400, description=str(exc))
         subject = (request.form.get("subject") or defaults["subject"]).strip()
         notes = (request.form.get("notes") or defaults["notes"]).strip()
         status = request.form.get("status") or "draft"
         total_amount = 0
         first_request_id = selected_items[0].get("request_id") if selected_items else None
-        document_no = _generate_prefixed_document_no("MT", "user_mitsumori", "document_no")
         conn, cur = _docs_open_cursor()
         try:
+            document_no = allocate_quote_number(conn, cur, get_jst_now(), postgres=bool(DATABASE_URL), prefix="MT")
             if DATABASE_URL:
                 cur.execute(
                     """
@@ -45795,7 +45772,7 @@ def admin_vendor_mitsumori_create(user_id):
         vendors=vendors,
         today=get_jst_now().strftime("%Y-%m-%d"),
         default_valid_until=(get_jst_now() + timedelta(days=7)).strftime("%Y-%m-%d"),
-        document_no=_generate_prefixed_document_no("MT", "user_mitsumori", "document_no"),
+        document_no="保存時に採番",
         subject_default=defaults["subject"],
         notes_default=defaults["notes"],
         back_url=url_for("admin_documents_dashboard", group="vendor_outgoing"),

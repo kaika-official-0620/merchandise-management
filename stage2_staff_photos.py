@@ -54,7 +54,7 @@ class StaffPhotos:
     def actor(self):
         return Actor(int(current_user.get_id()), staff=True)
 
-    def target(self, registry, item_id, lock=False):
+    def target(self, registry, item_id, lock=False, *, detail=None):
         actor = self.actor()
         registry.actor(actor, staff_required=True)
         links = registry.query('SELECT merchandise_id FROM business_item_links WHERE physical_item_id=?', (item_id,))
@@ -70,7 +70,8 @@ class StaffPhotos:
             abort(404)
         if lock and self.postgres:
             registry.query('SELECT physical_item_id FROM business_item_profiles WHERE physical_item_id=? FOR UPDATE', (item_id,))
-        detail = registry.detail(actor, item_id)
+        if detail is None:
+            detail = registry.detail(actor, item_id)
         row = rows[0]
         if (row.get('scope') != 'user' or row.get('user_id') != detail['owner_user_id']
                 or row.get('custody_location') != 'kaika' or detail['custodian'] != 'kaika'
@@ -78,6 +79,17 @@ class StaffPhotos:
                 or detail['sales_state'] in ('sold', 'shipped') or row.get('sale_date') or row.get('is_shipped')):
             abort(409, description='現在の所有者・開花での受領・保留状況を確認してください。自己保管、売却済み、返送中の商品はこの画面で変更できません。')
         return row, detail
+
+    def entry_error(self, registry, item):
+        try:
+            self.target(registry, item['physical_item_id'], detail=item)
+        except HTTPException as error:
+            if error.code == 404:
+                return '写真の保存先となる商品記録が見つかりません。'
+            if error.code == 409:
+                return error.description
+            raise
+        return None
 
     @staticmethod
     def snapshot(row, detail):
@@ -208,7 +220,7 @@ def register_stage2_staff_photos(runtime):
     def manage(item_id):
         if not enabled(app):
             abort(404)
-        if not current_user.is_admin():
+        if not current_user.is_admin() or not current_user.has_permission('merchandise'):
             abort(403)
         try:
             return service.manage(item_id)
