@@ -33,10 +33,13 @@ class Forms(HTMLParser):
     def handle_starttag(self,tag,attrs):
         attrs=dict(attrs)
         if tag=='form':
-            self.current={'action':attrs.get('action',''),'fields':{}}
+            self.current={'action':attrs.get('action',''),'fields':{},'input_values':{}}
             self.forms.append(self.current)
-        elif tag=='input' and self.current is not None and attrs.get('type')=='hidden':
-            self.current['fields'][attrs.get('name')]=attrs.get('value','')
+        elif tag=='input' and self.current is not None and attrs.get('name'):
+            name,value=attrs['name'],attrs.get('value','')
+            self.current['input_values'][name]=value
+            if attrs.get('type')=='hidden':
+                self.current['fields'][name]=value
 
     def handle_endtag(self,tag):
         if tag=='form':
@@ -44,6 +47,9 @@ class Forms(HTMLParser):
 
     def fields(self,action):
         return next((dict(f['fields']) for f in self.forms if urlsplit(f['action']).path==action),{})
+
+    def initial_value(self,action,name):
+        return next((f['input_values'].get(name) for f in self.forms if urlsplit(f['action']).path==action),None)
 
 
 def run(module,users):
@@ -271,15 +277,44 @@ def run(module,users):
         check('one accepted individual-item order claim',len(rows('SELECT physical_item_id FROM stage4_order_claims'))==1)
         packing=rows("SELECT task_id FROM stage4_order_tasks WHERE order_id=? AND kind='packing'",(channel_order['order_id'],))[0]['task_id']
         task_path='/commerce/tasks/'+packing
-        task_deadline=(datetime.now(ZoneInfo('Asia/Tokyo'))+timedelta(days=1)).replace(microsecond=0).isoformat()
+        jst=ZoneInfo('Asia/Tokyo')
+        task_deadline=(datetime.now(jst)+timedelta(days=1)).replace(microsecond=123456)
+        stale_task_form=form('staff','/commerce/channels',task_path)
         _,task_form=post('packing task gets staff and deadline','staff','/commerce/channels',task_path,
-            {'status':'working','assignee_user_id':str(staff_id),'deadline_at':task_deadline,
+            {'status':'working','assignee_user_id':str(staff_id),'deadline_at':task_deadline.isoformat(),
              'note':'fixture-packing-in-progress','evidence_reference':'fixture-task-evidence'})
         task_record=rows('SELECT * FROM stage4_order_task_events WHERE task_id=?',(packing,))[0]
         check('task saved correct staff',task_record['assignee_user_id']==staff_id and task_record['status']=='working')
-        check('task deadline retains correct instant',datetime.fromisoformat(task_record['deadline_at'])==datetime.fromisoformat(task_deadline))
+        check('task deadline retains correct instant',datetime.fromisoformat(task_record['deadline_at'])==task_deadline)
         check('task update replay accepted',http('staff',task_path,task_form).status_code==302)
         check('task replay no duplicate history',len(rows('SELECT event_id FROM stage4_order_task_events WHERE task_id=?',(packing,)))==1)
+        stale_task_response=http('staff',task_path,{**task_form,**stale_task_form,'deadline_at':'','status':'blocked'})
+        check('stale packing task cannot overwrite newer deadline',stale_task_response.status_code==409)
+        check('stale task links directly back to latest channels page',
+            'href="/commerce/channels">販路・受注・発送へ戻る' in stale_task_response.get_data(as_text=True))
+        task_deadline_field=Forms(http('staff','/commerce/channels')).initial_value(task_path,'deadline_at')
+        check('packing task deadline prefills in JST at browser precision',
+            task_deadline_field==task_deadline.replace(tzinfo=None).isoformat(timespec='milliseconds'))
+        task_values={'status':'done','assignee_user_id':str(staff_id),'note':'fixture-packing-done',
+                     'evidence_reference':'fixture-task-evidence'}
+        post('packing task status saved with prefilled date','staff','/commerce/channels',task_path,
+             {**task_values,'deadline_at':task_deadline_field})
+        post('packing task status saved with blank date','staff','/commerce/channels',task_path,
+             {**task_values,'deadline_at':''})
+        task_deadline_rows=rows('SELECT deadline_at FROM stage4_order_task_events WHERE task_id=? ORDER BY revision',(packing,))
+        check('prefilled and blank deadline keep the original instant',
+            len(task_deadline_rows)==3 and all(row['deadline_at']==task_record['deadline_at'] for row in task_deadline_rows))
+        new_deadline=task_deadline+timedelta(hours=1)
+        post('packing task deadline can be edited','staff','/commerce/channels',task_path,
+             {**task_values,'deadline_at':new_deadline.replace(tzinfo=None).isoformat(timespec='milliseconds')})
+        latest_deadline=rows('SELECT deadline_at FROM stage4_order_task_events WHERE task_id=? ORDER BY revision DESC LIMIT 1',(packing,))[0]['deadline_at']
+        check('changed deadline is persisted',
+            datetime.fromisoformat(latest_deadline)==new_deadline.replace(microsecond=123000))
+        post('packing task deadline is removed only by explicit checkbox','staff','/commerce/channels',task_path,
+             {**task_values,'deadline_at':new_deadline.replace(tzinfo=None).isoformat(timespec='milliseconds'),'clear_deadline':'yes'})
+        cleared=rows('SELECT deadline_at FROM stage4_order_task_events WHERE task_id=? ORDER BY revision DESC LIMIT 1',(packing,))[0]
+        check('explicit clear leaves deadline blank',cleared['deadline_at'] is None and
+            Forms(http('staff','/commerce/channels')).initial_value(task_path,'deadline_at')=='')
         ship_path='/commerce/channel-orders/'+channel_order['order_id']+'/ship'
         post('shipment held until every listing stop confirmed','staff','/commerce/channels',ship_path,
             {'tracking_reference':'FIXTURE-TRACK-1','evidence_reference':'fixture-shipment'},expected=409)

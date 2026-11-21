@@ -586,7 +586,7 @@ def verify_documents(runtime, state, state_path, users, clients, phase_name, che
 
     if phase_name == 'initialize':
         subject = 'fictional-document-review-' + secrets.token_hex(6)
-        form = {'status': 'completed', 'issue_date': '2026-10-27', 'company_name': 'fictional-kaika',
+        form = {'status': 'completed', 'issue_date': '2001-10-27', 'company_name': 'fictional-kaika',
                 'subject': subject, 'item_name[]': ['fictional-preserve-on-reboot'],
                 'merchandise_id[]': [str(state['legacy_id'])], 'quantity[]': ['1'],
                 'unit[]': ['item'], 'unit_price[]': ['1000'], 'security_csrf_token': owner_token}
@@ -596,12 +596,26 @@ def verify_documents(runtime, state, state_path, users, clients, phase_name, che
               data={**form, 'merchandise_id[]': [str(next(iter(other_ids)))]}).status_code == 404)
         check('document_invalid_price_rejected_before_save', normal.post('/mitsumori/add', base_url=base,
               data={**form, 'unit_price[]': ['1.5']}).status_code == 400)
-        for number in range(2):
-            saved = normal.post('/mitsumori/add', base_url=base, data=form)
-            check('document_direct_completion_without_preview_' + str(number), saved.status_code == 302)
+        check('document_expiry_before_issue_denied', normal.post('/mitsumori/add', base_url=base,
+              data={**form, 'valid_until': '2001-10-26'}).status_code == 400)
+        check('document_expiry_invalid_date_denied', normal.post('/mitsumori/add', base_url=base,
+              data={**form, 'valid_until': '2001-11-31'}).status_code == 400)
+        with normal.session_transaction(base_url=base) as session:
+            original_session = dict(session)
+
+        def create_backdated(expiry):
+            contender = app.test_client()
+            with contender.session_transaction(base_url=base) as session:
+                session.update(original_session)
+            return contender.post('/mitsumori/add', base_url=base, data={**form, 'valid_until': expiry}).status_code
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            saved_statuses = list(pool.map(create_backdated, ('', form['issue_date'])))
+        check('document_concurrent_backdated_completion_without_preview', saved_statuses == [302, 302])
         rows = fetch_rows('SELECT id,status,total_amount,document_no FROM user_mitsumori WHERE user_id=%s AND subject=%s ORDER BY id',
                           (users['normal']['id'], subject))
         check('document_two_distinct_completed_unsent', len(rows) == 2 and all(row[1] == 'completed' and row[2] == 1000 for row in rows))
+        check('document_concurrent_backdated_numbers_unique', len(rows) == 2 and rows[0][3] != rows[1][3])
         if len(rows) != 2:
             raise AssertionError('Fixture document creation did not return two saved documents')
         first, second = rows[0][0], rows[1][0]
@@ -621,9 +635,6 @@ def verify_documents(runtime, state, state_path, users, clients, phase_name, che
 
         # Both independent HTTP submissions wait on the same actual PG item
         # lock. Releasing it must permit only one distinct document to submit.
-        with normal.session_transaction(base_url=base) as session:
-            original_session = dict(session)
-
         def concurrent_submit(document_id):
             contender = app.test_client()
             with contender.session_transaction(base_url=base) as session:
@@ -736,6 +747,13 @@ def verify_source_documents(runtime, state, state_path, users, clients, phase_na
             data={**form, 'source_invoice_item_id[]': [str(source_rows[1])]}).status_code == 400)
         check('document_source_excludes_only_its_own_invoice', business.post(path, base_url=base, data=form).status_code == 409)
         query("UPDATE invoices SET status='cancelled' WHERE id=%s", (unrelated_id,), write=True)
+        check('document_source_expiry_uses_invoice_issue_date', business.post(path, base_url=base,
+            data={**form, 'issue_date': '2001-10-27', 'valid_until': '2026-10-26'}).status_code == 400)
+        ordinary = business.post('/mitsumori/add', base_url=base, data={
+            'status': 'draft', 'issue_date': '2001-10-27', 'subject': 'fictional-source-series-parity',
+            'security_csrf_token': token,
+        })
+        check('document_source_series_ordinary_quote_saved', ordinary.status_code == 302)
         saved = business.post(path, base_url=base, data=form)
         check('document_source_direct_completion_allowed', saved.status_code == 302)
         rows = query('SELECT id,status,source_document_id,source_document_type FROM user_mitsumori WHERE user_id=%s AND source_invoice_id=%s', (users['business']['id'], invoice_id))
@@ -743,6 +761,9 @@ def verify_source_documents(runtime, state, state_path, users, clients, phase_na
         if len(rows) != 1:
             raise AssertionError('The explicit source fixture did not produce one estimate')
         document_id = rows[0][0]
+        serials = query("SELECT document_no FROM user_mitsumori WHERE user_id=%s AND (subject='fictional-source-series-parity' OR id=%s)",
+                        (users['business']['id'], document_id))
+        check('document_source_and_ordinary_quote_numbers_unique', len({row[0] for row in serials}) == 2)
         query('UPDATE user_mitsumori_items SET amount=29999 WHERE mitsumori_id=%s', (document_id,), write=True)
         check('document_source_snapshot_change_denied', send(document_id).status_code == 409)
         query('UPDATE user_mitsumori_items SET amount=30000 WHERE mitsumori_id=%s', (document_id,), write=True)

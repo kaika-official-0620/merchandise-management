@@ -2,6 +2,7 @@
 from contextlib import redirect_stdout, redirect_stderr
 from datetime import datetime, timezone
 from html.parser import HTMLParser
+import re
 import hashlib
 import importlib
 import io
@@ -117,6 +118,9 @@ def run(module, users):
     check('staff CSRF missing denied',http('staff',item_path+'/facts',{}).status_code == 400)
     body = http('staff',item_path).get_data(as_text=True)
     check('unknown original amount displayed', '未確認' in body and 'name="purchase_cost_yen" value=""' in body)
+    defaults = re.findall(r'type="datetime-local" step="0\.001" name="occurred_at" value="([^"]*)"', body)
+    check('finance date inputs contain browser-compatible JST defaults',
+        len(defaults)>=2 and all(re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}', value) for value in defaults))
     fact_fields = form(item_path,item_path+'/facts')
     facts = {**fact_fields, 'purchase_cost_yen':'30000','sale_gross_yen':'40000','channel_fee_yen':'4000',
         'shipping_cost_yen':'750','shipping_source_id':'fixture-delivery-1','materials_yen':'100',
