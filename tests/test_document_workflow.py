@@ -16,7 +16,7 @@ from flask_login import LoginManager, UserMixin, current_user, login_user
 from jinja2 import ChoiceLoader, DictLoader, Environment, FileSystemLoader
 from werkzeug.exceptions import HTTPException
 
-from document_workflow import KINDS, register_document_workflow
+from document_workflow import KINDS, STAFF_INBOX_EVENT, register_document_workflow
 from invoice_tax import invoice_tax_context, invoice_tax_category_label
 
 
@@ -40,11 +40,11 @@ class DocumentWorkflowTests(unittest.TestCase):
         self.path=Path(self.tmp.name)/'fictional.sqlite'
         self.app=Flask(__name__)
         self.app.config.update(TESTING=True,SECRET_KEY='fictional-only')
-        self.users={str(p.id):p for p in [Person(1),Person(2),Person(9,'admin'),Person(8,'admin',False)]}
+        self.users={str(p.id):p for p in [Person(1),Person(2),Person(9,'admin'),Person(8,'admin',False),Person(10,'owner')]}
         manager=LoginManager(self.app)
         manager.user_loader(lambda key:self.users.get(key))
         self.app.jinja_loader=DictLoader({'customer_documents/inbox.html':'{{ submissions|tojson }}',
-            'customer_documents/received_detail.html':'{{ {"document":document,"details":details}|tojson }}',
+            'customer_documents/received_detail.html':'{{ {"document":document,"details":details,"progress":progress,"history":history,"staff":staff,"back_url":back_url}|tojson }}',
             'mitsumori_form.html':'{{ {"available":my_merchandise,"history":document_product_history}|tojson }}'})
         for kind, spec in KINDS.items():
             self.app.add_url_rule('/view/'+kind+'/<int:id>',spec[4],lambda id:'detail')
@@ -55,10 +55,13 @@ class DocumentWorkflowTests(unittest.TestCase):
         self.app.add_url_rule('/mitsumori/edit/<int:id>','user_mitsumori_edit',form,methods=['GET','POST'])
         self.app.add_url_rule('/invoices/send/<int:id>','user_invoice_send',lambda id:'unsafe',methods=['GET','POST'])
         self.app.add_url_rule('/invoices','user_invoice_list',lambda:'list')
-        self.runtime=SimpleNamespace(app=self.app,DATABASE_URL=None,get_db=self.connect,get_jst_now=lambda:datetime(2026,10,27))
+        self.runtime=SimpleNamespace(app=self.app,DATABASE_URL=None,get_db=self.connect,get_jst_now=lambda:datetime(2026,10,27),
+            build_user_from_record=lambda row: Person(row['id'], row['role'], row['admin_permissions'] in ('', '["invoices"]')))
         with self.connect() as db:
-            db.execute('CREATE TABLE users(id INTEGER PRIMARY KEY,display_name TEXT)')
-            db.executemany('INSERT INTO users VALUES (?,?)',[(1,'Customer A'),(2,'Customer B')])
+            db.execute('CREATE TABLE users(id INTEGER PRIMARY KEY,display_name TEXT, username TEXT, role TEXT, admin_permissions TEXT)')
+            db.executemany('INSERT INTO users VALUES (?,?,?,?,?)',[(1,'Customer A','a','user',''),(2,'Customer B','b','user',''),
+                (8,'Inventory Staff','inventory','admin','["merchandise"]'),(9,'Document Staff','documents','admin','["invoices"]'),
+                (10,'Owner','owner','owner','')])
             db.execute('CREATE TABLE merchandise(id INTEGER PRIMARY KEY,user_id INTEGER,scope TEXT,sale_date TEXT,product_name TEXT,brand_name TEXT,listing_price INTEGER,kaika_product_code TEXT)')
             db.executemany('INSERT INTO merchandise VALUES (?,?,?,?,?,?,?,?)',[(11,1,'user',None,'Bag','Brand',1000,'A-11'),(12,1,'user',None,'Coat','Brand',2000,'A-12'),(13,2,'user',None,'Private B','B',3000,'B-13'),(14,1,'kaika',None,'Company','C',4000,'K-14'),(15,1,'user','2026-10-25','Sold','D',5000,'A-15')])
             for _,(table,items,key,owner,*_) in KINDS.items():
@@ -204,6 +207,53 @@ class DocumentWorkflowTests(unittest.TestCase):
         self.assertEqual([(row['id'], row['sent_at']) for row in filtered], [(90, '2026/10/28 00:15')])
         self.assertIn('received_through=2026-10-28', filtered[0]['url'])
         self.assertEqual(self.client.get(filtered[0]['url']).status_code, 200)
+
+    def progress_post(self, *, kind='estimate', document_id=101, revision=0, handling='in_progress', assignee='9', token='A'*43):
+        return self.client.post(f'/admin/customer-submissions/{kind}/{document_id}/progress?category=estimate&handling=pending',
+            data={'handling': handling, 'assignee': assignee, 'revision': revision, 'security_csrf_token':token})
+
+    def test_staff_assignment_status_filters_and_history_leave_received_document_intact(self):
+        self.add_doc(status='submitted')
+        self.add_doc(kind='consent',status='submitted')
+        self.login(9)
+        detail='/admin/customer-submissions/estimate/101'
+        before=self.client.get(detail).get_json(force=True)
+        self.assertEqual(before['progress'], {'id':0,'assignee':None,'handling':'pending'})
+        self.assertEqual(set(before['staff']), {'9','10'})
+        saved=self.progress_post()
+        self.assertEqual(saved.status_code,302)
+        self.assertIn('handling=pending', saved.location)
+        after=self.client.get(saved.location).get_json(force=True)
+        self.assertIn('handling=pending', after['back_url'])
+        self.assertEqual(after['progress']['assignee'],'9')
+        self.assertEqual(after['progress']['handling'],'in_progress')
+        self.assertEqual(after['document'],before['document'])
+        self.assertEqual(self.progress_post().status_code,409)
+        rev=after['progress']['id']
+        self.assertEqual(self.progress_post(revision=rev).status_code,302)
+        self.assertEqual(self.progress_post(revision=rev,handling='resolved',assignee='10').status_code,302)
+        found=self.client.get('/admin/customer-submissions?handling=resolved&assignee=10').get_json(force=True)
+        self.assertEqual([(record['kind'],record['id']) for record in found],[('estimate',101)])
+        self.assertEqual(self.client.get('/admin/customer-submissions?handling=pending&assignee=unassigned').get_json(force=True)[0]['kind'],'consent')
+        after=self.client.get(detail).get_json(force=True)
+        self.assertEqual([event['handling'] for event in after['history']],['resolved','in_progress'])
+        self.assertEqual(self.progress_post(revision=after['progress']['id'],handling='pending',assignee='').status_code,302)
+        self.assertEqual(self.client.get(detail).get_json(force=True)['progress']['assignee'],None)
+
+    def test_staff_progress_rejects_unentitled_users_invalid_assignment_and_unsent_documents(self):
+        self.add_doc(status='submitted')
+        self.add_doc(id=102,status='completed')
+        for user in (1,2,8):
+            self.login(user)
+            self.assertEqual(self.progress_post().status_code,403)
+        self.login(9)
+        self.assertEqual(self.progress_post(token='B'*43).status_code,400)
+        for user in ('1','8','99','-1'):
+            self.assertEqual(self.progress_post(assignee=user).status_code,400)
+        self.assertEqual(self.progress_post(document_id=102).status_code,404)
+        self.assertEqual(self.progress_post(handling='submitted').status_code,400)
+        with self.connect() as db:
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM final_document_events WHERE action=?',(STAFF_INBOX_EVENT,)).fetchone()[0],0)
 
     def test_calculation_detail_uses_matching_table(self):
         self.add_doc(kind='calculation')
