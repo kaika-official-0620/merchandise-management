@@ -2,6 +2,7 @@
   const picker = document.getElementById('intake-product-picker');
   if (!picker) return;
   const search = document.getElementById('intake-product-search');
+  const choices = document.getElementById('intake-product-choices');
   const count = document.getElementById('intake-product-count');
   const empty = document.getElementById('intake-product-empty');
   const transfer = document.querySelector('input[name="kind"][value="transfer"]');
@@ -21,7 +22,10 @@
     count.textContent = `${visible} / ${rows.length}点を表示・${selected}点を選択中（1回100点まで）`;
     empty.hidden = visible !== 0;
   }
-  search.addEventListener('input', update);
+  search.addEventListener('input', () => {
+    update();
+    if (choices) choices.scrollTop = 0;
+  });
   picker.addEventListener('change', event => {
     if (event.target.matches('input[name="item_ids"]') && event.target.checked) transfer.checked = true;
     update();
