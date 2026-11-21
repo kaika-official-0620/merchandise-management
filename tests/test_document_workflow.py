@@ -24,7 +24,7 @@ class Person(UserMixin):
     def __init__(self, id, role='user', permissions=True):
         self.id,self.role,self.permissions=id,role,permissions
     def is_admin(self): return self.role in {'admin','owner'}
-    def has_permission(self, name): return self.permissions
+    def has_permission(self, name): return self.permissions if isinstance(self.permissions, bool) else name in self.permissions
 
 
 class ClosingConnection(sqlite3.Connection):
@@ -48,6 +48,8 @@ class DocumentWorkflowTests(unittest.TestCase):
             'mitsumori_form.html':'{{ {"available":my_merchandise,"history":document_product_history}|tojson }}'})
         for kind, spec in KINDS.items():
             self.app.add_url_rule('/view/'+kind+'/<int:id>',spec[4],lambda id:'detail')
+        self.app.add_url_rule('/mitsumori/pdf/<int:id>','user_mitsumori_pdf',lambda id:'print')
+        self.app.add_url_rule('/mitsumori/download/<int:id>','user_mitsumori_download',lambda id:'export')
         def form(id=None):
             if request.method=='POST': return jsonify(saved=True,status=request.form.get('status'))
             return render_template('mitsumori_form.html',mitsumori={'id':id} if id else None)
@@ -55,6 +57,7 @@ class DocumentWorkflowTests(unittest.TestCase):
         self.app.add_url_rule('/mitsumori/edit/<int:id>','user_mitsumori_edit',form,methods=['GET','POST'])
         self.app.add_url_rule('/invoices/send/<int:id>','user_invoice_send',lambda id:'unsafe',methods=['GET','POST'])
         self.app.add_url_rule('/invoices','user_invoice_list',lambda:'list')
+        self.app.add_url_rule('/admin/users/<int:user_id>/documents','admin_member_documents',lambda user_id:'member documents')
         self.runtime=SimpleNamespace(app=self.app,DATABASE_URL=None,get_db=self.connect,get_jst_now=lambda:datetime(2026,10,27),
             build_user_from_record=lambda row: Person(row['id'], row['role'], row['admin_permissions'] in ('', '["invoices"]')))
         with self.connect() as db:
@@ -99,6 +102,29 @@ class DocumentWorkflowTests(unittest.TestCase):
         response=self.client.post('/mitsumori/add',data=self.form_data())
         self.assertEqual(response.status_code,200)
         self.assertEqual(response.json['status'],'completed')
+
+    def test_customer_authoring_is_separate_from_staff_authoring(self):
+        for user_id in (8, 9, 10):
+            self.login(user_id)
+            self.assertEqual(self.client.get('/mitsumori/add').status_code, 403)
+            self.assertEqual(self.client.post('/mitsumori/add', data=self.form_data()).status_code, 403)
+        self.login()
+        self.assertEqual(self.client.get('/mitsumori/add').status_code, 200)
+        self.assertEqual(self.client.post('/mitsumori/add', data=self.form_data()).status_code, 200)
+
+    def test_internal_legacy_estimate_is_hidden_from_customer_detail_print_csv_and_inbox(self):
+        self.add_doc(status='submitted')
+        self.add_doc(id=102,status='submitted')
+        with self.connect() as db:
+            db.execute("UPDATE user_mitsumori SET document_no='KM-20261121-010',document_scope=NULL WHERE id=102")
+        for template in ('/view/estimate/{}','/mitsumori/pdf/{}','/mitsumori/download/{}'):
+            self.assertEqual(self.client.get(template.format(101)).status_code,200)
+            self.assertEqual(self.client.get(template.format(102)).status_code,404)
+        self.login(8)
+        self.assertEqual(self.client.get('/mitsumori/download/102').status_code,403)
+        self.login(9)
+        self.assertEqual(self.client.get('/mitsumori/download/102').status_code,200)
+        self.assertEqual([row['id'] for row in self.client.get('/admin/customer-submissions').get_json(force=True)], [101])
 
     def test_cannot_forge_sent_status_on_save(self):
         self.assertEqual(self.client.post('/mitsumori/add',data=self.form_data(status='submitted')).status_code,400)
@@ -254,6 +280,26 @@ class DocumentWorkflowTests(unittest.TestCase):
         self.assertEqual(self.progress_post(handling='submitted').status_code,400)
         with self.connect() as db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM final_document_events WHERE action=?',(STAFF_INBOX_EVENT,)).fetchone()[0],0)
+
+    def test_staff_member_context_scopes_inbox_rows_and_never_changes_another_members_receipt(self):
+        self.add_doc(status='submitted')
+        self.add_doc(id=102, owner=2, status='submitted', item=13)
+        rows, _ = self.service.inbox(query='',category='',received_from=None,received_through=None,page=1,customer_id=1)
+        self.assertEqual([record['id'] for record in rows], [101])
+        self.login(9)
+        receipt = '/admin/customer-submissions/estimate/101'
+        self.assertEqual(self.client.get(receipt+'?member_id=2').status_code, 404)
+        fields = {'handling':'in_progress', 'assignee':'9', 'revision':'0', 'security_csrf_token':'A'*43}
+        self.assertEqual(self.client.post(receipt+'/progress?member_id=2',data=fields).status_code, 404)
+        self.users['9'].permissions = {'invoices'}
+        self.assertEqual(self.client.get(receipt+'?member_id=1').status_code, 403)
+        self.assertEqual(self.client.get(receipt).status_code, 200)
+        self.users['9'].permissions = {'invoices','users'}
+        saved = self.client.post(receipt+'/progress?member_id=1',data=fields)
+        self.assertIn('member_id=1', saved.location)
+        page = self.client.get(saved.location).get_json(force=True)
+        self.assertEqual(page['back_url'], '/admin/users/1/documents')
+        self.assertEqual(page['progress']['handling'], 'in_progress')
 
     def test_calculation_detail_uses_matching_table(self):
         self.add_doc(kind='calculation')

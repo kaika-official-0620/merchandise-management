@@ -13,7 +13,7 @@ from flask import Flask, abort, render_template_string
 from flask_login import LoginManager, UserMixin
 
 from mobile_api import _register_mobile_media
-from security_access import register_security_access, HELD_DELETIONS, MUTATIONS
+from security_access import CUSTOMER_DOCUMENT_MUTATIONS, register_security_access, HELD_DELETIONS, MUTATIONS
 
 
 class FixtureUser(UserMixin):
@@ -296,9 +296,9 @@ class SecurityAccessTest(unittest.TestCase):
             self.assertEqual(connection.execute('SELECT count(*) FROM users').fetchone()[0], 4)
 
     def test_all_guarded_get_and_head_are_non_mutating(self):
-        self.login(3)
         for endpoint in MUTATIONS:
             path = '/fixture/' + endpoint + '/1'
+            self.login(1 if endpoint in CUSTOMER_DOCUMENT_MUTATIONS else 3)
             self.assertEqual(self.client.get(path).status_code, 200, endpoint)
             self.assertEqual(self.client.head(path).status_code, 200, endpoint)
         self.assertEqual(self.calls, [])
@@ -351,10 +351,15 @@ class SecurityAccessTest(unittest.TestCase):
 
     def test_invoice_send_and_approval_get_aliases_never_reach_business_mutations(self):
         self.login(3)
-        for endpoint in ('user_invoice_send', 'admin_invoice_approve', 'admin_invoice_reject', 'admin_seisan_send', 'admin_shikiriosho_send'):
+        self.assertEqual(self.client.get('/fixture/user_invoice_send/1').status_code, 403)
+        self.assertEqual(self.client.post('/fixture/user_invoice_send/1', data={'security_csrf_token':self.token()}).status_code, 403)
+        for endpoint in ('admin_invoice_approve', 'admin_invoice_reject', 'admin_seisan_send', 'admin_shikiriosho_send'):
             path = '/fixture/' + endpoint + '/1'
             self.assertEqual(self.client.get(path).status_code, 200)
             self.assertEqual(self.client.post(path).status_code, 400)
+        self.login(1)
+        self.assertEqual(self.client.get('/fixture/user_invoice_send/1').status_code, 200)
+        self.assertEqual(self.client.post('/fixture/user_invoice_send/1').status_code, 400)
         self.assertEqual(self.calls, [])
 
 
