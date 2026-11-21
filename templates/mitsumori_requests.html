@@ -1,19 +1,19 @@
 {% extends "base.html" %}
 
-{% block title %}見積依頼書作成依頼 - 株式会社 開花{% endblock %}
+{% block title %}買取明細書から見積依頼書を作成 - 株式会社 開花{% endblock %}
 
 {% block content %}
 {% set pending_count = pending_mitsumori_from_invoices|default([])|length %}
 <div class="page-header">
-    <h1>見積依頼書作成依頼</h1>
+    <h1>買取明細書から見積依頼書を作成</h1>
     <p class="page-subtitle">開花から届いた買取明細書を確認し、必要な見積依頼書を作成してください。</p>
 </div>
 
 <section class="mitsumori-request-panel">
     <div class="mitsumori-request-heading">
         <div>
-            <span class="mitsumori-request-kicker">未対応 {{ pending_count }}件</span>
-            <h2>見積依頼書を作成してください</h2>
+            <span class="mitsumori-request-kicker">対象 {{ pending_count }}件</span>
+            <h2>買取明細書を選ぶ</h2>
             <p>対象の買取明細書を選ぶと、その内容をもとに見積依頼書を作成できます。</p>
         </div>
         <a href="{{ url_for('user_document_list') }}" class="btn btn-secondary">書類一覧へ戻る</a>
@@ -34,7 +34,7 @@
     </div>
     {% else %}
     <div class="mitsumori-request-empty">
-        現在、見積依頼書の作成依頼はありません。
+        見積依頼書を作成できる買取明細書はありません。
     </div>
     {% endif %}
 </section>

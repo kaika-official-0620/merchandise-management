@@ -98,6 +98,7 @@
     'admin_sales_agency_requests',
     'admin_sales_agency_request_detail',
     'admin_users',
+    'admin_member_documents',
     'admin_add_user',
     'admin_edit_user',
     'admin_proxy_service',
@@ -241,7 +242,7 @@
         <div class="sidebar-subcategory">
             <div class="subcategory-label">ユーザー一覧</div>
             {% if current_user.has_permission('users') %}
-            <a href="{{ url_for('admin_users') }}" class="{% if request.endpoint in ['admin_users', 'admin_add_user', 'admin_edit_user'] %}active{% endif %}">クライアント一覧</a>
+            <a href="{{ url_for('admin_users') }}" class="{% if request.endpoint in ['admin_users', 'admin_add_user', 'admin_edit_user', 'admin_member_documents'] %}active{% endif %}">クライアント一覧</a>
             {% else %}
             <span class="sidebar-item-disabled">ユーザー管理の権限がありません</span>
             {% endif %}

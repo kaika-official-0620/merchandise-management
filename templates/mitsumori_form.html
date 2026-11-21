@@ -52,18 +52,11 @@
                     <label for="company_name">会社名 <span class="required">*</span></label>
                     <input type="text" id="company_name" name="company_name" value="{{ mitsumori.company_name if is_edit else '株式会社 開花' }}" required class="form-control readonly" readonly>
                 </div>
-                <div class="form-group">
-                    <label for="department">部署名</label>
-                    <input type="text" id="department" name="department" value="{{ mitsumori.department if is_edit else '' }}" placeholder="例: 買取担当" class="form-control">
-                </div>
-                <div class="form-group">
-                    <label for="contact_person">担当者名</label>
-                    <input type="text" id="contact_person" name="contact_person" value="{{ mitsumori.contact_person if is_edit else '' }}" placeholder="例: ご担当者" class="form-control">
-                </div>
-                <div class="form-group full-width">
-                    <label for="address">住所</label>
-                    <input type="text" id="address" name="address" value="{{ mitsumori.address if is_edit else '' }}" placeholder="必要な場合のみ入力してください" class="form-control">
-                </div>
+                {% if is_edit %}
+                <input type="hidden" id="department" name="department" value="{{ mitsumori.department or '' }}">
+                <input type="hidden" id="contact_person" name="contact_person" value="{{ mitsumori.contact_person or '' }}">
+                <input type="hidden" id="address" name="address" value="{{ mitsumori.address or '' }}">
+                {% endif %}
             </div>
         </section>
 

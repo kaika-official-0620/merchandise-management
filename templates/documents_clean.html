@@ -39,6 +39,13 @@
     line-height: 1.6;
 }
 
+.user-doc-origin {
+    display: block;
+    margin-top: 0.25rem;
+    color: #475569;
+    font-size: 0.78rem;
+}
+
 .user-doc-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
@@ -356,8 +363,9 @@
     <section class="user-doc-panel user-doc-head">
         <div>
             <h1>書類履歴</h1>
-            <p>作成済み・送信済みの書類をカテゴリ別に確認できます。未送信の書類は詳細画面から送信できます。</p>
+            <p>自分で作成した書類と、開花から届いた書類を確認できます。</p>
         </div>
+        <a href="{{ url_for('user_document_list') }}" class="btn btn-outline">自分の書類を作る</a>
     </section>
 
     {% if not selected_category %}
@@ -408,6 +416,7 @@
                                 {{ row.document_type }}
                                 {% if row.is_unread %}<span class="user-doc-row-badge">新着</span>{% endif %}
                             </span>
+                            {% if row.origin_label %}<small class="user-doc-origin">{{ row.origin_label }}</small>{% endif %}
                         </td>
             <td data-label="No./書類名">
               {{ row.document_no }}

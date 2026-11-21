@@ -13,7 +13,7 @@
 <section class="document-create-panel">
     <div class="document-create-header">
         <div>
-            <h2>作成する書類</h2>
+            <h2>自分で作る書類</h2>
             <p>入力後はそのまま作成を完了できます。プレビューでの確認は任意です。作成完了後、書類の詳細画面で送付先を確認して開花へ送信します。</p>
         </div>
     </div>
@@ -21,14 +21,10 @@
         <article class="document-create-card">
             <span class="document-create-kicker">開花へ送る依頼</span>
             <h3>見積依頼書</h3>
-            {% if pending_mitsumori_count %}
-            <span class="document-create-badge">見積依頼書作成 {{ pending_mitsumori_count }}件</span>
-            {% endif %}
             <p>商品内容や金額を入力し、開花へ見積依頼を送るための書類です。</p>
-            {% if pending_mitsumori_count %}
-            <a href="{{ url_for('user_mitsumori_requests') }}" class="btn btn-primary">作成依頼を確認</a>
-            {% else %}
             <a href="{{ url_for('user_mitsumori_add') }}" class="btn btn-primary">見積依頼書を作成</a>
+            {% if pending_mitsumori_count %}
+            <a href="{{ url_for('user_mitsumori_requests') }}" class="btn btn-secondary">届いた買取明細書から作成（{{ pending_mitsumori_count }}件）</a>
             {% endif %}
         </article>
         <article class="document-create-card">
@@ -43,7 +39,7 @@
 
 <section class="draft-documents-panel">
     <div class="section-heading">
-        <h2>作成中の書類</h2>
+        <h2>自分の下書き</h2>
         <p>下書き保存した書類はここに残ります。作成完了すると書類履歴へ移動します。</p>
     </div>
 
@@ -190,19 +186,6 @@
     font-size: 0.78rem;
     font-weight: 800;
     letter-spacing: 0.04em;
-}
-
-.document-create-badge {
-    display: inline-flex;
-    align-items: center;
-    width: max-content;
-    max-width: 100%;
-    padding: 0.28rem 0.65rem;
-    border-radius: 999px;
-    background: #fee2e2;
-    color: #991b1b;
-    font-size: 0.78rem;
-    font-weight: 800;
 }
 
 .pending-source-panel {

@@ -19,8 +19,8 @@
 
     {% if pending_mitsumori_count %}
     <div class="pending-mitsumori-box">
-        <strong>&#35211;&#31309;&#20381;&#38972;&#26360;&#20316;&#25104; {{ pending_mitsumori_count }}&#20214;</strong>
-        <span>&#36023;&#21462;&#26126;&#32048;&#26360;&#12434;&#30906;&#35469;&#12375;&#12289;&#35211;&#31309;&#20381;&#38972;&#26360;&#12434;&#20316;&#25104;&#12375;&#12390;&#12367;&#12384;&#12373;&#12356;&#12290;</span>
+        <strong>届いた買取明細書から作成（{{ pending_mitsumori_count }}件）</strong>
+        <span>買取明細書を選ぶと、その内容をもとに見積依頼書を作成できます。</span>
         <div class="pending-mitsumori-links">
             {% for inv in pending_mitsumori_from_invoices %}
             <a href="{{ url_for('user_mitsumori_add', source_invoice_id=inv.id) }}" class="btn btn-info">{{ inv.invoice_no or inv.id }}</a>

@@ -11,7 +11,7 @@
     <div class="admin-doc-toolbar">
         <div>
             <h1>見積り依頼書</h1>
-            <p>開花へ送付する見積り依頼書の内容を確認できます。明細・合計金額は管理画面側と同じ形式で表示されます。</p>
+            <p>ご自身で作成した見積依頼書の明細と送信状況を確認できます。</p>
         </div>
         <div class="admin-doc-actions">
             <a href="{{ url_for('documents') }}" class="doc-btn doc-btn-secondary context-back-inline">書類履歴へ戻る</a>
@@ -32,7 +32,7 @@
     <article class="admin-doc-sheet">
         <header class="admin-doc-hero">
             <div>
-                <div class="admin-doc-kicker">クライアントから開花へ送付</div>
+                <div class="admin-doc-kicker">自分で作成</div>
                 <h2 class="admin-doc-title">見積り依頼書</h2>
                 <p class="admin-doc-no">{{ mitsumori.document_no or '-' }}</p>
             </div>
@@ -67,17 +67,21 @@
                             <dt>会社名</dt>
                             <dd>{{ mitsumori.company_name or '株式会社 開花' }}</dd>
                         </div>
+                        {% if mitsumori.department or mitsumori.contact_person %}
                         <div>
-                            <dt>部署・担当者</dt>
+                            <dt>宛名</dt>
                             <dd>
-                                {% if mitsumori.department %}{{ mitsumori.department }}<br>{% endif %}
-                                {{ (mitsumori.contact_person ~ ' 様') if mitsumori.contact_person else '-' }}
+                                {% if mitsumori.department %}{{ mitsumori.department }}{% if mitsumori.contact_person %}<br>{% endif %}{% endif %}
+                                {% if mitsumori.contact_person %}{{ mitsumori.contact_person }} 様{% endif %}
                             </dd>
                         </div>
+                        {% endif %}
+                        {% if mitsumori.address %}
                         <div>
-                            <dt>住所</dt>
-                            <dd>{{ mitsumori.address or '-' }}</dd>
+                            <dt>宛先住所</dt>
+                            <dd>{{ mitsumori.address }}</dd>
                         </div>
+                        {% endif %}
                     </dl>
                 </section>
 
