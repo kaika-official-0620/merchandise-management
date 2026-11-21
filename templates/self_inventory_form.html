@@ -33,7 +33,7 @@
 <div class="self-inventory">
   <div class="page-header">
     <div><h1>{{ '商品情報の編集' if item else '自分で登録・自己保管' }}</h1><p class="subtitle">自宅などで保管する商品の情報・販売・発送をご自身で記録します。</p></div>
-    <a class="btn btn-secondary" href="{{ url_for('view_item', id=item.id) if item else url_for('index') }}">{{ '商品詳細に戻る' if item else '商品一覧に戻る' }}</a>
+    <a class="btn btn-secondary" href="{{ return_url }}">{{ '商品詳細に戻る' if item else '商品一覧に戻る' }}</a>
   </div>
   {% if error %}<div class="notice notice-error" role="alert">{{ error }}{% if photos_enabled %}<br>写真を選択していた場合は、もう一度選択してください。{% endif %}</div>{% endif %}
   {% if stage2_quota %}<div class="notice" role="status">自己管理中：{{ stage2_quota.active_items }}点。
@@ -81,13 +81,13 @@
           <h2>商品写真</h2>
           {% if photos_usage %}<p class="form-help">記録済みの現在の写真：{{ photos_usage.photo_count }}枚、確認できた容量：{{ photos_usage.known_bytes }}バイト。{% if photos_usage.unknown_size_count %}{{ photos_usage.unknown_size_count }}枚の容量は未確認です。{% endif %}過去に外した写真の原本は自動削除しません。未計測の既存写真は次回保存時に確認します。</p>{% endif %}
           {% if item and item.photo_path %}<div class="photo-grid"><div class="photo-tile"><img src="{{ url_for('static', filename=item.photo_path) }}" alt="メイン写真">{% if not locked %}<label><input type="checkbox" name="remove_photo" value="1">この写真を外す</label>{% endif %}</div></div>{% endif %}
-          {% if photos_enabled and not locked %}<div class="form-group"><label for="photo">メイン写真</label><input type="file" id="photo" name="photo" accept="image/jpeg,image/png,image/webp"><span class="form-help">JPEG・PNG・WebP。端末の写真やカメラから選択できます。</span></div>{% endif %}
+          {% if photos_enabled and not locked %}<div class="form-group"><label for="photo">メイン写真</label><input type="file" id="photo" name="photo" accept="image/*"><span class="form-help">写真ライブラリやカメラから選択できます。JPEG・PNG・WebP・HEIC/HEIF・AVIFに対応しています。</span></div>{% endif %}
           {% if additional_photos %}<div class="photo-grid">{% for photo in additional_photos %}<div class="photo-tile"><img src="{{ url_for('static', filename=photo) }}" alt="追加写真 {{ loop.index }}">{% if not locked %}<label><input type="checkbox" name="remove_additional" value="{{ loop.index0 }}">この写真を外す</label>{% endif %}</div>{% endfor %}</div>{% endif %}
-          {% if photos_enabled and not locked %}<div class="form-group"><label for="additional_photos">追加写真</label><input type="file" id="additional_photos" name="additional_photos" multiple accept="image/jpeg,image/png,image/webp"><span class="form-help">メイン写真とは別に、合計19枚まで登録できます。1回の送信は全体で40MB以下にしてください。</span></div>{% elif not photos_enabled %}<p class="form-help">写真の追加は現在ご利用いただけません。</p>{% endif %}
+          {% if photos_enabled and not locked %}<div class="form-group"><label for="additional_photos">追加写真</label><input type="file" id="additional_photos" name="additional_photos" multiple accept="image/*"><span class="form-help">メイン写真とは別に、合計19枚まで登録できます。1回の送信は全体で40MB以下にしてください。</span></div>{% elif not photos_enabled %}<p class="form-help">写真の追加は現在ご利用いただけません。</p>{% endif %}
         </section>
       </div>
     </div>
-    <div class="form-actions"><a href="{{ url_for('view_item', id=item.id) if item else url_for('index') }}" class="btn btn-secondary">戻る</a>{% if not locked and (item or not stage2_quota or stage2_quota.can_add) %}{% if not item %}<button type="submit" name="continue_register" value="1" class="btn btn-secondary">登録して次の商品へ</button>{% endif %}<button type="submit" class="btn btn-primary">{{ '変更を保存する' if item else '商品を登録する' }}</button>{% endif %}</div>
+    <div class="form-actions"><a href="{{ return_url }}" class="btn btn-secondary">戻る</a>{% if not locked and (item or not stage2_quota or stage2_quota.can_add) %}{% if not item %}<button type="submit" name="continue_register" value="1" class="btn btn-secondary">登録して次の商品へ</button>{% endif %}<button type="submit" class="btn btn-primary">{{ '変更を保存する' if item else '商品を登録する' }}</button>{% endif %}</div>
   </form>
 </div>
 {% endblock %}

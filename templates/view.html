@@ -912,7 +912,7 @@
 <div class="page-actions">
     <div class="header-actions context-back-inline-source">
         {% if (feature_plans_enabled or stage2_inventory_available|default(false)) and not current_user.is_admin() and can_edit_self_inventory_item(item) %}
-        <a href="{{ url_for('self_inventory_edit', item_id=item.id) }}" class="btn btn-primary">編集</a>
+        <a href="{{ url_for('self_inventory_edit', item_id=item.id, back_url=back_url) }}" class="btn btn-primary">編集</a>
         {% endif %}
         {% if current_user.is_admin() and custody_location(item) == 'kaika' %}
         <a href="{{ url_for('edit_item', id=item.id, back_url=back_url) }}" class="btn btn-primary">編集</a>

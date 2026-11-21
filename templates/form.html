@@ -652,7 +652,7 @@ input:disabled, select:disabled, textarea:disabled {
             <div class="form-group">
                 <label for="additional_photos">追加写真（最大19枚）</label>
                 <div class="photo-upload-options">
-                <input type="file" id="additional_photos" name="additional_photos" accept="image/jpeg,image/png,image/webp" multiple {% if basic_readonly %}disabled{% endif %}>
+                <input type="file" id="additional_photos" name="additional_photos" accept="image/*" multiple {% if basic_readonly %}disabled{% endif %}>
                 <div id="kaika-additional-image-preview" class="local-additional-preview"></div>
                     {% if is_kaika_scope %}<button type="button" id="google-drive-additional-btn" class="btn-google-drive" {% if basic_readonly %}disabled{% endif %}>
                         <svg viewBox="0 0 87.3 78" width="18" height="16" style="margin-right: 6px;">
@@ -2036,8 +2036,11 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             const reader = new FileReader();
+            // If the browser cannot decode the gallery photo, let the server validate it.
+            reader.onerror = reader.onabort = () => resolve(file);
             reader.onload = function(e) {
                 const img = new Image();
+                img.onerror = () => resolve(file);
                 img.onload = function() {
                     // リサイズが不要な場合はそのまま返す
                     if (img.width <= MAX_WIDTH && img.height <= MAX_HEIGHT) {
@@ -2066,10 +2069,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     canvas.width = width;
                     canvas.height = height;
                     const ctx = canvas.getContext('2d');
+                    if (!ctx) { resolve(file); return; }
                     ctx.drawImage(img, 0, 0, width, height);
                     
                     // Blob に変換
                     canvas.toBlob(function(blob) {
+                        if (!blob) { resolve(file); return; }
                         const resizedFile = new File([blob], file.name, {
                             type: 'image/jpeg',
                             lastModified: Date.now()

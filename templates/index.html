@@ -2390,7 +2390,7 @@
     <div class="action-buttons">
         {% if not current_user.is_admin() %}
         {% if (feature_plans_enabled or stage2_inventory_available|default(false)) and has_plan_feature('inventory_manage') %}
-        <a href="{{ url_for('self_inventory_new') }}" class="btn btn-primary">+ 自分の在庫を登録</a>
+        <a href="{{ url_for('self_inventory_new', back_url=current_back_url) }}" class="btn btn-primary">+ 自分の在庫を登録</a>
         <a href="{{ url_for('inventory_intake_new') }}" class="btn btn-secondary">開花へ預ける・登録を依頼</a>
         {% endif %}
         {% if not feature_plans_enabled or has_plan_feature('dealer_sales') %}
@@ -2708,7 +2708,7 @@
                     <td class="action-cell">
                         <a href="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}" class="btn btn-sm btn-detail">詳細</a>
                         {% if (feature_plans_enabled or stage2_inventory_available|default(false)) and not current_user.is_admin() and can_edit_self_inventory_item(item) %}
-                        <a href="{{ url_for('self_inventory_edit', item_id=item.id) }}" class="btn btn-sm btn-edit">編集</a>
+                        <a href="{{ url_for('self_inventory_edit', item_id=item.id, back_url=current_back_url) }}" class="btn btn-sm btn-edit">編集</a>
                         {% endif %}
                         {% if custody_location(item) != 'kaika' %}
                         {% include '_inventory_custody_actions.html' %}
@@ -2975,7 +2975,7 @@
             </div>
             <div class="card-actions">
                 {% if (feature_plans_enabled or stage2_inventory_available|default(false)) and not current_user.is_admin() and can_edit_self_inventory_item(item) %}
-                <a href="{{ url_for('self_inventory_edit', item_id=item.id) }}" class="btn btn-sm btn-edit">編集</a>
+                <a href="{{ url_for('self_inventory_edit', item_id=item.id, back_url=current_back_url) }}" class="btn btn-sm btn-edit">編集</a>
                 {% endif %}
                 {% if custody_location(item) != 'kaika' %}
                 {% include '_inventory_custody_actions.html' %}

@@ -13,8 +13,8 @@
   <form method="post" enctype="multipart/form-data" style="margin:1.5rem 0">
     <input type="hidden" name="staff_photo_csrf" value="{{ staff_photo_csrf }}">
     <input type="hidden" name="operation_token" value="{{ operation_token }}">
-    <label for="photos">追加する写真（JPEG・PNG・WebP）</label><br>
-    <input type="file" id="photos" name="photos" accept="image/jpeg,image/png,image/webp" multiple required>
+    <label for="photos">追加する写真（JPEG・PNG・WebP・HEIC/HEIF・AVIF）</label><br>
+    <input type="file" id="photos" name="photos" accept="image/*" multiple required>
     <p>1回の送信全体は40MB以下です。保存時に既存の画像検証・圧縮処理を行います。</p>
     <button type="submit" class="btn btn-primary">写真を追加する</button>
   </form>
