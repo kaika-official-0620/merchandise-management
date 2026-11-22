@@ -1,5 +1,7 @@
 {% extends "finance_review/frame.html" %}
 {% block finance_content %}
+{% set prior_refund=refunded_demo_history|default(none) %}
+{% set history_draft_ids=prior_refund.draft_ids if prior_refund else [] %}
 <h1>{{ item.title }}</h1><nav><a href="{{ url_for('inventory_registry.detail', item_id=item.physical_item_id) }}">個品・作業記録</a><a href="{{ url_for('finance_review.customer', customer_id=item.owner_user_id) }}">顧客の請求下書き</a></nav>
 <section class="card"><h2>手残りの確認</h2><p>状態：{{ finance_status.get(profit.recognition, '要確認') }} ／ 売上：{{ finance_status.get(profit.sale_payment_status, '未確認') }}</p>
 {% include 'finance_review/_profit_guide.html' %}
@@ -21,6 +23,11 @@
 <section class="card"><h2>売上の入金・精算確認</h2><form method="post" action="{{ url_for('finance_review.status', item_id=item.physical_item_id) }}">{{ tokens('finance_status', item.physical_item_id) }}<label>確認状況<select name="status">{% for value in ('unpaid','paid','return_hold','settlement_ready') %}<option value="{{ value }}">{{ finance_status[value] }}</option>{% endfor %}</select></label>{{ when() }}<label>確認した資料・根拠<input name="source_reference" maxlength="1000" required></label><label>返品・保留解除の確認根拠（該当時）<input name="resolution_reference" maxlength="1000"></label><button type="submit">確認状況を保存</button></form><p class="muted">入金待ち → 入金確認 → 精算可能の順に確認します。送金や購入用資金への加算はありません。</p></section>
 <section class="card"><h2>発送済み商品の請求候補</h2><p>適用契約・開始日・一式作業の範囲などに未確定事項があれば「要確認」に留めます。</p><form method="post" action="{{ url_for('finance_review.drafts', item_id=item.physical_item_id) }}">{{ tokens('finance_drafts', item.physical_item_id) }}<label>適用契約<select name="agreement_id"><option value="">未確認</option>{% for agreement in agreements %}<option value="{{ agreement.agreement_id }}">{{ agreement.agreement_id }}（下書き）</option>{% endfor %}</select></label><button type="submit">作業・発送から請求候補を保存</button></form></section>
 {% endif %}
-<section class="card"><h2>保存した請求候補</h2><div class="scroll"><table><thead><tr><th>区分</th><th>税抜参考額</th><th>状態</th><th>根拠</th></tr></thead><tbody>{% for draft in drafts %}<tr><td>{{ finance_fee_kinds.get(draft.fee_kind, draft.fee_kind) }}</td><td>{{ money(draft.amount_net_yen) }}</td><td>要確認・未請求</td><td>{{ draft.draft_id }}{% if draft.current_review_reasons %}<details><summary>確認項目</summary>{% for reason in draft.current_review_reasons %}{{ finance_reason(reason) }} {% endfor %}</details>{% endif %}</td></tr>{% else %}<tr><td colspan="4">請求候補はまだありません。</td></tr>{% endfor %}</tbody></table></div></section>
+<section class="card"><h2>保存した請求候補</h2>
+{% if prior_refund %}
+<p>前回のテスト返金とその明細は、前の請求下書きで確認できます。</p>
+<a href="{{ url_for('finance_review.invoice', month_id=prior_refund.invoice_id) }}">前回のテスト返金・請求下書きを確認</a>
+{% endif %}
+<div class="scroll"><table><thead><tr><th>区分</th><th>税抜参考額</th><th>状態</th><th>根拠</th></tr></thead><tbody>{% for draft in drafts if draft.draft_id not in history_draft_ids %}<tr><td>{{ finance_fee_kinds.get(draft.fee_kind, draft.fee_kind) }}</td><td>{{ money(draft.amount_net_yen) }}</td><td>要確認・未請求</td><td>{{ draft.draft_id }}{% if draft.current_review_reasons %}<details><summary>確認項目</summary>{% for reason in draft.current_review_reasons %}{{ finance_reason(reason) }} {% endfor %}</details>{% endif %}</td></tr>{% else %}<tr><td colspan="4">請求候補はまだありません。</td></tr>{% endfor %}</tbody></table></div></section>
 {% if history %}<details class="card"><summary>金額の変更履歴（{{ history|length }}版）</summary><table><thead><tr><th>版</th><th>日時</th><th>販売価格</th><th>根拠</th></tr></thead><tbody>{% for row in history %}<tr><td>{{ row.revision_number }}</td><td>{{ row.occurred_at }}</td><td>{{ money(row.sale_gross_yen) }}</td><td>{{ row.source_reference }}</td></tr>{% endfor %}</tbody></table></details>{% endif %}
 {% endblock %}
