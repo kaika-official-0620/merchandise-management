@@ -34,6 +34,7 @@ from test_stage5_payments import CUSTOMER, STAFF, fixture as finance_fixture
 
 ROOT = Path(__file__).resolve().parents[1]
 INVOICE_PATH = '/finance/months/' + DEMO_INVOICE_ID
+RESALE_INVOICE_ID = 'in3_13d28ed903074e4886b1e9ff7666fa43'
 MARKER = '【運用サンプル】'
 TITLE = MARKER + 'グレージュの二つ折り財布'
 
@@ -143,6 +144,10 @@ class StagingInvoicePaymentTests(unittest.TestCase):
     def return_rows(self):
         with closing(self.connect()) as db:
             return [dict(row) for row in db.execute('SELECT * FROM staging_invoice_payment_return_demo')]
+
+    def resale_rows(self):
+        with closing(self.connect()) as db:
+            return [dict(row) for row in db.execute('SELECT * FROM staging_wallet_resale_payment_demo')]
 
     def inbox(self, role):
         response = self.clients[role].get('/notifications')
@@ -393,11 +398,11 @@ class StagingInvoicePaymentTests(unittest.TestCase):
                 'wallet-release', MARKER + ' 再検品済み', details={'note': 'fixture-only'})
             registry.record_event(STAFF, self.item_id, 'sold', '2026-10-08T08:00:00+09:00',
                 'wallet-second-sale', MARKER + ' 再販売')
-            ProfitService(store).record_facts(STAFF, self.item_id, amounts={'sale_gross_yen': 55000},
+            ProfitService(store).record_facts(STAFF, self.item_id, amounts={'sale_gross_yen': 8500},
                 channel='multichannel', source_reference=MARKER + ' 再販売の明細', occurred_at='2026-10-08T09:00:00+09:00',
                 source_key='wallet-resale-facts')
             registry.record_event(STAFF, self.item_id, 'shipped', '2026-10-09T08:00:00+09:00',
-                'wallet-second-shipment', MARKER + ' 再発送')
+                'wallet-second-shipment', 'DEMO-WALLET-S02 ' + MARKER + ' 再発送')
             second_collection = billing.create_item_drafts(STAFF, self.item_id, source_key='wallet-resale-fees')
             repeated = billing.create_item_drafts(STAFF, self.item_id, source_key='wallet-resale-fees-repeat')
             new_drafts = set(second_collection['draft_ids'])
@@ -421,12 +426,13 @@ class StagingInvoicePaymentTests(unittest.TestCase):
             self.assertNotIn('staging_refund_history', normal_month['snapshot'])
 
         fields = self.form('staff', month_source, month_target)
-        staged = self.clients['staff'].post(month_target, data={**fields, 'period': '2026-10'})
+        with patch('stage3_billing.uuid', SimpleNamespace(uuid4=lambda: UUID(hex=RESALE_INVOICE_ID[4:]))):
+            staged = self.clients['staff'].post(month_target, data={**fields, 'period': '2026-10'})
         self.assertEqual(staged.status_code, 302)
         with closing(self.connect()) as db:
             billing = BillingService(FinanceStore(Registry(db)))
             current_id = billing.list_months(CUSTOMER, CUSTOMER.user_id)[0]['invoice_id']
-            self.assertNotIn(current_id, (DEMO_INVOICE_ID, normal_month_id))
+            self.assertEqual(current_id, RESALE_INVOICE_ID)
             current = billing.get_month(CUSTOMER, current_id)
             self.assertTrue(current['is_current_snapshot'])
             snapshot = current['snapshot']
@@ -442,13 +448,14 @@ class StagingInvoicePaymentTests(unittest.TestCase):
             for line in snapshot['lines']:
                 self.assertIsNone(line['amount_net_yen'])
                 self.assertIn('return_cycle_requires_review', line['reason_codes'])
-                self.assertEqual(line['snapshot']['sale_fact_snapshot']['sale_gross_yen'], 55000)
+                self.assertEqual(line['snapshot']['sale_fact_snapshot']['sale_gross_yen'], 8500)
             self.assertIsNone(snapshot['totals']['payable_total_yen'])
             self.assertIsNone(snapshot['totals']['reference_gross_total_yen'])
             self.assertFalse(snapshot['chargeable'])
             self.assertEqual(billing.get_month(CUSTOMER, DEMO_INVOICE_ID)['snapshot_json'], old_invoice['snapshot_json'])
 
-        csv = self.clients['member'].get('/finance/months/' + current_id + '/export.csv')
+        resale_path = '/finance/months/' + current_id
+        csv = self.clients['member'].get(resale_path + '/export.csv')
         self.assertEqual(csv.status_code, 200)
         self.assertNotIn('DEMO-WALLET-O01', csv.get_data(as_text=True))
         revised_fields = self.form('staff', month_source, month_target)
@@ -460,3 +467,73 @@ class StagingInvoicePaymentTests(unittest.TestCase):
         self.assertEqual(self.rehearsal_rows(), completed_payment)
         self.assertEqual(self.return_rows(), completed_return)
         self.assertIn('返金済み（検証）', self.inbox('member'))
+
+        self.notification_projection.reset_mock()
+        before = self.unaffected_tables()
+        original_csv = self.clients['member'].get(INVOICE_PATH + '/export.csv').data
+        self.assertEqual(self.resale_rows(), [])
+        member_page = self.clients['member'].get(resale_path)
+        self.assertEqual(member_page.status_code, 200)
+        member_body = member_page.get_data(as_text=True)
+        self.assertIn('販売料', member_body)
+        for amount in (300, 30, 330):
+            self.assertRegex(member_body, rf'>\s*{amount}円\s*<')
+        send_target = resale_path + '/test-payment/send'
+        pay_target = resale_path + '/test-payment/pay'
+        self.assertIsNone(self.form('member', resale_path, pay_target))
+        self.assertEqual(self.post('member', 'pay', self.signed_fields('member', 'pay', current_id),
+                                   invoice_path=resale_path).status_code, 409)
+        self.assertEqual(self.post('member', 'send', self.signed_fields('member', 'send', current_id),
+                                   invoice_path=resale_path).status_code, 403)
+        for action in ('return', 'refund'):
+            with self.subTest(unavailable_resale_action=action):
+                self.assertEqual(self.post('staff', action, self.signed_fields('staff', action, current_id),
+                                           invoice_path=resale_path).status_code, 404)
+        normal_path = '/finance/months/' + normal_month_id
+        self.assertIsNone(self.form('staff', normal_path, normal_path + '/test-payment/send'))
+        self.assertEqual(self.post('staff', 'send', self.signed_fields('staff', 'send', normal_month_id),
+                                   invoice_path=normal_path).status_code, 404)
+        with patch.dict(self.app.extensions, {'kaika_staging': False}):
+            self.assertIsNone(self.form('staff', resale_path, send_target))
+            self.assertEqual(self.post('staff', 'send', self.signed_fields('staff', 'send', current_id),
+                                       invoice_path=resale_path).status_code, 404)
+
+        send = self.form('staff', resale_path, send_target)
+        self.assertTrue(send)
+        self.assertEqual(self.post('staff', 'send', {**send, 'amount_yen': '1'}, invoice_path=resale_path).status_code, 302)
+        sent = self.resale_rows()[0]
+        self.assertEqual((sent['invoice_id'], sent['customer_id'], sent['sent_by'], sent['amount_yen'], sent['content_hash']),
+                         (current_id, CUSTOMER.user_id, STAFF.user_id, 330, current['content_hash']))
+        self.assertIsNone(sent['paid_at'])
+        self.assertEqual(self.post('staff', 'send', send, invoice_path=resale_path).status_code, 302)
+        self.assertEqual(self.resale_rows(), [sent])
+        inbox_pending = self.inbox('member')
+        other_inbox = self.inbox('other')
+        for path in (INVOICE_PATH, resale_path):
+            self.assertIn('href="' + path + '"', inbox_pending)
+            self.assertNotIn('href="' + path + '"', other_inbox)
+        self.assertIn('支払待ち（検証）', inbox_pending)
+        self.assertIn('返金済み（検証）', inbox_pending)
+
+        for role in ('staff', 'other'):
+            with self.subTest(unauthorized_resale_payment=role):
+                self.assertEqual(self.post(role, 'pay', self.signed_fields(role, 'pay', current_id),
+                                           invoice_path=resale_path).status_code, 403)
+        pay = self.form('member', resale_path, pay_target)
+        self.assertTrue(pay)
+        self.assertEqual(self.post('member', 'pay', {**pay, 'amount_yen': '1'}, invoice_path=resale_path).status_code, 302)
+        paid = self.resale_rows()[0]
+        self.assertEqual((paid['amount_yen'], paid['paid_by']), (330, CUSTOMER.user_id))
+        self.assertGreaterEqual(datetime.fromisoformat(paid['paid_at']), datetime.fromisoformat(paid['sent_at']))
+        self.assertEqual(self.post('member', 'pay', pay, invoice_path=resale_path).status_code, 302)
+        self.assertEqual(self.resale_rows(), [paid])
+        self.assertIsNone(self.form('member', resale_path, pay_target))
+        inbox_paid = self.inbox('member')
+        for text in ('330円', '880円', '支払い済み（検証）', '返金済み（検証）'):
+            self.assertIn(text, inbox_paid)
+        self.assertEqual(self.rehearsal_rows(), completed_payment)
+        self.assertEqual(self.return_rows(), completed_return)
+        self.assertEqual(self.unaffected_tables(), before)
+        self.assertEqual(self.clients['member'].get(resale_path + '/export.csv').data, csv.data)
+        self.assertEqual(self.clients['member'].get(INVOICE_PATH + '/export.csv').data, original_csv)
+        self.notification_projection.assert_not_called()
