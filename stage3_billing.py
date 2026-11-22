@@ -599,7 +599,8 @@ class BillingService:
             return {'draft_id': draft_id, 'status': 'needs_review', 'real_payment_enabled': False}
         return self.store.operation(actor, customer_id, source_key, payload, create)
 
-    def create_month(self, actor, customer_id, period, *, source_key, timezone_name='Asia/Tokyo'):
+    def create_month(self, actor, customer_id, period, *, source_key, timezone_name='Asia/Tokyo',
+                     exclude_staging_refund=False):
         if not isinstance(period, str) or not re.fullmatch(r'\d{4}-(0[1-9]|1[0-2])', period):
             raise RegistryError('invoice_period_invalid')
         try:
@@ -608,8 +609,15 @@ class BillingService:
             raise RegistryError('billing_timezone_invalid') from None
         self.store.authorize(actor, customer_id, write=True)
         def create():
+            staging_refund_history = None
+            if exclude_staging_refund and timezone_name == 'Asia/Tokyo':
+                from staging_invoice_payment import refunded_history
+                staging_refund_history = refunded_history(self.store, actor, customer_id, period=period)
+            historical_ids = set(staging_refund_history['draft_ids']) if staging_refund_history else set()
             rows = self.store.query('SELECT * FROM stage3_charge_drafts WHERE customer_id=? ORDER BY occurred_at,recorded_at,draft_id', (customer_id,))
-            lines = [self._line(actor, row) for row in rows if period_key(_dt(row['occurred_at']), timezone_name) == period]
+            # The isolated staging receipt remains auditable on its original revision.
+            lines = [self._line(actor, row) for row in rows if row['draft_id'] not in historical_ids
+                     and period_key(_dt(row['occurred_at']), timezone_name) == period]
             methods = {line['snapshot'].get('calculation', {}).get('rounding_method') for line in lines}
             method = next(iter(methods)) if len(methods) == 1 else None
             reasons = []
@@ -655,6 +663,8 @@ class BillingService:
             snapshot = {'customer_id': customer_id, 'period': period, 'timezone_name': timezone_name,
                 'lines': lines, 'totals': totals, 'reason_codes': reasons, 'uncollected_shipments': uncollected,
                 'chargeable': False, 'real_payment_enabled': False}
+            if staging_refund_history:
+                snapshot['staging_refund_history'] = staging_refund_history
             digest = hashlib.sha256(_json(snapshot).encode('utf-8')).hexdigest()
             if previous and previous[0]['content_hash'] == digest:
                 return {'invoice_id': previous[0]['invoice_id'], 'revision': previous[0]['revision'], 'unchanged': True, 'real_payment_enabled': False}
@@ -700,6 +710,7 @@ class BillingService:
         self.store.authorize(actor, rows[0]['customer_id'])
         row = rows[0]
         snapshot = json.loads(row['snapshot_json'])
+        refund_history = snapshot.get('staging_refund_history', {})
         current_reasons = list(snapshot['reason_codes'])
         line_reasons = {}
         changed = False
@@ -711,11 +722,13 @@ class BillingService:
                 current_reasons.append('source_changed_after_snapshot')
         current_lines = self.store.query('SELECT draft_id,occurred_at FROM stage3_charge_drafts WHERE customer_id=?', (row['customer_id'],))
         current_ids = {line['draft_id'] for line in current_lines if period_key(_dt(line['occurred_at']), row['timezone_name']) == row['period']}
+        current_ids.difference_update(refund_history.get('draft_ids', ()))
         if current_ids != {line['draft_id'] for line in snapshot['lines']}:
             changed = True
             current_reasons.append('invoice_new_lines_available')
         known_shipments = {line['source_event_id'] for line in snapshot['lines'] if line['source_event_id']}
         known_shipments.update(event['shipment_event_id'] for event in snapshot.get('uncollected_shipments', []))
+        known_shipments.update(refund_history.get('shipment_event_ids', ()))
         if self._current_month_shipments(row['customer_id'], row['period'], row['timezone_name']) - known_shipments:
             changed = True
             current_reasons.append('uncollected_shipments')

@@ -83,6 +83,26 @@ def member_notice(store, actor):
     return describe(store, month, include_refunded_history=True)
 
 
+def refunded_history(store, actor, customer_id, *, period=None, item_id=None):
+    record = _saved_demo(store, customer_id)
+    if not record or not record['refunded_at']:
+        return None
+    original = BillingService(store).get_month(actor, DEMO_INVOICE_ID)
+    demo = describe(store, original, include_refunded_history=True)
+    if not demo or demo['status'] != 'refunded':
+        return None
+    if period is not None and (original['period'] != period or original['timezone_name'] != 'Asia/Tokyo'):
+        return None
+    if item_id is not None and demo['fee_preview']['physical_item_id'] != item_id:
+        return None
+    lines = original['snapshot']['lines']
+    return {
+        'invoice_id': DEMO_INVOICE_ID,
+        'draft_ids': sorted(line['draft_id'] for line in lines),
+        'shipment_event_ids': sorted({line['source_event_id'] for line in lines if line['source_event_id']}),
+    }
+
+
 def transition(store, actor, invoice_id, action):
     if invoice_id != DEMO_INVOICE_ID or action not in ACTIONS:
         raise RegistryError('staging_invoice_payment_not_found', status=404)

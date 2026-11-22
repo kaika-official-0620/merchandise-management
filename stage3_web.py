@@ -131,16 +131,21 @@ def register_stage3_finance(runtime):
     def item(item_id):
         from stage3_profit import ProfitService
         from stage3_billing import BillingService
+        from staging_invoice_payment import enabled as staging_payment_enabled, refunded_history
+        actor = service.actor()
         with service.db() as store:
-            detail = store.item(service.actor(), item_id)
-            profit = ProfitService(store).profit(service.actor(), item_id)
-            history = ProfitService(store).history(service.actor(), item_id)
+            detail = store.item(actor, item_id)
+            profit = ProfitService(store).profit(actor, item_id)
+            history = ProfitService(store).history(actor, item_id)
             billing = BillingService(store)
-            preview = billing.preview_item(service.actor(), item_id)
-            drafts = billing.list_item_drafts(service.actor(), item_id)
-            agreements = billing.list_agreements(service.actor(), detail['owner_user_id'])
+            preview = billing.preview_item(actor, item_id)
+            drafts = billing.list_item_drafts(actor, item_id)
+            agreements = billing.list_agreements(actor, detail['owner_user_id'])
+            refund_history = (refunded_history(store, actor, detail['owner_user_id'], item_id=item_id)
+                              if staging_payment_enabled(app) else None)
         return render_template('finance_review/item.html', item=detail, profit=profit, facts=profit['facts'],
-            history=history, preview=preview, drafts=drafts, agreements=agreements, staff=_staff())
+            history=history, preview=preview, drafts=drafts, agreements=agreements, staff=_staff(),
+            refunded_demo_history=refund_history)
 
     @bp.post('/finance/items/<item_id>/facts')
     @allowed(staff=True)
@@ -214,10 +219,12 @@ def register_stage3_finance(runtime):
     @allowed(staff=True)
     def month(customer_id):
         from stage3_billing import BillingService
+        from staging_invoice_payment import enabled as staging_payment_enabled
         key = service.verify('finance_month', customer_id)
+        actor, period = service.actor(), _text('period', 7, True)
         with service.db(write=True) as store:
-            BillingService(store).create_month(service.actor(), customer_id, _text('period', 7, True),
-                                               source_key=key, timezone_name='Asia/Tokyo')
+            BillingService(store).create_month(actor, customer_id, period, source_key=key,
+                                               exclude_staging_refund=staging_payment_enabled(app))
         flash('月次の請求下書きを保存しました。前の版は保持しています。', 'success')
         return redirect(url_for('finance_review.customer', customer_id=customer_id))
 
