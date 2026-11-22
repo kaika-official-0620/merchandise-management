@@ -15,6 +15,7 @@ import json
 import logging
 import os
 from pathlib import Path
+import re
 import sys
 import tempfile
 import traceback
@@ -33,8 +34,10 @@ class Forms(HTMLParser):
     def handle_starttag(self,tag,attrs):
         attrs=dict(attrs)
         if tag=='form':
-            self.current={'action':attrs.get('action',''),'fields':{},'input_values':{}}
+            self.current={'action':attrs.get('action',''),'fields':{},'input_values':{},'disabled_fieldset':False}
             self.forms.append(self.current)
+        elif tag=='fieldset' and self.current is not None and 'disabled' in attrs:
+            self.current['disabled_fieldset']=True
         elif tag=='input' and self.current is not None and attrs.get('name'):
             name,value=attrs['name'],attrs.get('value','')
             self.current['input_values'][name]=value
@@ -50,6 +53,53 @@ class Forms(HTMLParser):
 
     def initial_value(self,action,name):
         return next((f['input_values'].get(name) for f in self.forms if urlsplit(f['action']).path==action),None)
+
+    def disabled_fieldset(self,action):
+        return next((f['disabled_fieldset'] for f in self.forms if urlsplit(f['action']).path==action),None)
+
+
+class ListingHistory(HTMLParser):
+    def __init__(self,response):
+        super().__init__()
+        self.entries=[]
+        self.depth=0
+        self.in_summary=False
+        self.feed(response.get_data(as_text=True))
+
+    def handle_starttag(self,tag,attrs):
+        attrs=dict(attrs)
+        if tag=='details':
+            if self.depth:
+                self.depth+=1
+            elif 'listing-history' in attrs.get('class','').split():
+                self.depth=1
+                self.entries.append({'open':'open' in attrs,'summary':[],'text':[]})
+        elif tag=='summary' and self.depth==1:
+            self.in_summary=True
+
+    def handle_endtag(self,tag):
+        if tag=='details' and self.depth:
+            self.depth-=1
+        elif tag=='summary' and self.depth==1:
+            self.in_summary=False
+
+    def handle_data(self,data):
+        if self.depth:
+            self.entries[-1]['text'].append(data)
+            if self.in_summary:
+                self.entries[-1]['summary'].append(data)
+
+
+def has_japan_time(body,value):
+    instant=datetime.fromisoformat(value)
+    displayed=instant.astimezone(ZoneInfo('Asia/Tokyo')).strftime('%Y/%m/%d %H:%M')
+    for stamp,text in re.findall(r'<time\b[^>]*\bdatetime="([^"]+)"[^>]*>([^<]+)</time>',body):
+        try:
+            if datetime.fromisoformat(stamp)==instant and text.strip()==displayed:
+                return True
+        except ValueError:
+            continue
+    return False
 
 
 def run(module,users):
@@ -233,11 +283,25 @@ def run(module,users):
              'evidence_reference':'fixture-listing-proposal'})
         version=rows('SELECT * FROM stage4_listing_versions')[0]
         approval='/commerce/listings/'+version['version_id']+'/approve'
+        current_listing=http('customer',listing_page).get_data(as_text=True)
+        check('listing expiry shown in Japan time',
+            '有効期限（日本時間）' in current_listing and has_japan_time(current_listing,version['valid_until']))
+        check('listing proposal time shown in Japan time',has_japan_time(current_listing,version['occurred_at']))
         post('customer approves exact version','customer',listing_page,approval,{'evidence_reference':'fixture-customer-approval'})
         check('customer single approval not enough',len(rows('SELECT decision_id FROM stage4_listing_decisions'))==1)
+        check('duplicate customer approval form removed',not Forms(http('customer',listing_page)).fields(approval))
         post('staff approves same version','staff',listing_page,approval,{'evidence_reference':'fixture-staff-approval'})
         check('dual approvals share exact content hash',all(row['content_hash']==version['content_hash'] for row in rows('SELECT content_hash FROM stage4_listing_decisions')))
         publication='/commerce/listings/'+version['version_id']+'/publish'
+        approved_staff_page=http('staff',listing_page)
+        approved_body=approved_staff_page.get_data(as_text=True)
+        decision_times=rows('SELECT occurred_at FROM stage4_listing_decisions WHERE version_id=?',(version['version_id'],))
+        check('both approval times shown in Japan time',
+            '承認履歴（日本時間）' in approved_body and len(decision_times)==2 and
+            all(has_japan_time(approved_body,decision['occurred_at']) for decision in decision_times))
+        approved_staff_forms=Forms(approved_staff_page)
+        check('duplicate staff approval form removed',not approved_staff_forms.fields(approval))
+        check('approved staff can still record the approved listing',bool(approved_staff_forms.fields(publication)))
         for index,account in enumerate(accounts):
             post('manual publication '+str(index),'staff',listing_page,publication,
                 {'account_id':account['account_id'],'external_listing_id':'fixture-listing-'+str(index),'evidence_reference':'fixture-manual-publication'})
@@ -316,6 +380,13 @@ def run(module,users):
         check('explicit clear leaves deadline blank',cleared['deadline_at'] is None and
             Forms(http('staff','/commerce/channels')).initial_value(task_path,'deadline_at')=='')
         ship_path='/commerce/channel-orders/'+channel_order['order_id']+'/ship'
+        shipment_page=http('staff','/commerce/channels')
+        shipment_body=shipment_page.get_data(as_text=True)
+        pending_tasks=rows('''SELECT t.task_id FROM stage4_stop_tasks t JOIN stage4_channel_listings l
+            ON l.listing_id=t.listing_id WHERE l.physical_item_id=?''',(item_id,))
+        check('shipment form blocked in view with links to outstanding stop tasks',
+            Forms(shipment_page).disabled_fieldset(ship_path) is True and bool(pending_tasks) and
+            all('href="#stop-task-'+task['task_id']+'"' in shipment_body for task in pending_tasks))
         post('shipment held until every listing stop confirmed','staff','/commerce/channels',ship_path,
             {'tracking_reference':'FIXTURE-TRACK-1','evidence_reference':'fixture-shipment'},expected=409)
         tasks=rows('SELECT * FROM stage4_stop_tasks ORDER BY task_id')
@@ -327,11 +398,18 @@ def run(module,users):
         for task in tasks:
             post('stop confirmed '+task['task_id'],'staff','/commerce/channels','/commerce/stop-tasks/'+task['task_id'],
                 {'status':'confirmed_stopped','evidence_reference':'fixture-manual-stop-verification'})
+        check('shipment form enabled in view after all stops confirmed',
+            Forms(http('staff','/commerce/channels')).disabled_fieldset(ship_path) is False)
         _,shipment=post('shipment records Stage3 charge drafts','staff','/commerce/channels',ship_path,
             {'tracking_reference':'FIXTURE-TRACK-1','evidence_reference':'fixture-shipment'})
         check('shipment replay accepted',http('staff',ship_path,shipment).status_code==302)
         check('shipment event recorded once',len(rows("SELECT observation_id FROM business_item_observations WHERE kind='shipped'"))==1)
         check('single shipment record',len(rows('SELECT shipment_id FROM stage4_order_shipments'))==1)
+        shipment_record=rows('SELECT occurred_at FROM stage4_order_shipments WHERE order_id=?',(channel_order['order_id'],))[0]
+        shipped_body=http('staff','/commerce/channels').get_data(as_text=True)
+        check('shipment time shown in Japan time with tracking number',
+            '発送日時（日本時間）' in shipped_body and 'FIXTURE-TRACK-1' in shipped_body and
+            has_japan_time(shipped_body,shipment_record['occurred_at']))
         drafts=rows('SELECT * FROM stage3_charge_drafts')
         check('bundle and sales fee candidates only once',len(drafts)==2 and set(row['fee_kind'] for row in drafts)=={'work_bundle','sales_fee'})
         check('unapproved pricing stays review',all(row['status']=='needs_review' for row in drafts))
@@ -385,6 +463,26 @@ def run(module,users):
         check('other customer cannot view return photograph',http('other','/commerce/media/'+new_photo['media_id']).status_code==404)
         check('raw static return photograph private',http('customer','/static/'+new_photo['storage_path']).status_code in (403,404))
         check('return photograph creates no automatic work or charges',not rows('SELECT work_id FROM business_work_records') and len(rows('SELECT draft_id FROM stage3_charge_drafts'))==2)
+        post('new proposal replaces returned item listing version','staff',listing_page,listing_page,
+            {'title':'【架空】返送後に再確認する出品案','description':'検証用の状態確認と新しい写真を使った出品案。',
+             'condition':'返品後に再確認済み・架空','price_yen':'39000','minimum_price_yen':'34000',
+             'photo_refs':[new_photo['media_id']],'accounts':[row['account_id'] for row in accounts],
+             'valid_until':(datetime.now(jst)+timedelta(days=7)).isoformat(),
+             'supersedes_version_id':version['version_id'],'evidence_reference':'fixture-revised-proposal'})
+        revised=rows('SELECT version_id FROM stage4_listing_versions WHERE supersedes_version_id=?',(version['version_id'],))[0]
+        for role in ('customer','staff'):
+            response=http(role,listing_page)
+            history=ListingHistory(response)
+            forms=Forms(response)
+            old_version='/commerce/listings/'+version['version_id']
+            current_version='/commerce/listings/'+revised['version_id']
+            check('superseded listing detail closed by default for '+role,
+                len(history.entries)==1 and not history.entries[0]['open'] and
+                '旧版' in ''.join(history.entries[0]['summary']) and version['title'] in ''.join(history.entries[0]['summary']) and
+                version['description'] in ''.join(history.entries[0]['text']))
+            check('listing approval and rejection controls apply only to latest version for '+role,
+                all(forms.fields(current_version+'/'+action) and not forms.fields(old_version+'/'+action)
+                    for action in ('approve','reject')) and not forms.fields(old_version+'/publish'))
 
         # A separate fictional unsold item proves the return-dispatch boundary
         # through actual HTTP without cancelling or rewriting the sale above.
