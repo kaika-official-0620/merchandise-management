@@ -70,7 +70,8 @@
     <header class="finance-fee-preview__header">
         <h2 id="finance-fee-preview-title">検証用の仮料金</h2>
         <span class="finance-fee-preview__status">
-            {{ {'unsent':'未送付（検証）', 'sent':'支払待ち（検証）', 'paid':'支払い済み（検証）'}.get(payment_demo.status,'未確認（検証）') if payment_demo else '未請求' }}
+            {{ {'unsent':'未送付（検証）', 'sent':'支払待ち（検証）', 'paid':'支払い済み（検証）',
+                'returned':'返品受付（検証）', 'refunded':'返金済み（検証）'}.get(payment_demo.status,'未確認（検証）') if payment_demo else '未請求' }}
         </span>
     </header>
     {% if fee_preview.title and fee_preview.title != '検証用の仮料金' %}<p><strong>{{ fee_preview.title }}</strong></p>{% endif %}
@@ -117,15 +118,42 @@
         </form>
         {% elif payment_demo.status == 'paid' %}
         <p>{{ money(payment_demo.amount_yen) }}のテスト支払いを記録しました。</p>
+        {% if staff %}
+        <p>このサンプルで返品の受付から返金までの流れを試せます。</p>
+        <form method="post" action="{{ url_for('finance_review.staging_demo_payment', month_id=month.invoice_id, action='return') }}">
+            {{ tokens('finance_staging_demo_return', month.invoice_id) }}
+            <button type="submit">返品を記録する（検証）</button>
+        </form>
         {% endif %}
-        {% if payment_demo.sent_at or payment_demo.paid_at %}
+        {% elif payment_demo.status == 'returned' %}
+        <p>検証用の返品を受け付けました。</p>
+        {% if staff %}
+        <form method="post" action="{{ url_for('finance_review.staging_demo_payment', month_id=month.invoice_id, action='refund') }}">
+            {{ tokens('finance_staging_demo_refund', month.invoice_id) }}
+            <button type="submit">{{ money(payment_demo.amount_yen) }}をテスト返金する</button>
+        </form>
+        {% else %}
+        <p>開花がテスト返金を記録すると、この画面で結果を確認できます。</p>
+        {% endif %}
+        {% elif payment_demo.status == 'refunded' %}
+        <p>{{ money(payment_demo.amount_yen) }}のテスト返金を記録しました。</p>
+        {% endif %}
+        {% set timeline = [
+            ('送付日時（日本時間）', payment_demo.sent_at),
+            ('テスト支払い日時（日本時間）', payment_demo.paid_at),
+            ('返品受付日時（日本時間）', payment_demo.returned_at|default(none)),
+            ('テスト返金日時（日本時間）', payment_demo.refunded_at|default(none))
+        ] %}
+        {% set recorded = timeline|selectattr('1')|list %}
+        {% if recorded %}
         <p class="muted">
-            {% if payment_demo.sent_at %}送付日時（日本時間）：{{ registry_time(payment_demo.sent_at) }}{% endif %}
-            {% if payment_demo.sent_at and payment_demo.paid_at %}<br>{% endif %}
-            {% if payment_demo.paid_at %}テスト支払い日時（日本時間）：{{ registry_time(payment_demo.paid_at) }}{% endif %}
+            {% for label, timestamp in recorded %}{{ label }}：{{ registry_time(timestamp) }}{% if not loop.last %}<br>{% endif %}{% endfor %}
         </p>
         {% endif %}
         <p class="muted">実際のお金は動きません。</p>
+        {% if payment_demo.status in ('returned', 'refunded') or (staff and payment_demo.status == 'paid') %}
+        <p class="muted">検証用の返品・返金を記録しても、商品の状態や在庫は変わりません。</p>
+        {% endif %}
     </section>
     {% endif %}
 </section>
