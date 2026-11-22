@@ -177,6 +177,11 @@
     </section>
     {% endif %}
 </section>
+{% endif %}
+{% if resale_reconciliation|default(none) %}
+{% with reconciliation_location='invoice' %}{% include 'finance_review/_resale_reconciliation.html' %}{% endwith %}
+{% endif %}
+{% if fee_preview %}
 <details class="card finance-invoice-saved">
     <summary>保存済みの明細と根拠を確認</summary>
 {% endif %}

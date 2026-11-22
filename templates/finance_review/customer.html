@@ -1,6 +1,9 @@
 {% extends "finance_review/frame.html" %}
 {% block finance_content %}
 <h1>請求下書き・資金の記録</h1>
+{% if resale_reconciliation|default(none) %}
+{% with reconciliation_location='customer' %}{% include 'finance_review/_resale_reconciliation.html' %}{% endwith %}
+{% endif %}
 <section class="card"><h2>保存した月次下書き</h2><p>日本時間の月初から翌月初の直前までを集計。消費税は請求書内で税率ごとに合算し、端数を切り捨てます。</p><table><thead><tr><th>対象月</th><th>版</th><th>確認</th></tr></thead><tbody>{% for month in months %}<tr><td>{{ month.period }}</td><td>第{{ month.revision }}版</td><td><a href="{{ url_for('finance_review.invoice', month_id=month.invoice_id) }}">下書き・内訳・CSV</a></td></tr>{% else %}<tr><td colspan="3">下書きはまだありません。</td></tr>{% endfor %}</tbody></table>
 {% if staff %}<form method="post" action="{{ url_for('finance_review.month', customer_id=customer_id) }}">{{ tokens('finance_month', customer_id) }}<label>対象月<input type="month" name="period" value="{{ finance_now[:7] }}" required></label><button type="submit">月次下書きを保存</button></form><p class="muted">後から届いた明細・返品は新しい版で確認できます。同じ内容の保存では版を増やしません。発送済みで請求候補が未作成の商品も確認対象に残します。</p>{% endif %}</section>
 <section class="card"><h2>商品別の明細</h2>{% for item in items %}<p><a href="{{ url_for('finance_review.item', item_id=item.physical_item_id) }}">{{ item.title }}</a></p>{% else %}<p>照合済みの商品がありません。</p>{% endfor %}</section>

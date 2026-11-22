@@ -1,0 +1,41 @@
+<style>
+.resale-reconciliation-values {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: .65rem 1rem;
+    margin: .65rem 0;
+}
+.resale-reconciliation-values dd { margin: 0; font-variant-numeric: tabular-nums; }
+@media (max-width: 650px) {
+    .resale-reconciliation-values { grid-template-columns: minmax(0, 1fr); }
+}
+</style>
+<section class="card" aria-labelledby="resale-reconciliation-heading">
+    <h2 id="resale-reconciliation-heading">再販売の差引参考額（検証）</h2>
+    {% if reconciliation_location == 'customer' %}
+    <p>{{ resale_reconciliation.period }} ／ {{ resale_reconciliation.title }}</p>
+    {% endif %}
+    <dl class="resale-reconciliation-values">
+        <div>
+            <dt>今回の売上</dt>
+            <dd>{{ money(resale_reconciliation.sale_gross_yen) }}</dd>
+        </div>
+        <div>
+            <dt>テスト支払い済みの販売料（税込）</dt>
+            <dd>{{ money(resale_reconciliation.paid_fee_yen) }}</dd>
+        </div>
+        <div>
+            <dt>販売料だけを差し引いた参考額</dt>
+            <dd><strong>{{ money(resale_reconciliation.reference_difference_yen) }}</strong></dd>
+        </div>
+    </dl>
+    <p>最終利益の計算には、仕入原価やその他費用の確認が必要です。</p>
+    {% if reconciliation_location in ('item', 'customer') %}
+    <nav aria-label="今回の検証明細">
+        <a href="{{ url_for('finance_review.invoice', month_id=resale_reconciliation.invoice_id) }}">再販売分の請求下書きを確認</a>
+        {% if reconciliation_location == 'customer' %}
+        <a href="{{ url_for('finance_review.export', month_id=resale_reconciliation.invoice_id) }}">再販売分の下書きCSVを保存</a>
+        {% endif %}
+    </nav>
+    {% endif %}
+</section>
