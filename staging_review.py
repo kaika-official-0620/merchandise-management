@@ -47,11 +47,12 @@ def schema_statements():
     from stage7_common import migration_statements as pilot
     from stage7_measurement_schema import migration_statements as measurement
     from stage7_economics_schema import migration_statements as economics
+    from staging_invoice_payment import migration_statements as invoice_payment_demo
     statements = list(registry('postgres')) + list(import_schema_statements())
     statements += list(SELF_INVENTORY_DDL) + list(custody_ddl('postgres')) + [PHOTO_RECORDS_DDL]
     for provider in (finance, profit, billing, funds, commerce, catalog, listings,
                      channels, payments, payment_records, home, notifications,
-                     actions, pilot, measurement, economics):
+                     actions, pilot, measurement, economics, invoice_payment_demo):
         statements += list(provider('postgres'))
     return tuple(statements)
 

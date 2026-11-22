@@ -278,10 +278,24 @@ def register_stage3_finance(runtime):
     @allowed()
     def invoice(month_id):
         from stage3_billing import BillingService, provisional_fee_preview
+        from staging_invoice_payment import describe, enabled as staging_payment_enabled
         with service.db() as store:
             month = BillingService(store).get_month(service.actor(), month_id)
-        preview = provisional_fee_preview(month) if app.extensions.get('kaika_staging') is True else None
-        return render_template('finance_review/invoice.html', month=month, staff=_staff(), provisional_fee_preview=preview)
+            preview = provisional_fee_preview(month) if app.extensions.get('kaika_staging') is True else None
+            demo = describe(store, month, preview) if staging_payment_enabled(app) else None
+        return render_template('finance_review/invoice.html', month=month, staff=_staff(),
+                               provisional_fee_preview=preview, demo_payment=demo)
+
+    @bp.post('/finance/months/<month_id>/test-payment/<action>')
+    @allowed()
+    def staging_demo_payment(month_id, action):
+        from staging_invoice_payment import DEMO_INVOICE_ID, enabled as staging_payment_enabled, transition
+        if not staging_payment_enabled(app) or month_id != DEMO_INVOICE_ID or action not in ('send', 'pay'):
+            abort(404)
+        service.verify('finance_staging_demo_' + action, month_id)
+        with service.db(write=True) as store:
+            transition(store, service.actor(), month_id, action)
+        return redirect(url_for('finance_review.invoice', month_id=month_id))
 
     @bp.get('/finance/months/<month_id>/export.csv')
     @allowed()

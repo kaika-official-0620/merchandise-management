@@ -164,12 +164,17 @@ def register_stage6_web(runtime):
     @bp.get('/notifications')
     @allowed()
     def inbox():
+        from staging_invoice_payment import enabled as staging_payment_enabled, member_notice
+        actor = service.actor()
+        is_staff = staff()
         with service.db() as store:
             api = service.notifications(store)
-            notes = [] if staff() else api.inbox(service.actor())
-            deliveries = api.deliveries(service.actor())
-            usage = api.usage(service.actor()) if staff() else None
-        return render_template('workspace_home/inbox.html', notes=notes, deliveries=deliveries, usage=usage, staff=staff())
+            notes = [] if is_staff else api.inbox(actor)
+            deliveries = api.deliveries(actor)
+            usage = api.usage(actor) if is_staff else None
+            demo = member_notice(store.finance, actor) if staging_payment_enabled(app) else None
+        return render_template('workspace_home/inbox.html', notes=notes, deliveries=deliveries, usage=usage,
+                               staff=is_staff, staging_invoice_payment=demo)
 
     @bp.post('/notifications/refresh')
     @allowed()
@@ -411,6 +416,7 @@ def register_stage6_web(runtime):
         # Persist an inbox after the business transaction commits, never send.
         # Re-scanning is idempotent, so a failed projection can recover on refresh.
         if (enabled() and current_user.is_authenticated and request.method == 'POST'
+                and request.endpoint != 'finance_review.staging_demo_payment'
                 and response.status_code < 400 and request.blueprint in
                 ('inventory_registry', 'finance_review', 'commerce', 'payment_review')):
             try:
