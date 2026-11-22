@@ -60,6 +60,7 @@ class StagingInvoicePaymentTests(unittest.TestCase):
             billing = BillingService(FinanceStore(registry))
             item_id = registry.create_item(STAFF, TITLE, owner_user_id=CUSTOMER.user_id, custodian='self',
                 occurred_at='2026-10-01T08:00:00+09:00', evidence_reference=MARKER + '受付', source_key='demo-wallet')['physical_item_id']
+            self.item_id = item_id
             for day, kind in ((2, 'received'), (3, 'sold'), (4, 'shipped')):
                 registry.record_event(STAFF, item_id, kind, f'2026-10-0{day}T08:00:00+09:00', 'demo-' + kind, MARKER + ' ' + kind)
             billing.create_item_drafts(STAFF, item_id, source_key='demo-original-fees')
@@ -305,3 +306,64 @@ class StagingInvoicePaymentTests(unittest.TestCase):
         self.assertEqual(self.return_rows(), returned)
         self.assertIsNone(self.action_form('staff', 'refund'))
         self.assertNotIn(INVOICE_PATH, self.inbox('member'))
+
+    def test_refunded_history_stays_on_the_saved_revision_after_the_wallet_returns(self):
+        completed_forms = []
+        for role, action in (('staff', 'send'), ('member', 'pay'), ('staff', 'return'), ('staff', 'refund')):
+            fields = self.action_form(role, action)
+            self.assertTrue(fields)
+            self.assertEqual(self.post(role, action, fields).status_code, 302)
+            completed_forms.append((role, action, fields))
+        completed_payment, completed_return = self.rehearsal_rows(), self.return_rows()
+
+        with closing(self.connect()) as db:
+            registry = Registry(db)
+            billing = BillingService(FinanceStore(registry))
+            old_invoice = billing.get_month(CUSTOMER, DEMO_INVOICE_ID)
+            self.assertTrue(old_invoice['is_current_snapshot'])
+            registry.record_event(STAFF, self.item_id, 'returned', '2026-10-06T08:00:00+09:00',
+                'wallet-arrived-back', MARKER + ' 実際の在庫処理を模擬するテストの返品記録',
+                details={'return_reason': 'fixture wallet return'})
+            stale_invoice = billing.get_month(CUSTOMER, DEMO_INVOICE_ID)
+            self.assertFalse(stale_invoice['is_current_snapshot'])
+            self.assertIn('source_changed_after_snapshot', stale_invoice['current_review_reasons'])
+            self.assertEqual(stale_invoice['content_hash'], old_invoice['content_hash'])
+            self.assertEqual(stale_invoice['snapshot_json'], old_invoice['snapshot_json'])
+            updated = billing.create_month(STAFF, CUSTOMER.user_id, '2026-10', source_key='wallet-month-revised-after-return')
+            self.assertNotEqual(updated['invoice_id'], DEMO_INVOICE_ID)
+            db.commit()
+
+        before_replay = self.unaffected_tables()
+        for role, action, fields in completed_forms:
+            with self.subTest(stale_replay=action):
+                self.assertIsNone(self.action_form(role, action))
+                self.assertEqual(self.post(role, action, fields).status_code, 409)
+        self.assertEqual(self.rehearsal_rows(), completed_payment)
+        self.assertEqual(self.return_rows(), completed_return)
+        self.assertEqual(self.unaffected_tables(), before_replay)
+        self.notification_projection.assert_not_called()
+
+        for role in ('staff', 'member'):
+            with self.subTest(history_view=role):
+                page = self.clients[role].get(INVOICE_PATH)
+                self.assertEqual(page.status_code, 200)
+                body = page.get_data(as_text=True)
+                for text in (TITLE, '500円', '300円', '80円', '880円', '返金済み（検証）'):
+                    self.assertIn(text, body)
+        invoice_link = 'href="' + INVOICE_PATH + '"'
+        old_inbox = self.inbox('member')
+        self.assertIn('返金済み（検証）', old_inbox)
+        self.assertIn(invoice_link, old_inbox)
+        self.assertNotIn(invoice_link, self.inbox('other'))
+        self.assertEqual(self.clients['other'].get(INVOICE_PATH).status_code, 403)
+        new_page = self.clients['member'].get('/finance/months/' + updated['invoice_id'])
+        self.assertEqual(new_page.status_code, 200)
+        self.assertNotIn('返金済み（検証）', new_page.get_data(as_text=True))
+
+        with closing(self.connect()) as db:
+            with self.assertRaises(sqlite3.IntegrityError):
+                db.execute('UPDATE staging_invoice_payment_demo SET amount_yen=881 WHERE invoice_id=?', (DEMO_INVOICE_ID,))
+            db.execute('UPDATE staging_invoice_payment_demo SET content_hash=? WHERE invoice_id=?', ('wrong-fixture-hash', DEMO_INVOICE_ID))
+            db.commit()
+        self.assertNotIn('返金済み（検証）', self.clients['member'].get(INVOICE_PATH).get_data(as_text=True))
+        self.assertNotIn(invoice_link, self.inbox('member'))
