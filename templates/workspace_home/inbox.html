@@ -2,11 +2,18 @@
 <h1>{{ '通知の配信状況' if staff else 'お知らせ' }}</h1>
 <p>通知を受け取れなくても、ここで必要な確認を続けられます。</p>
 {% set invoice_notice=staging_invoice_payment|default(none) %}
-{% set has_invoice_notice=not staff and invoice_notice and invoice_notice.status in ('sent', 'paid') %}
+{% set invoice_notice_labels = {
+    'sent': ('検証用の請求が届きました', '支払待ち（検証）'),
+    'paid': ('検証用の請求が届きました', '支払い済み（検証）'),
+    'returned': ('検証用の返品を受け付けました', '返品受付（検証）'),
+    'refunded': ('検証用の返金を記録しました', '返金済み（検証）')
+} %}
+{% set has_invoice_notice=not staff and invoice_notice and invoice_notice.status in invoice_notice_labels %}
 {% if has_invoice_notice %}
+{% set notice_title, notice_status = invoice_notice_labels[invoice_notice.status] %}
 <article class="card" aria-labelledby="demo-invoice-notice-title">
-    <h2 id="demo-invoice-notice-title">検証用の請求が届きました</h2>
-    <p>税込 {{ money(invoice_notice.amount_yen) }} ／ <span class="badge">{{ '支払い済み（検証）' if invoice_notice.status == 'paid' else '支払待ち（検証）' }}</span></p>
+    <h2 id="demo-invoice-notice-title">{{ notice_title }}</h2>
+    <p>税込 {{ money(invoice_notice.amount_yen) }} ／ <span class="badge">{{ notice_status }}</span></p>
     <a class="action-link" href="{{ url_for('finance_review.invoice', month_id=invoice_notice.invoice_id) }}">検証用の請求を見る</a>
 </article>
 {% endif %}
