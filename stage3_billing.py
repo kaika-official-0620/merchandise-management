@@ -128,6 +128,60 @@ def invoice_totals(lines, rounding_method=None):
             'payable_total_yen': None, 'real_payment_enabled': False}
 
 
+def provisional_fee_preview(month):
+    """Display the sample charges without changing the saved invoice or its totals."""
+    snapshot = month['snapshot']
+    if (month.get('is_current_snapshot') is not True or snapshot.get('chargeable') is not False
+            or snapshot.get('uncollected_shipments') or len(snapshot['lines']) != 4):
+        return None
+
+    fee_tags = {'work_bundle': 'WORK', 'sales_fee': 'SALE'}
+    sample_marker = '【運用サンプル】'
+    lines = snapshot['lines']
+    if any(line['customer_id'] != month['customer_id']
+           or line['tax_treatment'] != 'exclusive' or line['tax_rate_percent'] is not None
+           or not line['evidence_reference'].startswith(sample_marker) for line in lines):
+        return None
+
+    originals = {line['fee_kind']: line for line in lines if line['fee_kind'] in fee_tags}
+    if set(originals) != set(fee_tags):
+        return None
+    work, sale = originals['work_bundle'], originals['sales_fee']
+    title = work['snapshot'].get('title', '')
+    item_id, event_id = work['physical_item_id'], work['source_event_id']
+    if (not item_id or not event_id or not title.startswith(sample_marker)
+            or any(line['physical_item_id'] != item_id for line in lines)
+            or sale['source_event_id'] != event_id or sale['snapshot'].get('title') != title
+            or any(line['amount_net_yen'] is not None or line['original_draft_id'] for line in originals.values())):
+        return None
+
+    adjustments = [line for line in lines if line['fee_kind'] == 'adjustment']
+    if len(adjustments) != 2:
+        return None
+    group_ids, entries = set(), []
+    for kind, suffix in fee_tags.items():
+        matches = [line for line in adjustments if line['original_draft_id'] == originals[kind]['draft_id']]
+        if len(matches) != 1:
+            return None
+        amount = matches[0]['amount_net_yen']
+        group = re.search(r'(?:^|\s)(DEMO-[A-Z0-9]+(?:-[A-Z0-9]+)*)-' + suffix + r'\Z',
+                          matches[0]['evidence_reference'])
+        if not group or type(amount) is not int or amount <= 0:
+            return None
+        group_ids.add(group[1])
+        entries.append({'fee_kind': kind, 'amount_net_yen': amount})
+    if len(group_ids) != 1:
+        return None
+
+    tax_rate = 10
+    totals = invoice_totals([
+        dict(line, tax_treatment='exclusive', tax_rate_percent=tax_rate) for line in entries
+    ], 'floor')
+    return {'title': title, 'lines': entries, 'tax_rate_percent': tax_rate,
+            'net_total_yen': totals['net_total_yen'], 'tax_total_yen': totals['tax_total_yen'],
+            'gross_total_yen': totals['reference_gross_total_yen']}
+
+
 def fee_proposal(sale_gross_yen, channel):
     """Keep the reviewed source's exact price/shipping boundaries in one place."""
     yen(sale_gross_yen)

@@ -277,10 +277,11 @@ def register_stage3_finance(runtime):
     @bp.get('/finance/months/<month_id>')
     @allowed()
     def invoice(month_id):
-        from stage3_billing import BillingService
+        from stage3_billing import BillingService, provisional_fee_preview
         with service.db() as store:
             month = BillingService(store).get_month(service.actor(), month_id)
-        return render_template('finance_review/invoice.html', month=month, staff=_staff())
+        preview = provisional_fee_preview(month) if app.extensions.get('kaika_staging') is True else None
+        return render_template('finance_review/invoice.html', month=month, staff=_staff(), provisional_fee_preview=preview)
 
     @bp.get('/finance/months/<month_id>/export.csv')
     @allowed()
