@@ -20,8 +20,10 @@ from item_registry import Registry
 from stage3_billing import BillingService
 from stage3_common import FinanceStore
 from stage3_funds_schema import migration_statements as funds_schema
+from stage3_profit import ProfitService
 from stage3_profit_schema import migration_statements as profit_schema
 from stage3_web import register_stage3_finance
+from stage4_listings_schema import migration_statements as listing_schema
 from stage6_common import migration_statements as notifications_common_schema
 from stage6_notifications_schema import migration_statements as notification_schema
 from stage6_web import register_stage6_web
@@ -53,7 +55,8 @@ class StagingInvoicePaymentTests(unittest.TestCase):
         self.addCleanup(directory.cleanup)
         self.path = Path(directory.name) / 'fictional.sqlite3'
         with closing(finance_fixture(str(self.path))) as db:
-            for statement in (list(funds_schema()) + list(profit_schema()) + list(notifications_common_schema()) + list(notification_schema())
+            for statement in (list(funds_schema()) + list(profit_schema()) + list(listing_schema())
+                              + list(notifications_common_schema()) + list(notification_schema())
                               + list(sandbox_payments_schema()) + list(demo_schema('sqlite'))):
                 db.execute(statement)
             registry = Registry(db)
@@ -121,10 +124,12 @@ class StagingInvoicePaymentTests(unittest.TestCase):
         return fields
 
     def action_form(self, role, action):
-        page = self.clients[role].get(INVOICE_PATH)
+        return self.form(role, INVOICE_PATH, INVOICE_PATH + '/test-payment/' + action)
+
+    def form(self, role, source_path, target_path):
+        page = self.clients[role].get(source_path)
         self.assertEqual(page.status_code, 200)
-        target = re.escape(INVOICE_PATH + '/test-payment/' + action)
-        form = re.search(r'<form\b[^>]*\baction="' + target + r'"[^>]*>(.*?)</form>',
+        form = re.search(r'<form\b[^>]*\baction="' + re.escape(target_path) + r'"[^>]*>(.*?)</form>',
                          page.get_data(as_text=True), re.DOTALL)
         if not form:
             return None
@@ -367,3 +372,91 @@ class StagingInvoicePaymentTests(unittest.TestCase):
             db.commit()
         self.assertNotIn('返金済み（検証）', self.clients['member'].get(INVOICE_PATH).get_data(as_text=True))
         self.assertNotIn(invoice_link, self.inbox('member'))
+
+    def test_same_month_resale_keeps_refunded_fee_lines_in_history_only_on_staging(self):
+        for role, action in (('staff', 'send'), ('member', 'pay'), ('staff', 'return'), ('staff', 'refund')):
+            self.assertEqual(self.post(role, action, self.action_form(role, action)).status_code, 302)
+        completed_payment, completed_return = self.rehearsal_rows(), self.return_rows()
+
+        with closing(self.connect()) as db:
+            registry = Registry(db)
+            store = FinanceStore(registry)
+            billing = BillingService(store)
+            old_invoice = billing.get_month(CUSTOMER, DEMO_INVOICE_ID)
+            old_lines = old_invoice['snapshot']['lines']
+            old_drafts = {line['draft_id'] for line in old_lines}
+            old_shipments = {line['source_event_id'] for line in old_lines if line['source_event_id']}
+            self.assertEqual((len(old_drafts), len(old_shipments)), (4, 1))
+            registry.record_event(STAFF, self.item_id, 'returned', '2026-10-06T08:00:00+09:00',
+                'wallet-back', MARKER + ' 返品受領', details={'return_reason': 'fixture-only'})
+            registry.record_event(STAFF, self.item_id, 'release_hold', '2026-10-07T08:00:00+09:00',
+                'wallet-release', MARKER + ' 再検品済み', details={'note': 'fixture-only'})
+            registry.record_event(STAFF, self.item_id, 'sold', '2026-10-08T08:00:00+09:00',
+                'wallet-second-sale', MARKER + ' 再販売')
+            ProfitService(store).record_facts(STAFF, self.item_id, amounts={'sale_gross_yen': 55000},
+                channel='multichannel', source_reference=MARKER + ' 再販売の明細', occurred_at='2026-10-08T09:00:00+09:00',
+                source_key='wallet-resale-facts')
+            registry.record_event(STAFF, self.item_id, 'shipped', '2026-10-09T08:00:00+09:00',
+                'wallet-second-shipment', MARKER + ' 再発送')
+            second_collection = billing.create_item_drafts(STAFF, self.item_id, source_key='wallet-resale-fees')
+            repeated = billing.create_item_drafts(STAFF, self.item_id, source_key='wallet-resale-fees-repeat')
+            new_drafts = set(second_collection['draft_ids'])
+            self.assertEqual(new_drafts, set(repeated['draft_ids']))
+            self.assertEqual(len(new_drafts), 2)
+            self.assertTrue(new_drafts.isdisjoint(old_drafts))
+            db.commit()
+
+        month_source = f'/finance/customers/{CUSTOMER.user_id}'
+        month_target = month_source + '/month'
+        with patch.dict(self.app.extensions, {'kaika_staging': False}):
+            fields = self.form('staff', month_source, month_target)
+            generic = self.clients['staff'].post(month_target, data={**fields, 'period': '2026-10'})
+            self.assertEqual(generic.status_code, 302)
+        with closing(self.connect()) as db:
+            billing = BillingService(FinanceStore(Registry(db)))
+            normal_month_id = billing.list_months(CUSTOMER, CUSTOMER.user_id)[0]['invoice_id']
+            normal_month = billing.get_month(CUSTOMER, normal_month_id)
+            self.assertTrue(normal_month['is_current_snapshot'])
+            self.assertEqual({line['draft_id'] for line in normal_month['snapshot']['lines']}, old_drafts | new_drafts)
+            self.assertNotIn('staging_refund_history', normal_month['snapshot'])
+
+        fields = self.form('staff', month_source, month_target)
+        staged = self.clients['staff'].post(month_target, data={**fields, 'period': '2026-10'})
+        self.assertEqual(staged.status_code, 302)
+        with closing(self.connect()) as db:
+            billing = BillingService(FinanceStore(Registry(db)))
+            current_id = billing.list_months(CUSTOMER, CUSTOMER.user_id)[0]['invoice_id']
+            self.assertNotIn(current_id, (DEMO_INVOICE_ID, normal_month_id))
+            current = billing.get_month(CUSTOMER, current_id)
+            self.assertTrue(current['is_current_snapshot'])
+            snapshot = current['snapshot']
+            self.assertEqual({line['draft_id'] for line in snapshot['lines']}, new_drafts)
+            self.assertEqual({line['fee_kind'] for line in snapshot['lines']}, {'work_bundle', 'sales_fee'})
+            shipment_ids = {line['source_event_id'] for line in snapshot['lines']}
+            self.assertEqual(len(shipment_ids), 1)
+            self.assertTrue(shipment_ids.isdisjoint(old_shipments))
+            self.assertFalse(snapshot['uncollected_shipments'])
+            self.assertEqual(snapshot['staging_refund_history']['invoice_id'], DEMO_INVOICE_ID)
+            self.assertEqual(set(snapshot['staging_refund_history']['draft_ids']), old_drafts)
+            self.assertEqual(set(snapshot['staging_refund_history']['shipment_event_ids']), old_shipments)
+            for line in snapshot['lines']:
+                self.assertIsNone(line['amount_net_yen'])
+                self.assertIn('return_cycle_requires_review', line['reason_codes'])
+                self.assertEqual(line['snapshot']['sale_fact_snapshot']['sale_gross_yen'], 55000)
+            self.assertIsNone(snapshot['totals']['payable_total_yen'])
+            self.assertIsNone(snapshot['totals']['reference_gross_total_yen'])
+            self.assertFalse(snapshot['chargeable'])
+            self.assertEqual(billing.get_month(CUSTOMER, DEMO_INVOICE_ID)['snapshot_json'], old_invoice['snapshot_json'])
+
+        csv = self.clients['member'].get('/finance/months/' + current_id + '/export.csv')
+        self.assertEqual(csv.status_code, 200)
+        self.assertNotIn('DEMO-WALLET-O01', csv.get_data(as_text=True))
+        revised_fields = self.form('staff', month_source, month_target)
+        repeated_save = self.clients['staff'].post(month_target, data={**revised_fields, 'period': '2026-10'})
+        self.assertEqual(repeated_save.status_code, 302)
+        with closing(self.connect()) as db:
+            months = BillingService(FinanceStore(Registry(db))).list_months(CUSTOMER, CUSTOMER.user_id)
+            self.assertEqual([month['invoice_id'] for month in months], [current_id, normal_month_id, DEMO_INVOICE_ID])
+        self.assertEqual(self.rehearsal_rows(), completed_payment)
+        self.assertEqual(self.return_rows(), completed_return)
+        self.assertIn('返金済み（検証）', self.inbox('member'))
