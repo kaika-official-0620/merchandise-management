@@ -1,6 +1,7 @@
 {% extends "finance_review/frame.html" %}
 {% block finance_content %}{% set snapshot=month.snapshot %}{% set total=snapshot.totals %}
 {% set fee_preview=provisional_fee_preview|default(none) %}
+{% set payment_demo=demo_payment|default(none) %}
 <h1>{{ month.period }} 請求下書き・第{{ month.revision }}版</h1><nav><a href="{{ url_for('finance_review.customer',customer_id=month.customer_id) }}">月次の一覧</a><a href="{{ url_for('finance_review.export',month_id=month.invoice_id) }}">内訳をCSVで保存</a></nav>
 {% if fee_preview %}
 <style>
@@ -46,6 +47,11 @@
     font-weight: 700;
     font-size: 1.13rem;
 }
+.finance-demo-payment {
+    margin-top: 1.1rem;
+    padding-top: .9rem;
+    border-top: 1px solid #bdd8cf;
+}
 .finance-invoice-saved > summary {
     display: list-item;
     min-height: 44px;
@@ -57,12 +63,15 @@
 @media (max-width: 600px) {
     .finance-fee-preview__groups { grid-template-columns: minmax(0, 1fr); gap: .8rem; }
     .finance-fee-preview__row { flex-direction: column; align-items: flex-start; }
+    .finance-demo-payment button { width: 100%; }
 }
 </style>
 <section class="card finance-fee-preview" aria-labelledby="finance-fee-preview-title">
     <header class="finance-fee-preview__header">
         <h2 id="finance-fee-preview-title">検証用の仮料金</h2>
-        <span class="finance-fee-preview__status">未請求</span>
+        <span class="finance-fee-preview__status">
+            {{ {'unsent':'未送付（検証）', 'sent':'支払待ち（検証）', 'paid':'支払い済み（検証）'}.get(payment_demo.status,'未確認（検証）') if payment_demo else '未請求' }}
+        </span>
     </header>
     {% if fee_preview.title and fee_preview.title != '検証用の仮料金' %}<p><strong>{{ fee_preview.title }}</strong></p>{% endif %}
     <p>画面確認用の金額です。実際の請求・決済は発生しません。</p>
@@ -87,6 +96,38 @@
             </dl>
         </div>
     </div>
+    {% if payment_demo %}
+    <section class="finance-demo-payment" aria-labelledby="finance-demo-payment-title">
+        <h3 id="finance-demo-payment-title">検証用の請求・支払い</h3>
+        {% if payment_demo.status == 'unsent' and staff %}
+        <p>送付すると、会員の「お知らせ」にこの請求が表示されます。</p>
+        <form method="post" action="{{ url_for('finance_review.staging_demo_payment', month_id=month.invoice_id, action='send') }}">
+            {{ tokens('finance_staging_demo_send', month.invoice_id) }}
+            <button type="submit">検証用の請求を会員に届ける</button>
+        </form>
+        {% elif payment_demo.status == 'unsent' %}
+        <p>開花から検証用の請求が届くと、ここで支払いを試せます。</p>
+        {% elif payment_demo.status == 'sent' and staff %}
+        <p>会員の「お知らせ」に届けました。会員がテスト支払いを行うと、ここに表示されます。</p>
+        {% elif payment_demo.status == 'sent' %}
+        <p>開花から検証用の請求が届きました。ボタンを押すとテスト支払いを記録します。</p>
+        <form method="post" action="{{ url_for('finance_review.staging_demo_payment', month_id=month.invoice_id, action='pay') }}">
+            {{ tokens('finance_staging_demo_pay', month.invoice_id) }}
+            <button type="submit">{{ money(payment_demo.amount_yen) }}をテスト支払いする</button>
+        </form>
+        {% elif payment_demo.status == 'paid' %}
+        <p>{{ money(payment_demo.amount_yen) }}のテスト支払いを記録しました。</p>
+        {% endif %}
+        {% if payment_demo.sent_at or payment_demo.paid_at %}
+        <p class="muted">
+            {% if payment_demo.sent_at %}送付日時（日本時間）：{{ registry_time(payment_demo.sent_at) }}{% endif %}
+            {% if payment_demo.sent_at and payment_demo.paid_at %}<br>{% endif %}
+            {% if payment_demo.paid_at %}テスト支払い日時（日本時間）：{{ registry_time(payment_demo.paid_at) }}{% endif %}
+        </p>
+        {% endif %}
+        <p class="muted">実際のお金は動きません。</p>
+    </section>
+    {% endif %}
 </section>
 <details class="card finance-invoice-saved">
     <summary>保存済みの明細と根拠を確認</summary>
