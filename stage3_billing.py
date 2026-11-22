@@ -128,10 +128,10 @@ def invoice_totals(lines, rounding_method=None):
             'payable_total_yen': None, 'real_payment_enabled': False}
 
 
-def provisional_fee_preview(month):
+def provisional_fee_preview(month, *, include_historical=False):
     """Display the sample charges without changing the saved invoice or its totals."""
     snapshot = month['snapshot']
-    if (month.get('is_current_snapshot') is not True or snapshot.get('chargeable') is not False
+    if ((not include_historical and month.get('is_current_snapshot') is not True) or snapshot.get('chargeable') is not False
             or snapshot.get('uncollected_shipments') or len(snapshot['lines']) != 4):
         return None
 
@@ -177,7 +177,7 @@ def provisional_fee_preview(month):
     totals = invoice_totals([
         dict(line, tax_treatment='exclusive', tax_rate_percent=tax_rate) for line in entries
     ], 'floor')
-    return {'title': title, 'lines': entries, 'tax_rate_percent': tax_rate,
+    return {'title': title, 'physical_item_id': item_id, 'lines': entries, 'tax_rate_percent': tax_rate,
             'net_total_yen': totals['net_total_yen'], 'tax_total_yen': totals['tax_total_yen'],
             'gross_total_yen': totals['reference_gross_total_yen']}
 

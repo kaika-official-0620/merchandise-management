@@ -281,8 +281,10 @@ def register_stage3_finance(runtime):
         from staging_invoice_payment import describe, enabled as staging_payment_enabled
         with service.db() as store:
             month = BillingService(store).get_month(service.actor(), month_id)
-            preview = provisional_fee_preview(month) if app.extensions.get('kaika_staging') is True else None
-            demo = describe(store, month, preview) if staging_payment_enabled(app) else None
+            demo = describe(store, month, include_refunded_history=True) if staging_payment_enabled(app) else None
+        preview = demo['fee_preview'] if demo else None
+        if preview is None and app.extensions.get('kaika_staging') is True:
+            preview = provisional_fee_preview(month)
         return render_template('finance_review/invoice.html', month=month, staff=_staff(),
                                provisional_fee_preview=preview, demo_payment=demo)
 

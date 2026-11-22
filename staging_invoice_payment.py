@@ -45,12 +45,20 @@ def _saved_demo(store, customer_id):
     return rows[0] if rows else None
 
 
-def describe(store, month, fee_preview):
-    if (month['invoice_id'] != DEMO_INVOICE_ID or month['is_current_snapshot'] is not True
-            or not fee_preview or fee_preview['gross_total_yen'] != DEMO_AMOUNT_YEN):
+def describe(store, month, *, include_refunded_history=False):
+    if month['invoice_id'] != DEMO_INVOICE_ID:
+        return None
+    historical = month['is_current_snapshot'] is not True
+    if historical and not include_refunded_history:
         return None
     record = _saved_demo(store, month['customer_id'])
     if record and (record['content_hash'] != month['content_hash'] or record['amount_yen'] != DEMO_AMOUNT_YEN):
+        return None
+    # Operational changes invalidate the draft for new actions but cannot erase a refund.
+    if historical and not (record and record['refunded_at']):
+        return None
+    fee_preview = provisional_fee_preview(month, include_historical=historical)
+    if not fee_preview or fee_preview['gross_total_yen'] != DEMO_AMOUNT_YEN:
         return None
     status = 'unsent'
     if record:
@@ -60,7 +68,7 @@ def describe(store, month, fee_preview):
                 status = phase
     return {
         'invoice_id': DEMO_INVOICE_ID, 'amount_yen': DEMO_AMOUNT_YEN,
-        'status': status,
+        'status': status, 'historical': historical, 'fee_preview': fee_preview,
         'sent_at': record['sent_at'] if record else None,
         'paid_at': record['paid_at'] if record else None,
         'returned_at': record['returned_at'] if record else None,
@@ -72,7 +80,7 @@ def member_notice(store, actor):
     if actor.staff or not _saved_demo(store, actor.user_id):
         return None
     month = BillingService(store).get_month(actor, DEMO_INVOICE_ID)
-    return describe(store, month, provisional_fee_preview(month))
+    return describe(store, month, include_refunded_history=True)
 
 
 def transition(store, actor, invoice_id, action):
@@ -90,7 +98,7 @@ def transition(store, actor, invoice_id, action):
     with store.atomic():
         store.customer_lock(customer_id)
         month = BillingService(store).get_month(actor, invoice_id)
-        demo = describe(store, month, provisional_fee_preview(month))
+        demo = describe(store, month)
         if not demo:
             raise RegistryError('staging_invoice_payment_unavailable',
                                 '対象の検証用下書きを開き直してください。', 409)
