@@ -164,7 +164,7 @@ def register_stage6_web(runtime):
     @bp.get('/notifications')
     @allowed()
     def inbox():
-        from staging_invoice_payment import enabled as staging_payment_enabled, member_notice
+        from staging_invoice_payment import enabled as staging_payment_enabled, member_notices
         actor = service.actor()
         is_staff = staff()
         with service.db() as store:
@@ -172,9 +172,9 @@ def register_stage6_web(runtime):
             notes = [] if is_staff else api.inbox(actor)
             deliveries = api.deliveries(actor)
             usage = api.usage(actor) if is_staff else None
-            demo = member_notice(store.finance, actor) if staging_payment_enabled(app) else None
+            demos = member_notices(store.finance, actor) if staging_payment_enabled(app) else []
         return render_template('workspace_home/inbox.html', notes=notes, deliveries=deliveries, usage=usage,
-                               staff=is_staff, staging_invoice_payment=demo)
+                               staff=is_staff, staging_invoice_payments=demos)
 
     @bp.post('/notifications/refresh')
     @allowed()

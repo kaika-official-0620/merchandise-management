@@ -285,10 +285,17 @@ def register_stage3_finance(runtime):
     @allowed()
     def invoice(month_id):
         from stage3_billing import BillingService, provisional_fee_preview
-        from staging_invoice_payment import describe, enabled as staging_payment_enabled
+        from staging_invoice_payment import (RESALE_INVOICE_ID, describe, describe_resale,
+                                             enabled as staging_payment_enabled)
+        actor = service.actor()
+        demo = None
         with service.db() as store:
-            month = BillingService(store).get_month(service.actor(), month_id)
-            demo = describe(store, month, include_refunded_history=True) if staging_payment_enabled(app) else None
+            month = BillingService(store).get_month(actor, month_id)
+            if staging_payment_enabled(app):
+                if month_id == RESALE_INVOICE_ID:
+                    demo = describe_resale(store, month, actor, include_paid_history=True)
+                else:
+                    demo = describe(store, month, include_refunded_history=True)
         preview = demo['fee_preview'] if demo else None
         if preview is None and app.extensions.get('kaika_staging') is True:
             preview = provisional_fee_preview(month)
@@ -298,8 +305,8 @@ def register_stage3_finance(runtime):
     @bp.post('/finance/months/<month_id>/test-payment/<action>')
     @allowed()
     def staging_demo_payment(month_id, action):
-        from staging_invoice_payment import ACTIONS, DEMO_INVOICE_ID, enabled as staging_payment_enabled, transition
-        if not staging_payment_enabled(app) or month_id != DEMO_INVOICE_ID or action not in ACTIONS:
+        from staging_invoice_payment import enabled as staging_payment_enabled, supports_action, transition
+        if not staging_payment_enabled(app) or not supports_action(month_id, action):
             abort(404)
         service.verify('finance_staging_demo_' + action, month_id)
         with service.db(write=True) as store:
