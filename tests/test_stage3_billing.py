@@ -1,4 +1,5 @@
 """Fictional SQLite fixtures only. No application startup, external I/O or money."""
+from copy import deepcopy
 import json
 import sqlite3
 import unittest
@@ -6,7 +7,7 @@ import unittest
 from item_registry import Actor, Registry, RegistryError, _json
 from item_registry_schema import migrate_registry
 from stage3_common import FinanceStore, migration_statements as common_statements
-from stage3_billing import BillingService, _catalog, fee_proposal, invoice_totals, round_fraction
+from stage3_billing import BillingService, _catalog, fee_proposal, invoice_totals, provisional_fee_preview, round_fraction
 from stage3_billing_schema import migration_statements
 from stage3_profit import ProfitService
 from stage3_profit_schema import migration_statements as profit_statements
@@ -93,6 +94,76 @@ class TaxTests(unittest.TestCase):
         self.assertEqual(invoice_totals([line(650), line(400)], 'floor')['reference_gross_total_yen'], 1155)
         for monthly, count, expected in ((2980, 10, 14828), (2980, 20, 26378), (5980, 21, 30833)):
             self.assertEqual(invoice_totals([line(monthly)] + [line(1050)] * count, 'floor')['reference_gross_total_yen'], expected)
+
+
+class ProvisionalFeePreviewTests(unittest.TestCase):
+    title = '【運用サンプル】グレージュの二つ折り財布'
+
+    def month(self):
+        base = dict(customer_id=1, physical_item_id='fixture-wallet', tax_rate_percent=None,
+                    tax_treatment='exclusive', current_review_reasons=[])
+        work = dict(base, draft_id='fixture-work', fee_kind='work_bundle', amount_net_yen=None,
+                    source_event_id='fixture-shipment', original_draft_id=None,
+                    evidence_reference='【運用サンプル】発送確認', snapshot={'title': self.title})
+        sale = dict(work, draft_id='fixture-sale', fee_kind='sales_fee')
+        work_example = dict(base, draft_id='fixture-work-example', fee_kind='adjustment', amount_net_yen=500,
+                            source_event_id=None, original_draft_id=work['draft_id'],
+                            evidence_reference='【運用サンプル】 作業料 DEMO-WALLET-O01-WORK',
+                            snapshot={'original_snapshot': dict(work)})
+        sale_example = dict(work_example, draft_id='fixture-sale-example', amount_net_yen=300,
+                            original_draft_id=sale['draft_id'], evidence_reference='【運用サンプル】 販売料 DEMO-WALLET-O01-SALE',
+                            snapshot={'original_snapshot': dict(sale)})
+        return dict(customer_id=1, is_current_snapshot=True, current_review_reasons=[],
+                    snapshot=dict(chargeable=False, lines=[work, sale, work_example, sale_example],
+                                  totals={'payable_total_yen': None, 'reference_gross_total_yen': None}))
+
+    def test_single_sample_shipment_calculates_display_only_tax_without_mutating_draft(self):
+        month = self.month()
+        # The calculation matches by identifiers, regardless of row order.
+        month['snapshot']['lines'].reverse()
+        original = deepcopy(month)
+        result = provisional_fee_preview(month)
+        self.assertIsNotNone(result)
+        self.assertEqual(result['title'], self.title)
+        self.assertEqual({line['fee_kind']: line['amount_net_yen'] for line in result['lines']},
+                         {'work_bundle': 500, 'sales_fee': 300})
+        self.assertEqual((result['tax_rate_percent'], result['net_total_yen'], result['tax_total_yen'],
+                          result['gross_total_yen']), (10, 800, 80, 880))
+        self.assertEqual(month, original)
+
+    def test_stale_or_chargeable_invoice_does_not_show_a_sample_total(self):
+        stale = dict(self.month(), is_current_snapshot=False, current_review_reasons=['invoice_new_lines_available'])
+        self.assertIsNone(provisional_fee_preview(stale))
+        for fields in ({'chargeable': True}, {'uncollected_shipments': [{'shipment_event_id': 'fixture-other'}]}):
+            with self.subTest(fields=fields):
+                month = self.month()
+                month['snapshot'].update(fields)
+                self.assertIsNone(provisional_fee_preview(month))
+
+    def test_incomplete_duplicate_or_mismatched_link_does_not_show_a_sample_total(self):
+        changes = (
+            (1, {'source_event_id': 'fixture-other-shipment'}),
+            (1, {'amount_net_yen': 300}),
+            (2, {'customer_id': 2}),
+            (2, {'physical_item_id': 'fixture-different-wallet'}),
+            (2, {'evidence_reference': '通常の作業料の調整'}),
+            (2, {'amount_net_yen': -500}),
+            (3, {'original_draft_id': 'fixture-work'}),
+            (3, {'evidence_reference': '【運用サンプル】 販売料 DEMO-WALLET-O01-WORK'}),
+            (3, {'evidence_reference': '【運用サンプル】 販売料 DEMO-WALLET-O02-SALE'}),
+        )
+        for index, fields in changes:
+            with self.subTest(index=index, fields=fields):
+                month = self.month()
+                month['snapshot']['lines'][index].update(fields)
+                self.assertIsNone(provisional_fee_preview(month))
+        month = self.month()
+        month['snapshot']['lines'].pop()
+        self.assertIsNone(provisional_fee_preview(month))
+        month = self.month()
+        lines = month['snapshot']['lines']
+        lines.append(dict(lines[2], draft_id='fixture-duplicate-example'))
+        self.assertIsNone(provisional_fee_preview(month))
 
 
 class BillingTests(unittest.TestCase):
