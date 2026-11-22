@@ -289,8 +289,8 @@ def register_stage3_finance(runtime):
     @bp.post('/finance/months/<month_id>/test-payment/<action>')
     @allowed()
     def staging_demo_payment(month_id, action):
-        from staging_invoice_payment import DEMO_INVOICE_ID, enabled as staging_payment_enabled, transition
-        if not staging_payment_enabled(app) or month_id != DEMO_INVOICE_ID or action not in ('send', 'pay'):
+        from staging_invoice_payment import ACTIONS, DEMO_INVOICE_ID, enabled as staging_payment_enabled, transition
+        if not staging_payment_enabled(app) or month_id != DEMO_INVOICE_ID or action not in ACTIONS:
             abort(404)
         service.verify('finance_staging_demo_' + action, month_id)
         with service.db(write=True) as store:
