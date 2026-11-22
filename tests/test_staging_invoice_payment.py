@@ -115,12 +115,12 @@ class StagingInvoicePaymentTests(unittest.TestCase):
     def post(self, role, action, fields=None, *, invoice_path=INVOICE_PATH):
         return self.clients[role].post(f'{invoice_path}/test-payment/{action}', data=fields or {})
 
-    def signed_fields(self, role, action, invoice_id=DEMO_INVOICE_ID):
+    def signed_fields(self, role, action, invoice_id=DEMO_INVOICE_ID, *, purpose=None):
         with self.app.test_request_context():
             user = self.users[role]
             login_user(user)
             fields = {'registry_csrf': self.web.csrf(),
-                      'operation_token': self.web.operation('finance_staging_demo_' + action, invoice_id)}
+                      'operation_token': self.web.operation(purpose or 'finance_staging_demo_' + action, invoice_id)}
         with self.clients[role].session_transaction() as session:
             session['_registry_actor'] = str(user.id)
             session['_registry_csrf'] = fields['registry_csrf']
@@ -150,6 +150,44 @@ class StagingInvoicePaymentTests(unittest.TestCase):
     def resale_rows(self):
         with closing(self.connect()) as db:
             return [dict(row) for row in db.execute('SELECT * FROM staging_wallet_resale_payment_demo')]
+
+    def resale_cost_rows(self):
+        with closing(self.connect()) as db:
+            return [dict(row) for row in db.execute('SELECT * FROM staging_wallet_resale_test_costs')]
+
+    def record_resale_costs(self, page_path, invoice, payment):
+        target = page_path + '/test-costs'
+        purpose = 'finance_staging_resale_costs'
+        amounts = {'purchase_cost_yen': '4200', 'shipping_cost_yen': '450', 'channel_fee_yen': '850'}
+        for role in ('member', 'other', 'limited_staff'):
+            with self.subTest(unauthorized_costs=role):
+                fields = self.signed_fields(role, 'costs', invoice['invoice_id'], purpose=purpose)
+                self.assertEqual(self.clients[role].post(target, data={**fields, **amounts}).status_code, 403)
+        with patch.dict(self.app.extensions, {'kaika_staging': False}):
+            self.assertIsNone(self.form('staff', page_path, target))
+            fields = self.signed_fields('staff', 'costs', invoice['invoice_id'], purpose=purpose)
+            self.assertEqual(self.clients['staff'].post(target, data={**fields, **amounts}).status_code, 404)
+        fields = self.signed_fields('staff', 'costs', DEMO_INVOICE_ID, purpose=purpose)
+        self.assertEqual(self.clients['staff'].post(INVOICE_PATH + '/test-costs', data={**fields, **amounts}).status_code, 404)
+        self.assertIsNone(self.form('member', page_path, target))
+        form = self.form('staff', page_path, target)
+        self.assertTrue(form)
+        self.assertEqual(self.clients['staff'].post(target, data={**form, 'purchase_cost_yen': '4200'}).status_code, 400)
+        self.assertEqual(self.clients['staff'].post(target,
+            data={**form, **amounts, 'shipping_cost_yen': '-1'}).status_code, 400)
+        self.assertEqual(self.resale_cost_rows(), [])
+        self.assertEqual(self.clients['staff'].post(target, data={**form, **amounts}).status_code, 302)
+        costs = self.resale_cost_rows()[0]
+        self.assertEqual(costs['invoice_id'], invoice['invoice_id'])
+        self.assertEqual(costs['sale_event_id'], invoice['snapshot']['lines'][0]['snapshot']['sale_event_id'])
+        self.assertEqual(costs['recorded_by'], STAFF.user_id)
+        self.assertEqual({key: costs[key] for key in amounts}, {key: int(value) for key, value in amounts.items()})
+        self.assertGreaterEqual(datetime.fromisoformat(costs['recorded_at']), datetime.fromisoformat(payment['paid_at']))
+        self.assertEqual(self.clients['staff'].post(target, data={**form, **amounts}).status_code, 302)
+        self.assertEqual(self.clients['staff'].post(target,
+            data={**form, **amounts, 'shipping_cost_yen': '451'}).status_code, 409)
+        self.assertEqual(self.resale_cost_rows(), [costs])
+        return costs, {**form, **amounts}
 
     def inbox(self, role):
         response = self.clients[role].get('/notifications')
@@ -486,6 +524,12 @@ class StagingInvoicePaymentTests(unittest.TestCase):
         for path in (item_path, month_source, resale_path):
             self.assertNotIn('8,170円', self.clients['member'].get(path).get_data(as_text=True))
         self.assertNotIn('検証集計（再販売分）', before_resale_csv.get_data(as_text=True))
+        costs_target = resale_path + '/test-costs'
+        self.assertIsNone(self.form('staff', resale_path, costs_target))
+        premature_costs = self.signed_fields('staff', 'costs', current_id, purpose='finance_staging_resale_costs')
+        self.assertEqual(self.clients['staff'].post(costs_target, data={**premature_costs,
+            'purchase_cost_yen': '4200', 'shipping_cost_yen': '450', 'channel_fee_yen': '850'}).status_code, 409)
+        self.assertEqual(self.resale_cost_rows(), [])
         send_target = resale_path + '/test-payment/send'
         pay_target = resale_path + '/test-payment/pay'
         self.assertIsNone(self.form('member', resale_path, pay_target))
@@ -576,19 +620,50 @@ class StagingInvoicePaymentTests(unittest.TestCase):
                 self.assertNotIn(reconciliation_label, self.clients['member'].get(path).get_data(as_text=True))
             self.assertEqual(self.clients['member'].get(export_path).data, before_resale_csv.data)
 
+        costs, cost_request = self.record_resale_costs(resale_path, current, paid)
+        final_label = '最終的な手残り（検証用）'
+        for role in ('staff', 'member'):
+            for path in (item_path, month_source, resale_path):
+                with self.subTest(recorded_costs_role=role, path=path):
+                    response = self.clients[role].get(path)
+                    self.assertEqual(response.status_code, 200)
+                    text = response.get_data(as_text=True)
+                    for value in (final_label, '4,200円', '450円', '850円', '2,670円'):
+                        self.assertIn(value, text)
+        self.assertEqual(self.unaffected_tables(), before)
+        self.notification_projection.assert_not_called()
+        self.assertEqual(self.rehearsal_rows(), completed_payment)
+        self.assertEqual(self.return_rows(), completed_return)
+        self.assertEqual(self.resale_rows(), [paid])
+        self.assertEqual(self.clients['member'].get(INVOICE_PATH + '/export.csv').data, original_csv)
+        self.assertNotIn('2,670円', self.clients['member'].get(INVOICE_PATH).get_data(as_text=True))
+        cost_reconciliation_rows = reconciliation_rows[:3] + [
+            ['検証集計（再販売分）', '仕入原価（円）', '4200'],
+            ['検証集計（再販売分）', '送料（円）', '450'],
+            ['検証集計（再販売分）', '販路手数料（円）', '850'],
+            ['検証集計（再販売分）', '最終的な手残り（検証用・円）', '2670'],
+        ]
+        costs_csv = list(csv.reader(StringIO(self.clients['member'].get(export_path).get_data(as_text=True))))
+        self.assertEqual(costs_csv, original_rows + cost_reconciliation_rows)
+
         with closing(self.connect()) as db:
             registry = Registry(db)
             store = FinanceStore(registry)
             profit = ProfitService(store).profit(CUSTOMER, self.item_id)
             self.assertEqual(profit['sale_payment_status'], 'unpaid')
-            self.assertIsNone(profit['facts']['kaika_fee_yen'])
+            for real_cost in ('purchase_cost_yen', 'shipping_cost_yen', 'channel_fee_yen', 'kaika_fee_yen'):
+                self.assertIsNone(profit['facts'][real_cost])
             self.assertIsNone(profit['realized_profit_yen'])
             registry.record_event(STAFF, self.item_id, 'returned', '2026-10-10T08:00:00+09:00',
                 'wallet-resale-returned', MARKER + ' 再販売後の返品を検証', details={'return_reason': 'fixture-only'})
             db.commit()
         for path in (item_path, month_source):
             self.assertNotIn(reconciliation_label, self.clients['member'].get(path).get_data(as_text=True))
-        self.assertIn('8,170円', self.clients['member'].get(resale_path).get_data(as_text=True))
+        self.assertEqual(self.clients['staff'].post(costs_target, data=cost_request).status_code, 409)
+        self.assertEqual(self.resale_cost_rows(), [costs])
+        historic = self.clients['member'].get(resale_path).get_data(as_text=True)
+        self.assertIn('8,170円', historic)
+        self.assertIn('2,670円', historic)
         historic_rows = list(csv.reader(StringIO(self.clients['member'].get(export_path).get_data(as_text=True))))
-        self.assertEqual(historic_rows[-4:], reconciliation_rows)
+        self.assertEqual(historic_rows[-len(cost_reconciliation_rows):], cost_reconciliation_rows)
         self.assertEqual(self.resale_rows(), [paid])
