@@ -98,9 +98,15 @@
         </div>
     </div>
     {% if payment_demo %}
+    {% set payment_history=payment_demo.historical|default(false) %}
     <section class="finance-demo-payment" aria-labelledby="finance-demo-payment-title">
         <h3 id="finance-demo-payment-title">検証用の請求・支払い</h3>
-        {% if payment_demo.status == 'unsent' and staff %}
+        {% if payment_history %}
+        <p>この請求の検証は終了しました。ここまでの操作履歴を確認できます。</p>
+        {% if payment_demo.status == 'refunded' %}
+        <p>{{ money(payment_demo.amount_yen) }}のテスト返金を記録しました。</p>
+        {% endif %}
+        {% elif payment_demo.status == 'unsent' and staff %}
         <p>送付すると、会員の「お知らせ」にこの請求が表示されます。</p>
         <form method="post" action="{{ url_for('finance_review.staging_demo_payment', month_id=month.invoice_id, action='send') }}">
             {{ tokens('finance_staging_demo_send', month.invoice_id) }}
@@ -152,7 +158,10 @@
         {% endif %}
         <p class="muted">実際のお金は動きません。</p>
         {% if payment_demo.status in ('returned', 'refunded') or (staff and payment_demo.status == 'paid') %}
-        <p class="muted">検証用の返品・返金を記録しても、商品の状態や在庫は変わりません。</p>
+        <p class="muted">この欄の返品受付・テスト返金は、請求に対する検証記録です。</p>
+        {% endif %}
+        {% if payment_history and fee_preview.physical_item_id|default(none) %}
+        <a class="action-link secondary" href="{{ url_for('inventory_registry.detail', item_id=fee_preview.physical_item_id) }}">商品の在庫・作業履歴を確認</a>
         {% endif %}
     </section>
     {% endif %}
