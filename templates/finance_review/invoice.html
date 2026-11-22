@@ -2,6 +2,7 @@
 {% block finance_content %}{% set snapshot=month.snapshot %}{% set total=snapshot.totals %}
 {% set fee_preview=provisional_fee_preview|default(none) %}
 {% set payment_demo=demo_payment|default(none) %}
+{% set resale_demo=payment_demo and (payment_demo.resale|default(false)) %}
 {% set prior_refund=snapshot.staging_refund_history|default(none) %}
 <h1>{{ month.period }} 請求下書き・第{{ month.revision }}版</h1><nav><a href="{{ url_for('finance_review.customer',customer_id=month.customer_id) }}">月次の一覧</a><a href="{{ url_for('finance_review.export',month_id=month.invoice_id) }}">内訳をCSVで保存</a></nav>
 {% if prior_refund %}
@@ -75,7 +76,7 @@
 </style>
 <section class="card finance-fee-preview" aria-labelledby="finance-fee-preview-title">
     <header class="finance-fee-preview__header">
-        <h2 id="finance-fee-preview-title">検証用の仮料金</h2>
+        <h2 id="finance-fee-preview-title">{{ '今回の再販売分（検証）' if resale_demo else '検証用の仮料金' }}</h2>
         <span class="finance-fee-preview__status">
             {{ {'unsent':'未送付（検証）', 'sent':'支払待ち（検証）', 'paid':'支払い済み（検証）',
                 'returned':'返品受付（検証）', 'refunded':'返金済み（検証）'}.get(payment_demo.status,'未確認（検証）') if payment_demo else '未請求' }}
@@ -83,6 +84,9 @@
     </header>
     {% if fee_preview.title and fee_preview.title != '検証用の仮料金' %}<p><strong>{{ fee_preview.title }}</strong></p>{% endif %}
     <p>画面確認用の金額です。実際の請求・決済は発生しません。</p>
+    {% if resale_demo %}
+    <p>前回の写真と商品登録を再利用するため、今回の検証料金は販売料のみです。作業料・梱包費・送料の検証額は0円です。</p>
+    {% endif %}
     <div class="finance-fee-preview__groups">
         <div>
             <h3>料金の内訳</h3>
@@ -131,14 +135,14 @@
         </form>
         {% elif payment_demo.status == 'paid' %}
         <p>{{ money(payment_demo.amount_yen) }}のテスト支払いを記録しました。</p>
-        {% if staff %}
+        {% if staff and not resale_demo %}
         <p>このサンプルで返品の受付から返金までの流れを試せます。</p>
         <form method="post" action="{{ url_for('finance_review.staging_demo_payment', month_id=month.invoice_id, action='return') }}">
             {{ tokens('finance_staging_demo_return', month.invoice_id) }}
             <button type="submit">返品を記録する（検証）</button>
         </form>
         {% endif %}
-        {% elif payment_demo.status == 'returned' %}
+        {% elif payment_demo.status == 'returned' and not resale_demo %}
         <p>検証用の返品を受け付けました。</p>
         {% if staff %}
         <form method="post" action="{{ url_for('finance_review.staging_demo_payment', month_id=month.invoice_id, action='refund') }}">
@@ -164,7 +168,7 @@
         </p>
         {% endif %}
         <p class="muted">実際のお金は動きません。</p>
-        {% if payment_demo.status in ('returned', 'refunded') or (staff and payment_demo.status == 'paid') %}
+        {% if not resale_demo and (payment_demo.status in ('returned', 'refunded') or (staff and payment_demo.status == 'paid')) %}
         <p class="muted">この欄の返品受付・テスト返金は、請求に対する検証記録です。</p>
         {% endif %}
         {% if payment_history and fee_preview.physical_item_id|default(none) %}
