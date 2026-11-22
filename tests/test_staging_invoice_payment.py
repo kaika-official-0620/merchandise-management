@@ -1,6 +1,8 @@
 """Real Flask routes and SQLite rehearsal records. No provider or network is used."""
 from contextlib import closing
+import csv
 from datetime import datetime
+from io import StringIO
 from pathlib import Path
 import re
 import sqlite3
@@ -455,9 +457,10 @@ class StagingInvoicePaymentTests(unittest.TestCase):
             self.assertEqual(billing.get_month(CUSTOMER, DEMO_INVOICE_ID)['snapshot_json'], old_invoice['snapshot_json'])
 
         resale_path = '/finance/months/' + current_id
-        csv = self.clients['member'].get(resale_path + '/export.csv')
-        self.assertEqual(csv.status_code, 200)
-        self.assertNotIn('DEMO-WALLET-O01', csv.get_data(as_text=True))
+        export_path = resale_path + '/export.csv'
+        before_resale_csv = self.clients['member'].get(export_path)
+        self.assertEqual(before_resale_csv.status_code, 200)
+        self.assertNotIn('DEMO-WALLET-O01', before_resale_csv.get_data(as_text=True))
         revised_fields = self.form('staff', month_source, month_target)
         repeated_save = self.clients['staff'].post(month_target, data={**revised_fields, 'period': '2026-10'})
         self.assertEqual(repeated_save.status_code, 302)
@@ -478,6 +481,11 @@ class StagingInvoicePaymentTests(unittest.TestCase):
         self.assertIn('販売料', member_body)
         for amount in (300, 30, 330):
             self.assertRegex(member_body, rf'>\s*{amount}円\s*<')
+        item_path = '/finance/items/' + self.item_id
+        reconciliation_label = '販売料だけを差し引いた参考額'
+        for path in (item_path, month_source, resale_path):
+            self.assertNotIn('8,170円', self.clients['member'].get(path).get_data(as_text=True))
+        self.assertNotIn('検証集計（再販売分）', before_resale_csv.get_data(as_text=True))
         send_target = resale_path + '/test-payment/send'
         pay_target = resale_path + '/test-payment/pay'
         self.assertIsNone(self.form('member', resale_path, pay_target))
@@ -534,6 +542,53 @@ class StagingInvoicePaymentTests(unittest.TestCase):
         self.assertEqual(self.rehearsal_rows(), completed_payment)
         self.assertEqual(self.return_rows(), completed_return)
         self.assertEqual(self.unaffected_tables(), before)
-        self.assertEqual(self.clients['member'].get(resale_path + '/export.csv').data, csv.data)
         self.assertEqual(self.clients['member'].get(INVOICE_PATH + '/export.csv').data, original_csv)
         self.notification_projection.assert_not_called()
+
+        for role in ('staff', 'member'):
+            for path in (item_path, month_source, resale_path):
+                with self.subTest(paid_reconciliation_role=role, path=path):
+                    response = self.clients[role].get(path)
+                    self.assertEqual(response.status_code, 200)
+                    body = response.get_data(as_text=True)
+                    for text in (reconciliation_label, '8,500円', '330円', '8,170円'):
+                        self.assertIn(text, body)
+                    self.assertNotIn('880円', body)
+        self.assertNotIn(reconciliation_label, self.clients['member'].get(INVOICE_PATH).get_data(as_text=True))
+        self.assertIn(self.clients['other'].get(item_path).status_code, (403, 404))
+        for path in (month_source, resale_path, export_path):
+            self.assertEqual(self.clients['other'].get(path).status_code, 403)
+
+        paid_csv = self.clients['member'].get(export_path)
+        self.assertEqual(paid_csv.status_code, 200)
+        original_rows = list(csv.reader(StringIO(before_resale_csv.get_data(as_text=True))))
+        paid_rows = list(csv.reader(StringIO(paid_csv.get_data(as_text=True))))
+        self.assertEqual(paid_rows[:len(original_rows)], original_rows)
+        reconciliation_rows = [
+            ['検証集計（再販売分）', '売上（税込・円）', '8500'],
+            ['検証集計（再販売分）', 'テスト販売料（税込・円）', '330'],
+            ['検証集計（再販売分）', '販売料だけを差し引いた参考額（円）', '8170'],
+            ['検証集計（再販売分）', '最終的な手残り', '未確認'],
+        ]
+        self.assertEqual(paid_rows[len(original_rows):], reconciliation_rows)
+        with patch.dict(self.app.extensions, {'kaika_staging': False}):
+            for path in (item_path, month_source, resale_path):
+                self.assertNotIn(reconciliation_label, self.clients['member'].get(path).get_data(as_text=True))
+            self.assertEqual(self.clients['member'].get(export_path).data, before_resale_csv.data)
+
+        with closing(self.connect()) as db:
+            registry = Registry(db)
+            store = FinanceStore(registry)
+            profit = ProfitService(store).profit(CUSTOMER, self.item_id)
+            self.assertEqual(profit['sale_payment_status'], 'unpaid')
+            self.assertIsNone(profit['facts']['kaika_fee_yen'])
+            self.assertIsNone(profit['realized_profit_yen'])
+            registry.record_event(STAFF, self.item_id, 'returned', '2026-10-10T08:00:00+09:00',
+                'wallet-resale-returned', MARKER + ' 再販売後の返品を検証', details={'return_reason': 'fixture-only'})
+            db.commit()
+        for path in (item_path, month_source):
+            self.assertNotIn(reconciliation_label, self.clients['member'].get(path).get_data(as_text=True))
+        self.assertIn('8,170円', self.clients['member'].get(resale_path).get_data(as_text=True))
+        historic_rows = list(csv.reader(StringIO(self.clients['member'].get(export_path).get_data(as_text=True))))
+        self.assertEqual(historic_rows[-4:], reconciliation_rows)
+        self.assertEqual(self.resale_rows(), [paid])
