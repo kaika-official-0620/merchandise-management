@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from flask import Flask
 from flask_login import LoginManager, UserMixin, login_user
@@ -133,6 +134,10 @@ class StagingInvoicePaymentTests(unittest.TestCase):
         with closing(self.connect()) as db:
             return [dict(row) for row in db.execute('SELECT * FROM staging_invoice_payment_demo')]
 
+    def return_rows(self):
+        with closing(self.connect()) as db:
+            return [dict(row) for row in db.execute('SELECT * FROM staging_invoice_payment_return_demo')]
+
     def inbox(self, role):
         response = self.clients[role].get('/notifications')
         self.assertEqual(response.status_code, 200)
@@ -141,9 +146,16 @@ class StagingInvoicePaymentTests(unittest.TestCase):
     def unaffected_tables(self):
         with closing(self.connect()) as db:
             tables = db.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
-            names = [row['name'] for row in tables if row['name'].startswith(('stage3_', 'stage5_', 'stage6_', 'stage9_'))
+            names = [row['name'] for row in tables if row['name'].startswith(('business_', 'stage3_', 'stage4_', 'stage5_', 'stage6_', 'stage9_'))
                      and row['name'] != 'stage3_customer_locks']
             return {name: db.execute('SELECT * FROM ' + name).fetchall() for name in names}
+
+    def add_late_charge(self):
+        with closing(self.connect()) as db:
+            BillingService(FinanceStore(Registry(db))).record_component(STAFF, CUSTOMER.user_id, fee_kind='expense',
+                amount_net_yen=100, tax_rate_percent=10, occurred_at='2026-10-06T08:00:00+09:00',
+                evidence_reference='different source expense', source_key='late-expense-in-october')
+            db.commit()
 
     def test_staff_sends_and_only_member_can_complete_rehearsal(self):
         before = self.unaffected_tables()
@@ -213,12 +225,83 @@ class StagingInvoicePaymentTests(unittest.TestCase):
         pay = self.action_form('member', 'pay')
         self.assertTrue(pay)
         sent = self.rehearsal_rows()
-        with closing(self.connect()) as db:
-            BillingService(FinanceStore(Registry(db))).record_component(STAFF, CUSTOMER.user_id, fee_kind='expense',
-                amount_net_yen=100, tax_rate_percent=10, occurred_at='2026-10-06T08:00:00+09:00',
-                evidence_reference='different source expense', source_key='late-expense-in-october')
-            db.commit()
+        self.add_late_charge()
         self.assertEqual(self.post('member', 'pay', pay).status_code, 409)
         self.assertEqual(self.rehearsal_rows(), sent)
         self.assertIsNone(self.action_form('member', 'pay'))
         self.assertNotIn('href="' + INVOICE_PATH + '"', self.inbox('member'))
+
+    def test_staff_records_return_then_refund_without_changing_original_payment(self):
+        before = self.unaffected_tables()
+        csv_path = INVOICE_PATH + '/export.csv'
+        before_csv = self.clients['member'].get(csv_path)
+        self.assertEqual(before_csv.status_code, 200)
+        for action in ('return', 'refund'):
+            with self.subTest(unpaid_action=action):
+                self.assertIsNone(self.action_form('staff', action))
+                self.assertEqual(self.post('staff', action, self.signed_fields('staff', action)).status_code, 409)
+        self.assertEqual(self.rehearsal_rows(), [])
+        self.assertEqual(self.return_rows(), [])
+        self.assertEqual(self.post('staff', 'send', self.action_form('staff', 'send')).status_code, 302)
+        self.assertEqual(self.post('staff', 'return', self.signed_fields('staff', 'return')).status_code, 409)
+        self.assertEqual(self.post('member', 'pay', self.action_form('member', 'pay')).status_code, 302)
+        paid = self.rehearsal_rows()[0]
+        self.assertEqual(self.post('staff', 'refund', self.signed_fields('staff', 'refund')).status_code, 409)
+        self.assertIsNone(self.action_form('member', 'return'))
+        self.assertEqual(self.post('member', 'return', self.signed_fields('member', 'return')).status_code, 403)
+
+        return_form = self.action_form('staff', 'return')
+        self.assertTrue(return_form)
+        self.assertEqual(self.post('staff', 'return', return_form).status_code, 302)
+        returned = self.return_rows()[0]
+        self.assertEqual((returned['invoice_id'], returned['returned_by']), (DEMO_INVOICE_ID, STAFF.user_id))
+        self.assertEqual(self.rehearsal_rows(), [paid])
+        self.assertGreaterEqual(datetime.fromisoformat(returned['returned_at']), datetime.fromisoformat(paid['paid_at']))
+        self.assertIsNone(returned['refunded_at'])
+        self.assertEqual(self.post('staff', 'return', return_form).status_code, 302)
+        self.assertEqual(self.return_rows(), [returned])
+        self.assertIn('返品受付（検証）', self.inbox('member'))
+        self.assertIsNone(self.action_form('member', 'refund'))
+        for role in ('member', 'limited_staff'):
+            with self.subTest(unauthorized_refund=role):
+                self.assertEqual(self.post(role, 'refund', self.signed_fields(role, 'refund')).status_code, 403)
+
+        refund_form = self.action_form('staff', 'refund')
+        self.assertTrue(refund_form)
+        self.assertEqual(self.post('staff', 'refund', {**refund_form, 'amount_yen': '1'}).status_code, 302)
+        refunded = self.return_rows()[0]
+        self.assertEqual((refunded['returned_at'], refunded['refunded_by']), (returned['returned_at'], STAFF.user_id))
+        self.assertGreaterEqual(datetime.fromisoformat(refunded['refunded_at']), datetime.fromisoformat(returned['returned_at']))
+        self.assertEqual(self.post('staff', 'refund', refund_form).status_code, 302)
+        self.assertEqual(self.return_rows(), [refunded])
+        self.assertEqual(self.rehearsal_rows(), [paid])
+        member_inbox = self.inbox('member')
+        self.assertIn('返金済み（検証）', member_inbox)
+        self.assertIn('880円', member_inbox)
+        self.assertNotIn(INVOICE_PATH, self.inbox('other'))
+
+        for role in ('staff', 'member'):
+            with self.subTest(history_view=role):
+                page = self.clients[role].get(INVOICE_PATH)
+                self.assertEqual(page.status_code, 200)
+                body = re.sub(r'<[^>]+>', ' ', page.get_data(as_text=True))
+                for field, label in (('returned_at', '返品受付日時（日本時間）'), ('refunded_at', 'テスト返金日時（日本時間）')):
+                    local_time = datetime.fromisoformat(refunded[field]).astimezone(ZoneInfo('Asia/Tokyo'))
+                    self.assertRegex(body, re.escape(label) + r'[：:]?\s*' +
+                                     re.escape(local_time.strftime('%Y/%m/%d %H:%M')))
+        self.assertEqual(self.clients['member'].get(csv_path).data, before_csv.data)
+        self.assertEqual(self.unaffected_tables(), before)
+        self.notification_projection.assert_not_called()
+
+    def test_new_source_line_hides_notice_and_blocks_old_refund_form(self):
+        for role, action in (('staff', 'send'), ('member', 'pay'), ('staff', 'return')):
+            self.assertEqual(self.post(role, action, self.action_form(role, action)).status_code, 302)
+        refund = self.action_form('staff', 'refund')
+        self.assertTrue(refund)
+        paid, returned = self.rehearsal_rows(), self.return_rows()
+        self.add_late_charge()
+        self.assertEqual(self.post('staff', 'refund', refund).status_code, 409)
+        self.assertEqual(self.rehearsal_rows(), paid)
+        self.assertEqual(self.return_rows(), returned)
+        self.assertIsNone(self.action_form('staff', 'refund'))
+        self.assertNotIn(INVOICE_PATH, self.inbox('member'))
