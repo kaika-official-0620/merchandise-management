@@ -5,6 +5,7 @@ import io
 
 from item_registry import RegistryError, _now
 from stage3_billing import BillingService, invoice_totals, provisional_fee_preview
+from stage3_common import yen
 
 
 DEMO_INVOICE_ID = 'in3_dc0ab67a7a07451e82119e2d09092eae'
@@ -12,6 +13,7 @@ DEMO_AMOUNT_YEN = 880
 RESALE_INVOICE_ID = 'in3_13d28ed903074e4886b1e9ff7666fa43'
 RESALE_SALES_FEE_NET_YEN = 300
 RESALE_AMOUNT_YEN = 330
+RESALE_COST_FIELDS = ('purchase_cost_yen', 'shipping_cost_yen', 'channel_fee_yen')
 ACTIONS = ('send', 'pay', 'return', 'refund')
 
 
@@ -47,6 +49,14 @@ def migration_statements(dialect='postgres'):
         CHECK (sent_by <> customer_id),
         CHECK ((paid_by IS NULL) = (paid_at IS NULL)),
         CHECK (paid_by IS NULL OR paid_by = customer_id)
+    )''', '''CREATE TABLE IF NOT EXISTS staging_wallet_resale_test_costs (
+        invoice_id TEXT PRIMARY KEY NOT NULL REFERENCES staging_wallet_resale_payment_demo(invoice_id),
+        sale_event_id TEXT NOT NULL REFERENCES business_item_observations(observation_id),
+        purchase_cost_yen BIGINT NOT NULL CHECK (purchase_cost_yen BETWEEN 0 AND 9000000000000),
+        shipping_cost_yen BIGINT NOT NULL CHECK (shipping_cost_yen BETWEEN 0 AND 9000000000000),
+        channel_fee_yen BIGINT NOT NULL CHECK (channel_fee_yen BETWEEN 0 AND 9000000000000),
+        recorded_by INTEGER NOT NULL REFERENCES users(id),
+        recorded_at TEXT NOT NULL
     )''')
 
 
@@ -186,7 +196,12 @@ def describe_resale(store, month, actor, *, include_paid_history=False):
             'returned_at': None, 'refunded_at': None}
 
 
-def resale_reconciliation(month, demo):
+def _resale_costs(store):
+    rows = store.query('SELECT * FROM staging_wallet_resale_test_costs WHERE invoice_id=?', (RESALE_INVOICE_ID,))
+    return rows[0] if rows else None
+
+
+def resale_reconciliation(store, month, demo):
     if not demo or not demo.get('resale') or demo['status'] != 'paid':
         return None
     lines = month['snapshot']['lines']
@@ -200,10 +215,16 @@ def resale_reconciliation(month, demo):
 
     sale_gross = sale_facts[0]['sale_gross_yen']
     paid_fee = demo['amount_yen']
+    difference = sale_gross - paid_fee
+    saved = _resale_costs(store)
+    costs = None
+    if saved and saved['sale_event_id'] == sale_id:
+        costs = {field: saved[field] for field in RESALE_COST_FIELDS}
+        costs.update(remaining_yen=difference - sum(costs.values()), recorded_at=saved['recorded_at'])
     return {'invoice_id': month['invoice_id'], 'item_id': demo['fee_preview']['physical_item_id'],
             'title': demo['fee_preview']['title'], 'period': month['period'], 'sale_event_id': sale_id,
             'sale_gross_yen': sale_gross, 'paid_fee_yen': paid_fee,
-            'reference_difference_yen': sale_gross - paid_fee, 'paid_at': demo['paid_at']}
+            'reference_difference_yen': difference, 'paid_at': demo['paid_at'], 'costs': costs}
 
 
 def current_resale_reconciliation(store, actor, customer_id, *, item_id=None, profit=None):
@@ -212,26 +233,54 @@ def current_resale_reconciliation(store, actor, customer_id, *, item_id=None, pr
         return None
     month = BillingService(store).get_month(actor, RESALE_INVOICE_ID)
     demo = describe_resale(store, month, actor, include_paid_history=True)
-    result = resale_reconciliation(month, demo)
+    result = resale_reconciliation(store, month, demo)
     if not result or (item_id is not None and item_id != result['item_id']):
         return None
+    return result if _matches_current_resale(store, actor, customer_id, result, profit) else None
 
+
+def _matches_current_resale(store, actor, customer_id, result, profit=None):
     try:
         current = store.item(actor, result['item_id'])
     except RegistryError as exc:
         if exc.status in (403, 404):
-            return None
+            return False
         raise
     if current['owner_user_id'] != customer_id or current['sales_state'] != 'shipped':
-        return None
+        return False
     if profit is None:
         from stage3_profit import ProfitService
         profit = ProfitService(store).profit(actor, result['item_id'])
     facts = profit['facts']
-    if (profit['recognition'] == 'return_hold' or facts['sale_event_id'] != result['sale_event_id']
-            or facts['sale_gross_yen'] != result['sale_gross_yen']):
-        return None
-    return result
+    return (profit['recognition'] != 'return_hold' and facts['sale_event_id'] == result['sale_event_id']
+            and facts['sale_gross_yen'] == result['sale_gross_yen'])
+
+
+def record_resale_costs(store, actor, *, purchase_cost_yen, shipping_cost_yen, channel_fee_yen):
+    amounts = (yen(purchase_cost_yen), yen(shipping_cost_yen), yen(channel_fee_yen))
+    billing = BillingService(store)
+    draft = billing.get_month(actor, RESALE_INVOICE_ID)
+    customer_id = draft['customer_id']
+    store.authorize(actor, customer_id, write=True)
+    with store.atomic():
+        store.customer_lock(customer_id)
+        month = billing.get_month(actor, RESALE_INVOICE_ID)
+        result = resale_reconciliation(store, month, describe_resale(store, month, actor))
+        if result:
+            # Use the registry lock shared by sale / return writers.
+            store.registry._profile(actor, result['item_id'], lock=True)
+        if not result or not _matches_current_resale(store, actor, customer_id, result):
+            raise RegistryError('staging_resale_costs_unavailable',
+                                '支払い済みの再販売明細を開き直して確認してください。', 409)
+
+        saved = _resale_costs(store)
+        if saved:
+            if saved['sale_event_id'] != result['sale_event_id'] or tuple(saved[field] for field in RESALE_COST_FIELDS) != amounts:
+                raise RegistryError('staging_resale_costs_conflict', 'この検証明細には費用がすでに記録されています。', 409)
+            return
+        store.execute('''INSERT INTO staging_wallet_resale_test_costs
+            (invoice_id, sale_event_id, purchase_cost_yen, shipping_cost_yen, channel_fee_yen, recorded_by, recorded_at)
+            VALUES (?,?,?,?,?,?,?)''', (RESALE_INVOICE_ID, result['sale_event_id'], *amounts, actor.user_id, _now()))
 
 
 def append_resale_csv(content, reconciliation):
@@ -244,8 +293,17 @@ def append_resale_csv(content, reconciliation):
         (section, '売上（税込・円）', reconciliation['sale_gross_yen']),
         (section, 'テスト販売料（税込・円）', reconciliation['paid_fee_yen']),
         (section, '販売料だけを差し引いた参考額（円）', reconciliation['reference_difference_yen']),
-        (section, '最終的な手残り', '未確認'),
     ))
+    costs = reconciliation['costs']
+    if costs:
+        writer.writerows((
+            (section, '仕入原価（円）', costs['purchase_cost_yen']),
+            (section, '送料（円）', costs['shipping_cost_yen']),
+            (section, '販路手数料（円）', costs['channel_fee_yen']),
+            (section, '最終的な手残り（検証用・円）', costs['remaining_yen']),
+        ))
+    else:
+        writer.writerow((section, '最終的な手残り', '未確認'))
     return content + output.getvalue()
 
 

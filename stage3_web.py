@@ -305,12 +305,15 @@ def register_stage3_finance(runtime):
                     demo = describe_resale(store, month, actor, include_paid_history=True)
                 else:
                     demo = describe(store, month, include_refunded_history=True)
+            reconciliation = resale_reconciliation(store, month, demo)
         preview = demo['fee_preview'] if demo else None
         if preview is None and app.extensions.get('kaika_staging') is True:
             preview = provisional_fee_preview(month)
         return render_template('finance_review/invoice.html', month=month, staff=_staff(),
                                provisional_fee_preview=preview, demo_payment=demo,
-                               resale_reconciliation=resale_reconciliation(month, demo))
+                               resale_reconciliation=reconciliation,
+                               can_record_resale_costs=bool(_staff() and reconciliation and not reconciliation['costs']
+                                                            and month['is_current_snapshot']))
 
     @bp.post('/finance/months/<month_id>/test-payment/<action>')
     @allowed()
@@ -321,6 +324,19 @@ def register_stage3_finance(runtime):
         service.verify('finance_staging_demo_' + action, month_id)
         with service.db(write=True) as store:
             transition(store, service.actor(), month_id, action)
+        return redirect(url_for('finance_review.invoice', month_id=month_id))
+
+    @bp.post('/finance/months/<month_id>/test-costs')
+    @allowed(staff=True)
+    def staging_resale_costs(month_id):
+        from staging_invoice_payment import (RESALE_COST_FIELDS, RESALE_INVOICE_ID, enabled as staging_payment_enabled,
+                                             record_resale_costs)
+        if not staging_payment_enabled(app) or month_id != RESALE_INVOICE_ID:
+            abort(404)
+        service.verify('finance_staging_resale_costs', month_id)
+        amounts = {name: _amount(name) for name in RESALE_COST_FIELDS}
+        with service.db(write=True) as store:
+            record_resale_costs(store, service.actor(), **amounts)
         return redirect(url_for('finance_review.invoice', month_id=month_id))
 
     @bp.get('/finance/months/<month_id>/export.csv')
@@ -336,7 +352,7 @@ def register_stage3_finance(runtime):
             if staging_payment_enabled(app) and month_id == RESALE_INVOICE_ID:
                 month = billing.get_month(actor, month_id)
                 demo = describe_resale(store, month, actor, include_paid_history=True)
-                content = append_resale_csv(content, resale_reconciliation(month, demo))
+                content = append_resale_csv(content, resale_reconciliation(store, month, demo))
         return Response(content, content_type='text/csv; charset=utf-8', headers={
             'Content-Disposition':'attachment; filename="invoice-draft.csv"', 'Cache-Control':'no-store'})
 

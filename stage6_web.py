@@ -416,7 +416,7 @@ def register_stage6_web(runtime):
         # Persist an inbox after the business transaction commits, never send.
         # Re-scanning is idempotent, so a failed projection can recover on refresh.
         if (enabled() and current_user.is_authenticated and request.method == 'POST'
-                and request.endpoint != 'finance_review.staging_demo_payment'
+                and request.endpoint not in ('finance_review.staging_demo_payment', 'finance_review.staging_resale_costs')
                 and response.status_code < 400 and request.blueprint in
                 ('inventory_registry', 'finance_review', 'commerce', 'payment_review')):
             try:
