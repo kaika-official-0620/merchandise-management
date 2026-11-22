@@ -131,8 +131,10 @@ def register_stage3_finance(runtime):
     def item(item_id):
         from stage3_profit import ProfitService
         from stage3_billing import BillingService
-        from staging_invoice_payment import enabled as staging_payment_enabled, refunded_history
+        from staging_invoice_payment import (current_resale_reconciliation, enabled as staging_payment_enabled,
+                                             refunded_history)
         actor = service.actor()
+        staging = staging_payment_enabled(app)
         with service.db() as store:
             detail = store.item(actor, item_id)
             profit = ProfitService(store).profit(actor, item_id)
@@ -142,10 +144,12 @@ def register_stage3_finance(runtime):
             drafts = billing.list_item_drafts(actor, item_id)
             agreements = billing.list_agreements(actor, detail['owner_user_id'])
             refund_history = (refunded_history(store, actor, detail['owner_user_id'], item_id=item_id)
-                              if staging_payment_enabled(app) else None)
+                              if staging else None)
+            reconciliation = (current_resale_reconciliation(store, actor, detail['owner_user_id'],
+                                                             item_id=item_id, profit=profit) if staging else None)
         return render_template('finance_review/item.html', item=detail, profit=profit, facts=profit['facts'],
             history=history, preview=preview, drafts=drafts, agreements=agreements, staff=_staff(),
-            refunded_demo_history=refund_history)
+            refunded_demo_history=refund_history, resale_reconciliation=reconciliation)
 
     @bp.post('/finance/items/<item_id>/facts')
     @allowed(staff=True)
@@ -204,16 +208,21 @@ def register_stage3_finance(runtime):
     def customer(customer_id):
         from stage3_billing import BillingService
         from stage3_funds import FundsService
+        from staging_invoice_payment import current_resale_reconciliation, enabled as staging_payment_enabled
+        actor = service.actor()
         with service.db() as store:
-            store.authorize(service.actor(), customer_id)
+            store.authorize(actor, customer_id)
             billing, funds = BillingService(store), FundsService(store)
-            months = billing.list_months(service.actor(), customer_id)
-            agreements = billing.list_agreements(service.actor(), customer_id)
-            summaries = [funds.summary(service.actor(), customer_id, mode) for mode in ('record_only', 'test')]
-            records = {mode: funds.history(service.actor(), customer_id, mode) for mode in ('record_only','test')}
-            items = [x for x in store.registry.list_items(service.actor()) if x['owner_user_id'] == customer_id]
+            months = billing.list_months(actor, customer_id)
+            agreements = billing.list_agreements(actor, customer_id)
+            summaries = [funds.summary(actor, customer_id, mode) for mode in ('record_only', 'test')]
+            records = {mode: funds.history(actor, customer_id, mode) for mode in ('record_only','test')}
+            items = [x for x in store.registry.list_items(actor) if x['owner_user_id'] == customer_id]
+            reconciliation = (current_resale_reconciliation(store, actor, customer_id)
+                              if staging_payment_enabled(app) else None)
         return render_template('finance_review/customer.html', customer_id=customer_id, months=months,
-            summaries=summaries, records=records, items=items, agreements=agreements, staff=_staff())
+            summaries=summaries, records=records, items=items, agreements=agreements, staff=_staff(),
+            resale_reconciliation=reconciliation)
 
     @bp.post('/finance/customers/<int:customer_id>/month')
     @allowed(staff=True)
@@ -286,7 +295,7 @@ def register_stage3_finance(runtime):
     def invoice(month_id):
         from stage3_billing import BillingService, provisional_fee_preview
         from staging_invoice_payment import (RESALE_INVOICE_ID, describe, describe_resale,
-                                             enabled as staging_payment_enabled)
+                                             enabled as staging_payment_enabled, resale_reconciliation)
         actor = service.actor()
         demo = None
         with service.db() as store:
@@ -300,7 +309,8 @@ def register_stage3_finance(runtime):
         if preview is None and app.extensions.get('kaika_staging') is True:
             preview = provisional_fee_preview(month)
         return render_template('finance_review/invoice.html', month=month, staff=_staff(),
-                               provisional_fee_preview=preview, demo_payment=demo)
+                               provisional_fee_preview=preview, demo_payment=demo,
+                               resale_reconciliation=resale_reconciliation(month, demo))
 
     @bp.post('/finance/months/<month_id>/test-payment/<action>')
     @allowed()
@@ -317,8 +327,16 @@ def register_stage3_finance(runtime):
     @allowed()
     def export(month_id):
         from stage3_billing import BillingService
+        from staging_invoice_payment import (RESALE_INVOICE_ID, append_resale_csv, describe_resale,
+                                             enabled as staging_payment_enabled, resale_reconciliation)
+        actor = service.actor()
         with service.db() as store:
-            content = BillingService(store).csv_month(service.actor(), month_id)
+            billing = BillingService(store)
+            content = billing.csv_month(actor, month_id)
+            if staging_payment_enabled(app) and month_id == RESALE_INVOICE_ID:
+                month = billing.get_month(actor, month_id)
+                demo = describe_resale(store, month, actor, include_paid_history=True)
+                content = append_resale_csv(content, resale_reconciliation(month, demo))
         return Response(content, content_type='text/csv; charset=utf-8', headers={
             'Content-Disposition':'attachment; filename="invoice-draft.csv"', 'Cache-Control':'no-store'})
 

@@ -1,5 +1,8 @@
 """Persist two separate wallet payment rehearsals on the dedicated staging site."""
 
+import csv
+import io
+
 from item_registry import RegistryError, _now
 from stage3_billing import BillingService, invoice_totals, provisional_fee_preview
 
@@ -181,6 +184,69 @@ def describe_resale(store, month, actor, *, include_paid_history=False):
             'historical': historical, 'fee_preview': preview,
             'sent_at': record['sent_at'] if record else None, 'paid_at': paid_at,
             'returned_at': None, 'refunded_at': None}
+
+
+def resale_reconciliation(month, demo):
+    if not demo or not demo.get('resale') or demo['status'] != 'paid':
+        return None
+    lines = month['snapshot']['lines']
+    sale_ids = {line['snapshot'].get('sale_event_id') for line in lines}
+    if len(sale_ids) != 1 or None in sale_ids:
+        return None
+    sale_id = next(iter(sale_ids))
+    sale_facts = [line['snapshot']['sale_fact_snapshot'] for line in lines]
+    if any(facts.get('sale_event_id') != sale_id for facts in sale_facts):
+        return None
+
+    sale_gross = sale_facts[0]['sale_gross_yen']
+    paid_fee = demo['amount_yen']
+    return {'invoice_id': month['invoice_id'], 'item_id': demo['fee_preview']['physical_item_id'],
+            'title': demo['fee_preview']['title'], 'period': month['period'], 'sale_event_id': sale_id,
+            'sale_gross_yen': sale_gross, 'paid_fee_yen': paid_fee,
+            'reference_difference_yen': sale_gross - paid_fee, 'paid_at': demo['paid_at']}
+
+
+def current_resale_reconciliation(store, actor, customer_id, *, item_id=None, profit=None):
+    record = _saved_resale(store, customer_id)
+    if not record or not record['paid_at']:
+        return None
+    month = BillingService(store).get_month(actor, RESALE_INVOICE_ID)
+    demo = describe_resale(store, month, actor, include_paid_history=True)
+    result = resale_reconciliation(month, demo)
+    if not result or (item_id is not None and item_id != result['item_id']):
+        return None
+
+    try:
+        current = store.item(actor, result['item_id'])
+    except RegistryError as exc:
+        if exc.status in (403, 404):
+            return None
+        raise
+    if current['owner_user_id'] != customer_id or current['sales_state'] != 'shipped':
+        return None
+    if profit is None:
+        from stage3_profit import ProfitService
+        profit = ProfitService(store).profit(actor, result['item_id'])
+    facts = profit['facts']
+    if (profit['recognition'] == 'return_hold' or facts['sale_event_id'] != result['sale_event_id']
+            or facts['sale_gross_yen'] != result['sale_gross_yen']):
+        return None
+    return result
+
+
+def append_resale_csv(content, reconciliation):
+    if not reconciliation:
+        return content
+    output = io.StringIO(newline='')
+    writer = csv.writer(output)
+    section = '検証集計（再販売分）'
+    writer.writerows((
+        (section, '売上（税込・円）', reconciliation['sale_gross_yen']),
+        (section, 'テスト販売料（税込・円）', reconciliation['paid_fee_yen']),
+        (section, '販売料だけを差し引いた参考額（円）', reconciliation['reference_difference_yen']),
+        (section, '最終的な手残り', '未確認'),
+    ))
+    return content + output.getvalue()
 
 
 def supports_action(invoice_id, action):
