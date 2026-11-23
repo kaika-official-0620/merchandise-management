@@ -1178,10 +1178,6 @@
             edgeTrigger.addEventListener('click', openFromEdge);
             edgeTrigger.addEventListener('touchstart', openFromEdge, { passive: false });
 
-            document.addEventListener('click', function(event) {
-                openFromEdge(event);
-            }, true);
-
             document.addEventListener('mousemove', function(event) {
                 if (!window.matchMedia('(hover: hover)').matches) {
                     return;
