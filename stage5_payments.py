@@ -400,11 +400,13 @@ class PhysicalPaymentService:
         return request
 
     def _dispatch(self, actor, identifier, kind, source_key):
-        adapter = self._adapter()
         table, key = ('stage5_payment_attempts', 'attempt_id') if kind == 'payment' else ('stage5_payment_refunds', 'refund_id')
         row = self._row(actor, table, identifier, key)
         if kind == 'payment':
             self._require_payment_initiator(actor, row['customer_id'], bool(row['off_session']))
+            if self._replaced_before_dispatch(identifier):
+                return self.get_attempt(actor, identifier)
+        adapter = self._adapter()
         def mark():
             state = self._state(kind, identifier)['state']
             if state != 'prepared':
@@ -431,6 +433,11 @@ class PhysicalPaymentService:
                     lambda: self._unknown(kind, identifier), staff=kind == 'refund' or bool(row['off_session']))
                 return self.get_attempt(actor, identifier) if kind == 'payment' else self.get_refund(actor, identifier)
         return self._reconcile(actor, identifier, kind, source_key + ':retrieve')
+
+    def _replaced_before_dispatch(self, attempt_id):
+        state = self._state('payment', attempt_id)
+        return (state['state'] == 'canceled' and state['provider_revision'] is None
+                and json.loads(state['snapshot_json']).get('reason') == 'bill_replaced_before_dispatch')
 
     def _unknown(self, kind, identifier):
         if self._state(kind, identifier)['state'] == 'processing':
@@ -460,10 +467,12 @@ class PhysicalPaymentService:
         return deepcopy(snapshot.__dict__)
 
     def _reconcile(self, actor, identifier, kind, source_key):
-        adapter = self._adapter()
         table, key = ('stage5_payment_attempts', 'attempt_id') if kind == 'payment' else ('stage5_payment_refunds', 'refund_id')
         row = self._row(actor, table, identifier, key)
         self.store.authorize(actor, row['customer_id'], staff_required=kind == 'refund' or bool(row['off_session']), finance=True)
+        if kind == 'payment' and self._replaced_before_dispatch(identifier):
+            return self.get_attempt(actor, identifier)
+        adapter = self._adapter()
         retrieved = adapter.retrieve(row['provider_idempotency_key'])
         if retrieved is None:
             raise RegistryError('payment_outcome_unknown_reconcile_required', status=409)
