@@ -2,6 +2,7 @@
 {% block title %}{{ item.product_name|clean_display('商品名未登録') }} - 株式会社 開花{% endblock %}
 
 {% block content %}
+{% set visible_photos, can_save_photo_zip = security_item_gallery(item) if security_item_gallery is defined else ([], false) %}
 {% set detail_is_user_product = (item.scope == 'user') or not (current_user.is_admin() or current_user.is_owner()) or ((item.wholesale_price or 0) and item.user_id and item.user_id != current_user.id) %}
 {% set detail_purchase_price = (item.wholesale_price or item.purchase_price or 0) if detail_is_user_product else (item.display_purchase_price or item.purchase_price or 0) %}
 {% set detail_sale_price = item.display_sale_price or item.sale_price or 0 %}
@@ -501,6 +502,12 @@
     margin: 0;
 }
 
+.product-title-wrapper h2,
+.view-details .detail-list dd {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
 /* コピー成功トースト */
 .copy-toast {
     position: fixed;
@@ -536,6 +543,7 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
+    min-height: 44px;
     padding: 8px 16px;
     background: #f8fafc;
     border: 1px solid #e2e8f0;
@@ -1115,29 +1123,29 @@
 
 <div class="view-container">
     <div class="view-image">
-        {% if item.all_photos and item.all_photos|length > 0 %}
+        {% if visible_photos %}
         <div class="gallery-container">
             <div class="main-photo-scroll">
                 <div class="main-photo-scroll-container" id="mainPhotoScrollContainer">
-                    {% for photo in item.all_photos %}
+                    {% for photo in visible_photos %}
                     <div class="main-photo-slide" onclick="openLightbox({{ loop.index0 }})">
                         <img src="{{ url_for('static', filename=photo) }}" alt="{{ item.product_name|clean_display('商品名未登録') }}">
                     </div>
                     {% endfor %}
                 </div>
-                {% if item.all_photos|length > 1 %}
-                <span class="photo-counter" id="photoCounter">1 / {{ item.all_photos|length }}</span>
+                {% if visible_photos|length > 1 %}
+                <span class="photo-counter" id="photoCounter">1 / {{ visible_photos|length }}</span>
                 {% endif %}
             </div>
             <div class="image-download-buttons">
-                <button class="download-btn" onclick="downloadCurrentImage(event)">この画像を保存</button>
-                {% if item.all_photos|length > 1 %}
-                <button class="download-btn" onclick="downloadAllImages(event)">すべて保存 ({{ item.all_photos|length }}枚)</button>
+                <button type="button" class="download-btn" onclick="downloadCurrentImage(event)">この写真を保存</button>
+                {% if can_save_photo_zip %}
+                <button type="button" class="download-btn" onclick="downloadAllImages(event)">写真をZIPでまとめて保存（{{ visible_photos|length }}枚）</button>
                 {% endif %}
             </div>
-            {% if item.all_photos|length > 1 %}
+            {% if visible_photos|length > 1 %}
             <div class="thumbnail-strip">
-                {% for photo in item.all_photos %}
+                {% for photo in visible_photos %}
                 <div class="thumbnail-item {% if loop.first %}active{% endif %}" onclick="scrollToPhoto({{ loop.index0 }})">
                     <img src="{{ url_for('static', filename=photo) }}" alt="写真{{ loop.index }}">
                 </div>
@@ -1146,7 +1154,7 @@
             {% endif %}
         </div>
         {% else %}
-        <div class="no-image-large">写真なし</div>
+        <div class="no-image-large">表示できる写真はありません</div>
         {% endif %}
     </div>
     
@@ -1341,29 +1349,29 @@
 </div>
 
 <!-- ライトボックス -->
-{% if item.all_photos and item.all_photos|length > 0 %}
+{% if visible_photos %}
 <div class="lightbox" id="lightbox" onclick="closeLightboxOnBackground(event)">
     <button class="lightbox-close" onclick="closeLightbox()">×</button>
-    {% if item.all_photos|length > 1 %}
+    {% if visible_photos|length > 1 %}
     <button class="lightbox-nav lightbox-prev" onclick="lightboxPrev()">‹</button>
     <button class="lightbox-nav lightbox-next" onclick="lightboxNext()">›</button>
     {% endif %}
     <div class="lightbox-content">
         <div class="lightbox-scroll-container" id="lightboxScrollContainer">
-            {% for photo in item.all_photos %}
+            {% for photo in visible_photos %}
             <div class="lightbox-slide">
                 <img src="{{ url_for('static', filename=photo) }}" alt="{{ item.product_name|clean_display('商品名未登録') }}">
             </div>
             {% endfor %}
         </div>
     </div>
-    {% if item.all_photos|length > 1 %}
+    {% if visible_photos|length > 1 %}
     <div class="lightbox-counter" id="lightboxCounter"></div>
     {% endif %}
 </div>
 
 <script>
-const photos = {{ item.all_photos | tojson }};
+const photos = {{ visible_photos | tojson }};
 let currentPhotoIndex = 0;
 
 // メイン画像のスクロールコンテナ
@@ -1953,39 +1961,51 @@ function showCopyFeedback(button) {
     }, 1500);
 }
 
-// 画像ダウンロード用の写真配列（ライトボックスがない場合用）
-{% if item.all_photos and item.all_photos|length > 0 %}
-const downloadPhotos = {{ item.all_photos | tojson }};
-let downloadCurrentIndex = 0;
+{% if visible_photos %}
+function downloadCurrentImage(event) {
+    const button = event.currentTarget;
+    const image = mainPhotoScrollContainer.querySelectorAll('img')[currentPhotoIndex];
+    const filename = photos[currentPhotoIndex].split('/').pop();
+    const originalText = button.textContent;
+    button.disabled = true;
+    button.classList.add('downloading');
+    button.textContent = '準備中…';
 
-// 現在の画像インデックスを更新（ライトボックスがある場合はそちらを使用）
-function updateDownloadIndex(index) {
-    downloadCurrentIndex = index;
+    fetch(image.src)
+        .then(response => {
+            const mediaType = (response.headers.get('Content-Type') || '').toLowerCase();
+            if (!response.ok || !mediaType.startsWith('image/')) {
+                throw new Error('The photo is unavailable');
+            }
+            return response.blob();
+        })
+        .then(blob => {
+            const objectUrl = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = objectUrl;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+            button.textContent = 'ダウンロードを開始しました';
+        })
+        .catch(() => {
+            button.textContent = '写真を取得できませんでした';
+        })
+        .finally(() => {
+            button.classList.remove('downloading');
+            setTimeout(() => {
+                button.textContent = originalText;
+                button.disabled = false;
+            }, 2000);
+        });
 }
 {% endif %}
 
-// 現在表示中の画像をダウンロード
-function downloadCurrentImage(event) {
-    event.stopPropagation();
-    const button = event.target;
-    button.classList.add('downloading');
-    button.textContent = 'ダウンロード中...';
-    
-    {% if item.all_photos and item.all_photos|length > 0 %}
-    // currentPhotoIndexはライトボックス用の変数（存在すれば使用）
-    const index = typeof currentPhotoIndex !== 'undefined' ? currentPhotoIndex : downloadCurrentIndex;
-    const photoPath = downloadPhotos[index];
-    const filename = photoPath.split('/').pop();
-    
-    downloadImage('{{ url_for("static", filename="") }}' + photoPath, filename, button);
-    {% endif %}
-}
-
-// すべての画像をダウンロード
-// すべての画像をダウンロード（サーバーでZIP圧縮してダウンロード）
+{% if can_save_photo_zip %}
 function downloadAllImages(event) {
-    event.stopPropagation();
-    const button = event.target;
+    const button = event.currentTarget;
     const originalText = button.textContent;
     
     // ボタンを一時的に無効化
@@ -2008,38 +2028,6 @@ function downloadAllImages(event) {
         button.textContent = originalText;
     }, 3000);
 }
-
-// 画像をダウンロードする共通関数
-function downloadImage(url, filename, button) {
-    fetch(url)
-        .then(response => response.blob())
-        .then(blob => {
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = filename;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(link.href);
-            
-            if (button) {
-                button.classList.remove('downloading');
-                button.textContent = '保存完了！';
-                setTimeout(() => {
-                    button.textContent = 'この画像を保存';
-                }, 2000);
-            }
-        })
-        .catch(error => {
-            console.error('Download error:', error);
-            if (button) {
-                button.classList.remove('downloading');
-                button.textContent = 'エラー';
-                setTimeout(() => {
-                    button.textContent = 'この画像を保存';
-                }, 2000);
-            }
-        });
-}
+{% endif %}
 </script>
 {% endblock %}
