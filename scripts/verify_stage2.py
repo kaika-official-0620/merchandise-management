@@ -170,6 +170,36 @@ def run(module, users, preview):
     check('receipt preserves physical identity and records actual receipt', bool(profile and profile['received_at']) and
           profile['physical_state'] == 'received' and
           row('SELECT physical_item_id FROM business_item_links WHERE merchandise_id=?', (legacy['id'],))['physical_item_id'] == item_id)
+
+    legacy_page = '/view/' + str(legacy['id'])
+    listing_page = '/commerce/items/' + item_id + '/listing'
+    no_commerce = request('owner', intake_path)
+    check('completed intake links to its physical item even with commerce disabled',
+          no_commerce.status_code == 200 and f'href="{detail}"' in no_commerce.get_data(as_text=True)
+          and listing_page not in no_commerce.get_data(as_text=True))
+
+    # Turn on the local commerce fixture for the customer-facing flow and
+    # follow the newly available links with the same logged-in customers.
+    app.config.update(STAGE3_FINANCE_ENABLED=True, STAGE4_COMMERCE_ENABLED=True)
+    completed = request('owner', intake_path)
+    completed_page = completed.get_data(as_text=True)
+    check('completed intake links directly to the current item and its listing approvals',
+          completed.status_code == 200 and f'href="{detail}"' in completed_page and
+          f'href="{listing_page}"' in completed_page and f'href="{legacy_page}"' not in completed_page)
+    old_detail = request('owner', legacy_page)
+    old_body = old_detail.get_data(as_text=True)
+    check('legacy detail keeps the same product and offers only the current operations',
+          old_detail.status_code == 200 and name in old_body and f'href="{detail}"' in old_body and
+          f'href="{listing_page}"' in old_body and 'data-action="create-shipping"' not in old_body and
+          'class="sales-agency-detail-form"' not in old_body and '開花で保管・管理' in old_body)
+    check('customer can follow both new links', request('owner', detail).status_code == 200 and
+          request('owner', listing_page).status_code == 200)
+    for path in (intake_path, legacy_page, detail, listing_page):
+        denied = request('other', path)
+        denied_body = denied.get_data(as_text=True)
+        check('another customer cannot follow ' + path, denied.status_code in (302, 403, 404) and
+              name not in denied_body and f'href="{detail}"' not in denied_body and f'href="{listing_page}"' not in denied_body)
+
     # The pre-existing custody guard intentionally refuses the legacy staff
     # editor while an item is at the customer's home. Once received, its GET
     # still works; only unsynchronized writes are held by the stage-2 guard.
@@ -228,6 +258,17 @@ def run(module, users, preview):
         response = request('staff', event_path, 'POST', {**tokens, 'kind': kind,
             'occurred_at': datetime.now(timezone.utc).isoformat(), 'note': '架空試験・顧客への返送確認:' + kind})
         check('staff records synchronized ' + kind, response.status_code == 302)
+        if kind == 'return_shipped':
+            for page in (legacy_page, detail, intake_path):
+                returning = request('owner', page)
+                returning_body = returning.get_data(as_text=True)
+                check('return-in-transit label matches the same item on ' + page,
+                      returning.status_code == 200 and 'お客様へ返送中' in returning_body and
+                      '開花で保管・管理' not in returning_body and 'data-action="create-shipping"' not in returning_body)
+            check('returned-in-transit item is absent from intake and legacy listing actions',
+                  all(f'href="{listing_page}"' not in request('owner', path).get_data(as_text=True)
+                      for path in (intake_path, legacy_page)))
+    app.config.update(STAGE3_FINANCE_ENABLED=False, STAGE4_COMMERCE_ENABLED=False)
     returned = row('SELECT custody_location FROM merchandise WHERE id=?', (legacy['id'],))
     profile = row('SELECT physical_state FROM business_item_profiles WHERE physical_item_id=?', (item_id,))
     check('return receipt restores self custody on the same physical item',
@@ -363,7 +404,10 @@ def main():
             loaded = importlib.import_module('render_app')
             users = sandbox.seed_preview(loaded.module, preview)
             from stage2_migration import prepare_stage2_fixture
-            prepare_stage2_fixture(loaded.module, allowed_test_path=preview / 'preview.sqlite3')
+            from stage3_migration import prepare_stage3_fixture
+            from stage4_migration import prepare_stage4_fixture
+            for migrate in (prepare_stage2_fixture, prepare_stage3_fixture, prepare_stage4_fixture):
+                migrate(loaded.module, allowed_test_path=preview / 'preview.sqlite3')
             loaded.module.app.config.update(STAGE2_INVENTORY_ENABLED=True, STAGE2_FREE_LIMIT_PROPOSAL_ENABLED=True)
             sandbox.install_preview_routes(loaded.module, preview, users, 18781)
             report = run(loaded.module, users, preview)

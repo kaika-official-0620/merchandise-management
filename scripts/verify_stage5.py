@@ -42,7 +42,7 @@ class Forms(HTMLParser):
         return next((dict(form['fields']) for form in self.forms if urlsplit(form['action']).path == action), {})
 
 
-def seed_invoices(module, customer_id, staff_id):
+def seed_invoices(module, customer_id, staff_id, periods=None):
     from item_registry import Actor, Registry, _json
     from stage3_common import FinanceStore
     from stage3_billing import BillingService, _catalog
@@ -56,7 +56,9 @@ def seed_invoices(module, customer_id, staff_id):
         store = FinanceStore(registry)
         billing, profit = BillingService(store), ProfitService(store)
         invoices = {}
-        for month, name, approved in ((9, 'unapproved', False), (10, 'customer_payment', True), (11, 'automatic_payment', True)):
+        if periods is None:
+            periods = ((9, 'unapproved', False), (10, 'customer_payment', True), (11, 'automatic_payment', True))
+        for month, name, approved in periods:
             def at(day):
                 return f'2026-{month:02d}-{day:02d}T00:00:00+09:00'
             evidence = dict(contract_version_id='fictional-contract-' + name, fee_version_id='fictional-fee-' + name,
@@ -264,6 +266,24 @@ def run(module, users):
         post('staff can reconcile existing customer payment', 'staff', attempt_path, attempt_path + '/reconcile')
         post('paid bill prevents second payment intent', 'customer', bill_path, bill_path, {'consent_id': consent['consent_id']}, expected=409)
         check('one external test payment after retry', adapter.create_calls == 1)
+
+        paid_revision = seed_invoices(module, owner, users['admin']['id'], ((10, 'paid_revision', True),))['paid_revision']
+        paid_revision_path = '/payments/invoices/' + paid_revision
+        paid_revision_page = http('staff', paid_revision_path)
+        check('newer draft cannot replace a bill with confirmed payment',
+              paid_revision_page.status_code == 200 and not Forms(paid_revision_page).fields(paid_revision_path) and
+              f'href="{bill_path}"' in paid_revision_page.get_data(as_text=True))
+        with clients['staff']:
+            clients['staff'].get(paid_revision_path, base_url='http://127.0.0.1:18785')
+            service = app.extensions['stage5_payments']
+            paid_replace = {'registry_csrf': service.csrf(),
+                'operation_token': service.operation('stage5_replace', paid_revision + ':' + invoices['customer_payment']),
+                'previous_invoice_id': invoices['customer_payment'], 'review_reference': 'fixture-paid-correction'}
+        check('signed replacement of an already paid bill is rejected',
+              http('staff', paid_revision_path, paid_replace).status_code == 409 and
+              not rows('SELECT invoice_id FROM stage5_physical_bill_revisions WHERE bill_id=?', (bill['bill_id'],)) and
+              adapter.create_calls == 1)
+
         check('customer cannot refund', http('customer', attempt_path + '/refund', {}).status_code == 403)
         _, refund_form = post('staff requests partial test refund', 'staff', attempt_path, attempt_path + '/refund', {'amount_yen': '500', 'reason': 'fixture-partial'})
         refund = rows('SELECT * FROM stage5_payment_refunds')[0]
@@ -314,6 +334,67 @@ def run(module, users):
         post('customer revokes future automatic payment consent', 'customer', '/payments', '/payments/consents/' + automatic['consent_id'] + '/revoke', {'reason': 'fixture-revoked'})
         post('revocation blocks prepared automatic payment dispatch', 'staff', third_attempt_path, third_attempt_path + '/dispatch', expected=409)
         check('provider created no charge after revocation', adapter.create_calls == 4)
+
+        original_invoice = seed_invoices(module, owner, users['admin']['id'], ((8, 'correctable', True),))['correctable']
+        original_invoice_path = '/payments/invoices/' + original_invoice
+        response, _ = post('unpaid bill prepared from first approved snapshot', 'staff',
+            original_invoice_path, original_invoice_path, {'review_reference': 'fixture-unpaid'})
+        correction_bill_path = urlsplit(response.location).path
+        original_bill = rows('SELECT * FROM stage5_physical_bills WHERE invoice_id=?', (original_invoice,))[0]
+        stale_attempt_form = form('customer', correction_bill_path, correction_bill_path)
+        check('unpaid correction fixture has no payment attempt and signs original invoice',
+              stale_attempt_form.get('invoice_id') == original_invoice and original_bill['amount_yen'] == 1155 and
+              not rows('SELECT attempt_id FROM stage5_payment_attempts WHERE bill_id=?', (original_bill['bill_id'],)))
+
+        revised_invoice = seed_invoices(module, owner, users['admin']['id'], ((8, 'additional_shipment', True),))['additional_shipment']
+        revised_path = '/payments/invoices/' + revised_invoice
+        replacement_fields = form('staff', revised_path, revised_path)
+        check('staff replacement form signs the revision and links the current bill',
+              replacement_fields.get('previous_invoice_id') == original_invoice and
+              f'href="{correction_bill_path}"' in http('staff', revised_path).get_data(as_text=True))
+        replacement = {**replacement_fields, 'review_reference': 'fixture-add-late-shipment'}
+        check('customer cannot submit the replacement even with staff fields',
+              http('customer', revised_path, replacement).status_code == 403 and
+              not Forms(http('customer', revised_path)).fields(revised_path))
+        check('changing the previous invoice on the signed form is rejected',
+              http('staff', revised_path, {**replacement, 'previous_invoice_id': invoices['automatic_payment']}).status_code == 400)
+        result = http('staff', revised_path, replacement)
+        check('replacement returns to the same physical bill',
+              result.status_code == 302 and urlsplit(result.location).path == correction_bill_path)
+        replay = http('staff', revised_path, replacement)
+        check('replacement replay remains on the same bill',
+              replay.status_code == 302 and urlsplit(replay.location).path == correction_bill_path)
+        revisions = rows('SELECT * FROM stage5_physical_bill_revisions WHERE bill_id=?', (original_bill['bill_id'],))
+        check('exactly one immutable correction is recorded for the same physical bill',
+              len(revisions) == 1 and revisions[0]['invoice_id'] == revised_invoice and
+              revisions[0]['previous_invoice_id'] == original_invoice and revisions[0]['source_revision'] == 2 and
+              revisions[0]['amount_yen'] == 2310 and
+              rows('SELECT * FROM stage5_physical_bills WHERE customer_id=? AND period=?', (owner, '2026-08')) == [original_bill])
+
+        history_path = '/finance/months/' + original_invoice
+        latest_page = http('customer', correction_bill_path)
+        latest_body = latest_page.get_data(as_text=True)
+        check('member sees corrected total with link to old amount and snapshot',
+              latest_page.status_code == 200 and '2,310円' in latest_body and
+              f'href="{history_path}">差し替え済みの明細 1,155円' in latest_body and
+              Forms(latest_page).fields(correction_bill_path).get('invoice_id') == revised_invoice)
+        history_page = http('customer', history_path)
+        check('member can open the original saved detail and other customers cannot',
+              history_page.status_code == 200 and '2026-08 請求下書き・第1版' in history_page.get_data(as_text=True) and
+              http('other', history_path).status_code in (403, 404) and http('other', correction_bill_path).status_code == 403)
+        check('old member payment form receives a conflict and creates no attempt',
+              http('customer', correction_bill_path, {**stale_attempt_form, 'consent_id': consent['consent_id']}).status_code == 409 and
+              not rows('SELECT attempt_id FROM stage5_payment_attempts WHERE bill_id=?', (original_bill['bill_id'],)))
+
+        response, attempt_form = post('member can prepare the corrected test amount', 'customer',
+            correction_bill_path, correction_bill_path, {'consent_id': consent['consent_id'], 'amount_yen': '1'})
+        check('corrected payment preparation replay is idempotent',
+              http('customer', correction_bill_path, attempt_form).location == response.location)
+        corrected_attempts = rows('SELECT * FROM stage5_payment_attempts WHERE bill_id=?', (original_bill['bill_id'],))
+        check('prepared amount comes from the correction and the provider has not been called',
+              len(corrected_attempts) == 1 and corrected_attempts[0]['amount_yen'] == 2310 and
+              state('stage5_payment_events', 'attempt_id', corrected_attempts[0]['attempt_id']) == 'prepared' and adapter.create_calls == 4)
+
         check('legacy invoices funds and digital entitlements unchanged', baseline() == before)
         check('all physical rows remain test mode', all(row['execution_mode'] == 'test' for row in rows('SELECT execution_mode FROM stage5_physical_bills')))
         check('scheduler and Stripe disabled', not module.STRIPE_ENABLED and not module.SCHEDULER_ENABLED)
@@ -323,7 +404,8 @@ def run(module, users):
         return dict(scope='Copied render_app with isolated fictional SQLite, authenticated forms, offline MemoryTestPSP only',
             checks=checks, requests=requests, passed=sum(row['pass'] for row in checks), failed=sum(not row['pass'] for row in checks),
             server_errors=sum(row['status'] >= 500 for row in requests),
-            fixture_only=['two explicitly seeded approved agreements and one unapproved agreement', 'offline test PSP authentication/failure/refund transitions'],
+            fixture_only=['approved and unapproved agreements plus additional shipments for invoice revisions',
+                'offline test PSP authentication/failure/refund transitions'],
             not_verified=['real PSP sandbox', 'live charges', 'store purchases and notifications', 'PostgreSQL concurrency', 'native devices', 'real customer consent'])
     except Exception as exc:
         return dict(scope='isolated Stage5 HTTP integration', checks=checks, requests=requests,
