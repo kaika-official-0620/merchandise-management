@@ -166,6 +166,10 @@ class StagingInvoicePaymentTests(unittest.TestCase):
         with closing(self.connect()) as db:
             return [dict(row) for row in db.execute('SELECT * FROM staging_wallet_resale_receipt_demo')]
 
+    def resale_settlement_rows(self):
+        with closing(self.connect()) as db:
+            return [dict(row) for row in db.execute('SELECT * FROM staging_wallet_resale_settlement_demo')]
+
     def confirm_resale_receipt(self, page_path, invoice_id, costs):
         target = page_path + '/test-sale-receipt'
         purpose = 'finance_staging_resale_receipt'
@@ -211,6 +215,51 @@ class StagingInvoicePaymentTests(unittest.TestCase):
                     self.assertIn(value, text)
                 self.assertNotIn('入金確認待ち（検証）', text)
         return receipt, form
+
+    def record_resale_settlement(self, page_path, invoice_id, receipt, receipt_form):
+        target = page_path + '/test-settlement'
+        purpose = 'finance_staging_resale_settlement'
+        for role in ('member', 'other', 'limited_staff'):
+            with self.subTest(unauthorized_resale_settlement=role):
+                fields = self.signed_fields(role, 'settlement', invoice_id, purpose=purpose)
+                self.assertEqual(self.clients[role].post(target, data=fields).status_code, 403)
+        with patch.dict(self.app.extensions, {'kaika_staging': False}):
+            self.assertIsNone(self.form('staff', page_path, target))
+            fields = self.signed_fields('staff', 'settlement', invoice_id, purpose=purpose)
+            self.assertEqual(self.clients['staff'].post(target, data=fields).status_code, 404)
+
+        self.assertIsNone(self.form('member', page_path, target))
+        form = self.form('staff', page_path, target, submit_label='テスト精算を記録する')
+        self.assertTrue(form)
+        self.assertEqual(self.clients['staff'].post(target, data={}).status_code, 400)
+        self.assertEqual(self.resale_settlement_rows(), [])
+        response = self.clients['staff'].post(target, data=form)
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.location.endswith(page_path + '#resale-receipt'))
+        settlement = self.resale_settlement_rows()[0]
+        self.assertEqual((settlement['invoice_id'], settlement['sale_event_id']), (invoice_id, receipt['sale_event_id']))
+        self.assertEqual(settlement['amount_yen'], receipt['planned_settlement_yen'])
+        self.assertEqual(settlement['settled_by'], STAFF.user_id)
+        when = datetime.fromisoformat(settlement['settled_at'])
+        self.assertGreaterEqual(when, datetime.fromisoformat(receipt['confirmed_at']))
+        self.assertEqual(self.clients['staff'].post(target, data=form).status_code, 302)
+        self.assertEqual(self.clients['staff'].post(page_path + '/test-sale-receipt',
+            data={**receipt_form, 'registry_csrf': form['registry_csrf']}).status_code, 302)
+        self.assertEqual(self.resale_settlement_rows(), [settlement])
+        self.assertEqual(self.resale_receipt_rows(), [receipt])
+        for role in ('staff', 'member'):
+            with self.subTest(settled_resale_view=role):
+                response = self.clients[role].get(page_path)
+                self.assertEqual(response.status_code, 200)
+                text = response.get_data(as_text=True)
+                for value in ('精算済み（検証）', 'テスト精算額', '7,200円', '2,670円'):
+                    self.assertIn(value, text)
+                local_time = when.astimezone(ZoneInfo('Asia/Tokyo')).strftime('%Y/%m/%d %H:%M')
+                self.assertRegex(text, r'精算日時（日本時間）\s*<time datetime="' + re.escape(settlement['settled_at'])
+                                 + r'">\s*' + re.escape(local_time) + r'\s*</time>')
+                self.assertNotIn('精算未実施', text)
+                self.assertIsNone(self.form(role, page_path, target))
+        return settlement, form
 
     def record_resale_costs(self, page_path, invoice, payment):
         target = page_path + '/test-costs'
@@ -711,7 +760,13 @@ class StagingInvoicePaymentTests(unittest.TestCase):
         costs_csv = list(csv.reader(StringIO(self.clients['member'].get(export_path).get_data(as_text=True))))
         self.assertEqual(costs_csv, original_rows + cost_reconciliation_rows)
 
+        settlement_target = resale_path + '/test-settlement'
+        self.assertIsNone(self.form('staff', resale_path, settlement_target))
+        settlement_fields = self.signed_fields('staff', 'settlement', current_id, purpose='finance_staging_resale_settlement')
+        self.assertEqual(self.clients['staff'].post(settlement_target, data=settlement_fields).status_code, 409)
+        self.assertEqual(self.resale_settlement_rows(), [])
         receipt, receipt_form = self.confirm_resale_receipt(resale_path, current_id, costs)
+        settlement, settlement_form = self.record_resale_settlement(resale_path, current_id, receipt, receipt_form)
         self.assertEqual(self.unaffected_tables(), before)
         self.notification_projection.assert_not_called()
         self.assertEqual(self.resale_rows(), [paid])
@@ -736,9 +791,13 @@ class StagingInvoicePaymentTests(unittest.TestCase):
             self.assertNotIn(reconciliation_label, self.clients['member'].get(path).get_data(as_text=True))
         self.assertIsNone(self.form('staff', resale_path, costs_target))
         self.assertEqual(self.clients['staff'].post(costs_target,
-            data={**cost_request, 'registry_csrf': receipt_form['registry_csrf']}).status_code, 409)
+            data={**cost_request, 'registry_csrf': settlement_form['registry_csrf']}).status_code, 409)
         self.assertIsNone(self.form('staff', resale_path, receipt_target))
-        self.assertEqual(self.clients['staff'].post(receipt_target, data=receipt_form).status_code, 409)
+        self.assertEqual(self.clients['staff'].post(receipt_target,
+            data={**receipt_form, 'registry_csrf': settlement_form['registry_csrf']}).status_code, 409)
+        self.assertIsNone(self.form('staff', resale_path, settlement_target))
+        self.assertEqual(self.clients['staff'].post(settlement_target, data=settlement_form).status_code, 409)
+        self.assertEqual(self.resale_settlement_rows(), [settlement])
         self.assertEqual(self.resale_receipt_rows(), [receipt])
         self.assertEqual(self.resale_cost_rows(), [costs])
         historic = self.clients['member'].get(resale_path).get_data(as_text=True)
