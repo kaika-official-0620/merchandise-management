@@ -706,10 +706,13 @@ body.sidebar-open {
 }
 
 .user-menu-trigger .user-badge {
+    flex: 0 0 auto;
     padding: 0.15rem 0.4rem;
-    border-radius: 0;
-    font-size: 0.65rem;
+    border-radius: 0.25rem;
+    font-size: 0.75rem;
     font-weight: 600;
+    line-height: 1.4;
+    white-space: nowrap;
     background: var(--text-primary);
     color: white;
 }
@@ -719,6 +722,7 @@ body.sidebar-open {
 }
 
 .user-menu-trigger .menu-arrow {
+    flex-shrink: 0;
     font-size: 0.65rem;
     color: var(--text-muted);
     transition: transform 0.2s;
