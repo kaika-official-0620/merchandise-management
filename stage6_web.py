@@ -417,7 +417,8 @@ def register_stage6_web(runtime):
         # Re-scanning is idempotent, so a failed projection can recover on refresh.
         if (enabled() and current_user.is_authenticated and request.method == 'POST'
                 and request.endpoint not in ('finance_review.staging_demo_payment', 'finance_review.staging_resale_costs',
-                                             'finance_review.staging_resale_receipt')
+                                             'finance_review.staging_resale_receipt',
+                                             'finance_review.staging_resale_settlement')
                 and response.status_code < 400 and request.blueprint in
                 ('inventory_registry', 'finance_review', 'commerce', 'payment_review')):
             try:

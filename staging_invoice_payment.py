@@ -66,6 +66,12 @@ def migration_statements(dialect='postgres'):
         planned_settlement_yen BIGINT NOT NULL CHECK (planned_settlement_yen = 7200),
         confirmed_by INTEGER NOT NULL REFERENCES users(id),
         confirmed_at TEXT NOT NULL
+    )''', '''CREATE TABLE IF NOT EXISTS staging_wallet_resale_settlement_demo (
+        invoice_id TEXT PRIMARY KEY NOT NULL REFERENCES staging_wallet_resale_receipt_demo(invoice_id),
+        sale_event_id TEXT NOT NULL REFERENCES business_item_observations(observation_id),
+        amount_yen BIGINT NOT NULL CHECK (amount_yen = 7200),
+        settled_by INTEGER NOT NULL REFERENCES users(id),
+        settled_at TEXT NOT NULL
     )''')
 
 
@@ -216,12 +222,21 @@ def _resale_receipt(store, sale_id, sale_gross, costs):
     planned = sale_gross - costs['channel_fee_yen'] - costs['shipping_cost_yen']
     if planned != RESALE_PLANNED_SETTLEMENT_YEN:
         return None
-    rows = store.query('SELECT * FROM staging_wallet_resale_receipt_demo WHERE invoice_id=?', (RESALE_INVOICE_ID,))
+    rows = store.query('''SELECT receipt.sale_event_id, receipt.sale_gross_yen, receipt.planned_settlement_yen,
+                               receipt.confirmed_at, settlement.sale_event_id AS settled_sale_event_id,
+                               settlement.amount_yen AS settled_amount_yen, settlement.settled_at
+        FROM staging_wallet_resale_receipt_demo AS receipt
+        LEFT JOIN staging_wallet_resale_settlement_demo AS settlement ON settlement.invoice_id=receipt.invoice_id
+        WHERE receipt.invoice_id=?''', (RESALE_INVOICE_ID,))
     saved = rows[0] if rows else None
     if saved and (saved['sale_event_id'], saved['sale_gross_yen'], saved['planned_settlement_yen']) != (sale_id, sale_gross, planned):
         return None
-    return {'status': 'confirmed' if saved else 'pending', 'planned_settlement_yen': planned,
-            'confirmed_at': saved['confirmed_at'] if saved else None}
+    settled_at = saved['settled_at'] if saved else None
+    if settled_at and (saved['settled_sale_event_id'], saved['settled_amount_yen']) != (sale_id, planned):
+        return None
+    status = 'settled' if settled_at else ('confirmed' if saved else 'pending')
+    return {'status': status, 'planned_settlement_yen': planned,
+            'confirmed_at': saved['confirmed_at'] if saved else None, 'settled_at': settled_at}
 
 
 def resale_reconciliation(store, month, demo):
@@ -319,12 +334,28 @@ def confirm_resale_receipt(store, actor):
         if not receipt:
             raise RegistryError('staging_resale_receipt_unavailable',
                                 '再販売分の費用とテスト精算予定額を確認してください。', 409)
-        if receipt['status'] == 'confirmed':
+        if receipt['status'] != 'pending':
             return False
         store.execute('''INSERT INTO staging_wallet_resale_receipt_demo
             (invoice_id, sale_event_id, sale_gross_yen, planned_settlement_yen, confirmed_by, confirmed_at)
             VALUES (?,?,?,?,?,?)''', (RESALE_INVOICE_ID, result['sale_event_id'], result['sale_gross_yen'],
                                       receipt['planned_settlement_yen'], actor.user_id, _now()))
+        return True
+
+
+def record_resale_settlement(store, actor):
+    """Record the approved mock amount without touching funds, payment or profit records."""
+    with _writable_resale_reconciliation(store, actor, 'staging_resale_settlement_unavailable') as result:
+        receipt = result['sale_receipt']
+        if not receipt or receipt['status'] == 'pending':
+            raise RegistryError('staging_resale_settlement_unavailable',
+                                '売上のテスト入金を確認してから、テスト精算を記録してください。', 409)
+        if receipt['status'] == 'settled':
+            return False
+        store.execute('''INSERT INTO staging_wallet_resale_settlement_demo
+            (invoice_id, sale_event_id, amount_yen, settled_by, settled_at)
+            VALUES (?,?,?,?,?)''', (RESALE_INVOICE_ID, result['sale_event_id'],
+                                   receipt['planned_settlement_yen'], actor.user_id, _now()))
         return True
 
 

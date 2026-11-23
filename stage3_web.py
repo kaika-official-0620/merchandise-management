@@ -312,11 +312,13 @@ def register_stage3_finance(runtime):
         staff = _staff()
         can_record_costs = bool(staff and reconciliation and month['is_current_snapshot'])
         receipt = reconciliation['sale_receipt'] if reconciliation else None
+        receipt_status = receipt['status'] if receipt else None
         return render_template('finance_review/invoice.html', month=month, staff=staff,
                                provisional_fee_preview=preview, demo_payment=demo,
                                resale_reconciliation=reconciliation,
                                can_record_resale_costs=can_record_costs,
-                               can_confirm_resale_receipt=bool(can_record_costs and receipt and receipt['status'] == 'pending'))
+                               can_confirm_resale_receipt=can_record_costs and receipt_status == 'pending',
+                               can_record_resale_settlement=can_record_costs and receipt_status == 'confirmed')
 
     @bp.post('/finance/months/<month_id>/test-payment/<action>')
     @allowed()
@@ -356,6 +358,20 @@ def register_stage3_finance(runtime):
             changed = confirm_resale_receipt(store, service.actor())
         if changed:
             flash('売上のテスト入金を確認しました。精算は未実施です。', 'success')
+        return redirect(url_for('finance_review.invoice', month_id=month_id, _anchor='resale-receipt'))
+
+    @bp.post('/finance/months/<month_id>/test-settlement')
+    @allowed(staff=True)
+    def staging_resale_settlement(month_id):
+        from staging_invoice_payment import (RESALE_INVOICE_ID, enabled as staging_payment_enabled,
+                                             record_resale_settlement)
+        if not staging_payment_enabled(app) or month_id != RESALE_INVOICE_ID:
+            abort(404)
+        service.verify('finance_staging_resale_settlement', month_id)
+        with service.db(write=True) as store:
+            changed = record_resale_settlement(store, service.actor())
+        if changed:
+            flash('7,200円のテスト精算を記録しました。', 'success')
         return redirect(url_for('finance_review.invoice', month_id=month_id, _anchor='resale-receipt'))
 
     @bp.get('/finance/months/<month_id>/export.csv')
