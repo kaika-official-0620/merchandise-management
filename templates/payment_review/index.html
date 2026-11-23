@@ -1,5 +1,22 @@
 {% extends 'payment_review/base.html' %}{% block payment_content %}
 <h1>月額・現物料金のお支払い</h1>
+{% if rehearsals %}
+<section class="card">
+  <h2>検証用の支払い・精算</h2>
+  {% for rehearsal in rehearsals %}
+  {% set record = rehearsal.record %}
+  {% set receipt = rehearsal.sale_receipt %}
+  {% set labels = {'sent':'支払い待ち（検証）','paid':'支払い済み（検証）','returned':'返品受付（検証）','refunded':'返金済み（検証）'} %}
+  <p>
+    <a href="{{ url_for('finance_review.invoice',month_id=record.invoice_id) }}">{{ rehearsal.period }} 第{{ rehearsal.revision }}版の検証用明細を開く</a>
+    <br>{{ labels.get(record.status,'確認中') }} {{ money(record.amount_yen) }}
+    {% if receipt and receipt.status == 'settled' %}
+    <br><strong>精算済み（検証） {{ money(receipt.planned_settlement_yen) }}</strong> ／ {{ registry_time(receipt.settled_at) }}（日本時間）
+    {% endif %}
+  </p>
+  {% endfor %}
+</section>
+{% endif %}
 <section class="card"><h2>デジタル月額</h2><p>詳しい分析など、アプリの追加機能の利用料です。現物の作業料・販売料とは分けて確認します。</p><p>有料期間が終了しても基本的な自己管理と過去の取引・請求明細は引き続き利用できます。</p>
 {% if management %}<p>現在：{{ management.current_plan }}</p>{% for contract in management.contracts %}<p>{{ contract.provider_name }} ／ {{ contract.plan_name }} ／ {{ contract.status }}<br>利用期限：{{ contract.access_until or '購入元で確認' }} ／ 次回請求：{{ contract.next_billing or '購入元で確認' }}{% if contract.cancel_at_period_end %}<br>解約予約済み{% endif %}</p>{% endfor %}{% for instruction in management.instructions %}<p class="notice">{{ instruction }}</p>{% endfor %}{% endif %}
 <a href="{{ url_for('feature_plans.plans') }}">購入元・解約・利用期限を確認する</a>{% if staff %}<p class="muted">4段階の新料金案と旧ノーマル／ビジネスのストア商品は別です。正式な対価・商品構成・価格が決まるまで、新料金を販売可能にしません。</p>{% endif %}</section>
