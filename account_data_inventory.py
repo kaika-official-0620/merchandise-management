@@ -59,7 +59,7 @@ _register('inventory', '''business_items business_item_assignments business_item
     stage4_order_returns stage6_custody_responses''', ())
 _register('financial', '''business_charge_drafts business_fund_records stage3_charge_drafts
     stage3_invoice_revisions stage3_fund_records stage3_item_financial_facts stage3_sale_status_records
-    stage5_physical_bills stage5_payment_attempts stage5_payment_refunds stage9_payment_customers
+    stage5_physical_bills stage5_physical_bill_revisions stage5_payment_attempts stage5_payment_refunds stage9_payment_customers
     stage9_payment_jobs''')
 _register('financial', '''feature_billing_accounts feature_subscriptions feature_manual_grants
     feature_store_accounts feature_store_replacements feature_billing_reviews''', ('user_id',))

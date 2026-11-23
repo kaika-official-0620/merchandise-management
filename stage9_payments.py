@@ -103,18 +103,21 @@ class SandboxPayments:
             self._ready(store); staff=store.authorize(actor,finance=True)
             jobs=store.query('SELECT * FROM stage9_payment_jobs'+('' if staff else ' WHERE customer_id=?')+' ORDER BY created_at DESC',() if staff else (actor.user_id,))
             customers=set(dict(self.scope.customer_map))
-            bills=store.query('SELECT bill_id,customer_id,period,amount_yen FROM stage5_physical_bills'+('' if staff else ' WHERE customer_id=?'),() if staff else (actor.user_id,))
+            bills=store.query('SELECT bill_id,customer_id FROM stage5_physical_bills'+('' if staff else ' WHERE customer_id=?'),() if staff else (actor.user_id,))
+            api=PhysicalPaymentService(store)
+            bills=[api.bill_record(actor,bill['bill_id']) for bill in bills if bill['customer_id'] in customers]
+            bills=[{key:bill[key] for key in ('bill_id','customer_id','period','amount_yen','invoice_id')} for bill in bills]
             consents=store.query('SELECT consent_id,customer_id,terms_reference,created_at,revoked_at,payment_method_id FROM stage9_payment_consents'+('' if staff else ' WHERE customer_id=?'),() if staff else (actor.user_id,))
             for consent in consents: consent['verified']=bool(consent.pop('payment_method_id'))
             return {'jobs':[self._projection(store,job) for job in jobs],
-                'bills':[bill for bill in bills if bill['customer_id'] in customers],
+                'bills':bills,
                 'consents':consents,'connected':bool(self.adapter and self.adapter.allow_network and self.adapter.allow_writes),
                 'environment':'test','real_payment_enabled':False}
 
     def _fresh(self,store,actor,job):
         self._ready(store,job['customer_id'],write=True)
         if job['kind'] in ('checkout','off_session'):
-            bill=PhysicalPaymentService(store)._row(actor,'stage5_physical_bills',job['bill_id'],'bill_id')
+            bill=PhysicalPaymentService(store).bill_record(actor,job['bill_id'])
             PhysicalPaymentService(store)._fresh_bill(actor,bill)
             if bill['amount_yen']!=job['amount_yen']: raise RegistryError('sandbox_bill_mismatch',status=409)
         if job['consent_id']:
@@ -132,11 +135,13 @@ class SandboxPayments:
         return job
 
     def queue(self,actor,kind,*,bill_id=None,consent_id=None,parent_job_id=None,amount_yen=None,
-              terms_reference=None,reason=None,source_key):
+              terms_reference=None,reason=None,source_key,expected_invoice_id=None):
         if kind not in ('checkout','setup','off_session','refund'): raise RegistryError('sandbox_kind_invalid')
         source_key=_text(source_key,'source_key',500)
         payload=dict(kind=kind,bill_id=bill_id,consent_id=consent_id,parent_job_id=parent_job_id,
             amount_yen=amount_yen,terms_reference=terms_reference,reason=reason)
+        if expected_invoice_id is not None:
+            payload['expected_invoice_id']=expected_invoice_id
         with self.db(True) as store:
             self._ready(store); self._lock(store)
             staff=store.authorize(actor,finance=True)
@@ -146,9 +151,14 @@ class SandboxPayments:
                 return self._projection(store,self._row(store,actor,previous[0]['job_id']))
             identifier=_id(); parent=None; customer=actor.user_id; amount=0
             if kind in ('checkout','off_session'):
-                bill=PhysicalPaymentService(store)._row(actor,'stage5_physical_bills',bill_id,'bill_id')
+                api=PhysicalPaymentService(store)
+                original=api._row(actor,'stage5_physical_bills',bill_id,'bill_id')
+                store.finance.customer_lock(original['customer_id'])
+                bill=api.bill_record(actor,bill_id)
+                if expected_invoice_id is not None and bill['invoice_id']!=expected_invoice_id:
+                    raise RegistryError('physical_invoice_stale',status=409)
                 customer,amount=bill['customer_id'],bill['amount_yen']
-                PhysicalPaymentService(store)._fresh_bill(actor,bill)
+                api._fresh_bill(actor,bill)
                 if kind=='checkout' and (staff or customer!=actor.user_id): raise RegistryError('customer_payment_action_required',status=403)
                 if kind=='off_session' and not staff: raise RegistryError('finance_permission_required',status=403)
                 old=store.query("SELECT * FROM stage9_payment_jobs WHERE bill_id=? AND kind IN ('checkout','off_session')",(bill_id,))

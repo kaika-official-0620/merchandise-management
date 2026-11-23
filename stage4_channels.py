@@ -13,6 +13,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from item_registry import RegistryError, _json, _now, _text, _time
+from stage2_dispatch_guard import effective_listing_stop_tasks
 from stage3_common import yen
 from stage3_profit import ProfitService, MONEY_FIELDS
 from stage3_billing import BillingService
@@ -283,9 +284,15 @@ class ChannelService:
         kinds = ('conflict_resolution',) if order['initial_status'] == 'conflict' else ('customer_response', 'packing', 'shipping')
         for kind in kinds:
             self._insert('stage4_order_tasks', dict(task_id=_id('ot4'), order_id=order['order_id'], kind=kind, created_at=order['occurred_at']))
-        for listing in self.store.query('SELECT listing_id FROM stage4_channel_listings WHERE physical_item_id=?', (order['physical_item_id'],)):
+        # Stop work follows an external listing across all orders. A new
+        # publication has a new listing_id and still needs its own confirmation.
+        listings = self.store.query('''SELECT l.listing_id,l.occurred_at FROM stage4_channel_listings l
+            WHERE l.physical_item_id=? AND NOT EXISTS(
+                SELECT 1 FROM stage4_stop_tasks t WHERE t.listing_id=l.listing_id)''', (order['physical_item_id'],))
+        for listing in listings:
             self._insert('stage4_stop_tasks', dict(task_id=_id('st4'), order_id=order['order_id'], listing_id=listing['listing_id'],
-                created_at=order['occurred_at'], reason='注文受付後の出品停止確認', reason_key=order['order_id'] + ':' + listing['listing_id']))
+                created_at=max(order['occurred_at'], listing['occurred_at']),
+                reason='注文受付後の出品停止確認', reason_key=order['order_id'] + ':' + listing['listing_id']))
 
     def record_order(self, actor, listing_id, *, external_order_id, sale_gross_yen, occurred_at, source_key, evidence_reference):
         listing = self._listing(actor, listing_id, write=True)
@@ -425,7 +432,7 @@ class ChannelService:
             history = self.store.query('SELECT * FROM stage4_stop_events WHERE task_id=? ORDER BY revision', (row['task_id'],))
             row.update(status=history[-1]['status'] if history else 'pending', history=history,
                        latest_at=history[-1]['occurred_at'] if history else row['created_at'])
-        return rows
+        return effective_listing_stop_tasks(rows)
 
     def stop_task(self, actor, task_id, *, status, evidence_reference, occurred_at, source_key):
         self.store.authorize(actor, staff_required=True, finance=True)
@@ -437,7 +444,11 @@ class ChannelService:
         def create():
             self._lock_legacy(listing['physical_item_id'])
             self.store.lock_item(listing['physical_item_id'])
-            history = self.store.query('SELECT * FROM stage4_stop_events WHERE task_id=? ORDER BY revision', (task_id,))
+            current = next((row for row in self._stop_rows(listing_id=listing['listing_id']) if row['task_id'] == task_id), None)
+            if current is None:
+                raise RegistryError('listing_stop_task_reused',
+                    '同じ出品の停止作業が別にあります。最新の作業一覧を開いて確認してください。', 409)
+            history = current['history']
             if history and history[-1]['status'] == 'confirmed_stopped':
                 raise RegistryError('listing_stop_already_confirmed', status=409)
             if when < (history[-1]['occurred_at'] if history else task['created_at']):

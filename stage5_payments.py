@@ -119,6 +119,39 @@ class PhysicalPaymentService:
         self.store.authorize(actor, rows[0]['customer_id'], finance=True)
         return rows[0]
 
+    def bill_record(self, actor, bill_id):
+        original = self._row(actor, 'stage5_physical_bills', bill_id, 'bill_id')
+        revisions = self.store.query('SELECT * FROM stage5_physical_bill_revisions WHERE bill_id=? '
+                                     'ORDER BY source_revision DESC LIMIT 1', (bill_id,))
+        return original | revisions[0] if revisions else original
+
+    def _period_bill(self, actor, inspected):
+        matches = self.store.query('SELECT bill_id FROM stage5_physical_bills '
+                                   'WHERE customer_id=? AND period=? AND timezone_name=?',
+                                   (inspected['customer_id'], inspected['period'], inspected['timezone_name']))
+        return self.bill_record(actor, matches[0]['bill_id']) if matches else None
+
+    def _has_sandbox_payment(self, bill_id):
+        if self.store.dialect == 'postgres':
+            present = self.store.query("SELECT to_regclass('stage9_payment_jobs') AS name")
+        else:
+            present = self.store.query("SELECT name FROM sqlite_master WHERE type='table' AND name='stage9_payment_jobs'")
+        return bool(present and present[0]['name'] and self.store.query(
+            "SELECT job_id FROM stage9_payment_jobs WHERE bill_id=? AND kind IN ('checkout','off_session')", (bill_id,)))
+
+    def _unstarted_attempts(self, bill_id):
+        if self._has_sandbox_payment(bill_id):
+            return None
+        pending = []
+        for row in self.store.query('SELECT attempt_id FROM stage5_payment_attempts WHERE bill_id=?', (bill_id,)):
+            attempt = row['attempt_id']
+            state = self._state('payment', attempt)['state']
+            if state == 'prepared':
+                pending.append(attempt)
+            elif state != 'canceled':
+                return None
+        return pending
+
     def inspect_invoice(self, actor, invoice_id):
         invoice = self.billing.get_month(actor, invoice_id)
         excluded = {line['draft_id'] for line in invoice['snapshot']['lines'] if line['fee_kind'] == 'digital_monthly'}
@@ -179,12 +212,11 @@ class PhysicalPaymentService:
             current = self.inspect_invoice(actor, invoice_id)
             if current['review_reasons']:
                 raise RegistryError('physical_invoice_requires_review', '未確定の料金・契約・明細はカード決済の検証へ進められません。', 409)
-            existing = self.store.query('SELECT * FROM stage5_physical_bills WHERE customer_id=? AND period=? AND timezone_name=?',
-                                        (customer, current['period'], current['timezone_name']))
+            existing = self._period_bill(actor, current)
             if existing:
-                if existing[0]['invoice_id'] != invoice_id:
+                if existing['invoice_id'] != invoice_id:
                     raise RegistryError('physical_period_already_prepared', '同じ月の別請求は自動再請求せず、訂正の確認が必要です。', 409)
-                return self.get_bill(actor, existing[0]['bill_id'])
+                return self.get_bill(actor, existing['bill_id'])
             bill = _id('pb5_')
             year, month = map(int, current['period'].split('-'))
             due = date(year + (month == 12), 1 if month == 12 else month + 1, 10).isoformat()
@@ -196,6 +228,45 @@ class PhysicalPaymentService:
             return self.get_bill(actor, bill)
         return self._operation(actor, customer, source_key,
             dict(action='physical_bill', invoice_id=invoice_id, review_reference=reference), create)
+
+    def replacement_context(self, actor, inspected):
+        existing = self._period_bill(actor, inspected)
+        if not existing or existing['invoice_id'] == inspected['invoice_id']:
+            return None
+        old = self.billing.get_month(actor, existing['invoice_id'])
+        return {'bill_id': existing['bill_id'], 'invoice_id': existing['invoice_id'],
+                'amount_yen': existing['amount_yen'], 'revision': old['revision'],
+                'replaceable': (not inspected['review_reasons'] and not old['is_current_snapshot']
+                                and inspected['source_revision'] > old['revision']
+                                and self._unstarted_attempts(existing['bill_id']) is not None)}
+
+    def replace_invoice(self, actor, invoice_id, *, expected_invoice_id, review_reference, source_key):
+        inspected = self.inspect_invoice(actor, invoice_id)
+        customer = inspected['customer_id']
+        expected = _text(expected_invoice_id, 'expected_invoice_id', 100)
+        reference = _text(review_reference, 'review_reference', 1000)
+
+        def revise():
+            current = self.inspect_invoice(actor, invoice_id)
+            previous = self.replacement_context(actor, current)
+            if not previous or previous['invoice_id'] != expected or not previous['replaceable']:
+                raise RegistryError('physical_replacement_unavailable',
+                    '訂正内容または支払い処理が更新されました。元の明細と支払い履歴を確認してください。', 409)
+            for attempt in self._unstarted_attempts(previous['bill_id']):
+                # The dispatch path uses the same lock and must first append a
+                # processing event. A prepared attempt has never been sent.
+                self._event('payment', attempt, 'canceled',
+                            {'reason': 'bill_replaced_before_dispatch', 'invoice_id': expected})
+            self.store.execute('''INSERT INTO stage5_physical_bill_revisions
+                (invoice_id,bill_id,customer_id,previous_invoice_id,source_revision,source_hash,snapshot_json,
+                 amount_yen,review_reference,actor_user_id,recorded_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)''',
+                (invoice_id, previous['bill_id'], customer, expected, current['source_revision'],
+                 current['source_hash'], _json(current), current['amount_yen'], reference, actor.user_id, _now()))
+            return self.get_bill(actor, previous['bill_id'])
+
+        return self._operation(actor, customer, source_key,
+            dict(action='physical_bill_replace', invoice_id=invoice_id, previous_invoice_id=expected,
+                 review_reference=reference), revise)
 
     def record_consent(self, actor, customer_id, *, terms_reference, payment_method_reference,
                        provider_customer_reference, off_session=False, source_key):
@@ -271,7 +342,7 @@ class PhysicalPaymentService:
             raise RegistryError('customer_payment_action_required',
                 '毎回確認して支払う方式は、お客様本人が操作してください。スタッフによる請求には自動請求の同意が必要です。', 403)
 
-    def create_attempt(self, actor, bill_id, consent_id, *, off_session=False, flow=None, source_key):
+    def create_attempt(self, actor, bill_id, consent_id, *, off_session=False, flow=None, source_key, expected_invoice_id=None):
         bill = self._row(actor, 'stage5_physical_bills', bill_id, 'bill_id')
         if flow is not None:
             if flow not in ('customer_initiated', 'off_session'):
@@ -283,15 +354,14 @@ class PhysicalPaymentService:
             raise RegistryError('consent_boolean_required')
         self._require_payment_initiator(actor, bill['customer_id'], off_session)
         def create():
+            bill = self.bill_record(actor, bill_id)
+            if expected_invoice_id is not None and bill['invoice_id'] != expected_invoice_id:
+                raise RegistryError('physical_invoice_stale', status=409)
             self._fresh_bill(actor, bill)
             self._valid_consent(actor, consent_id, bill['customer_id'], off_session)
             # An explicitly connected Stripe sandbox uses a separate durable
             # ledger. Do not open a second memory-provider path for its bill.
-            if self.store.dialect == 'postgres':
-                present = self.store.query("SELECT to_regclass('stage9_payment_jobs') AS name")
-            else:
-                present = self.store.query("SELECT name FROM sqlite_master WHERE type='table' AND name='stage9_payment_jobs'")
-            if present and present[0]['name'] and self.store.query("SELECT job_id FROM stage9_payment_jobs WHERE bill_id=? AND kind IN ('checkout','off_session')", (bill_id,)):
+            if self._has_sandbox_payment(bill_id):
                 raise RegistryError('payment_attempt_exists_reconcile_first', status=409)
             previous = self.store.query('SELECT * FROM stage5_payment_attempts WHERE bill_id=?', (bill_id,))
             # A failed payment intent is not proof it can never succeed later.
@@ -305,8 +375,10 @@ class PhysicalPaymentService:
                  'test:physical:' + identifier, actor.user_id, _now()))
             self._event('payment', identifier, 'prepared')
             return self.get_attempt(actor, identifier)
-        return self._operation(actor, bill['customer_id'], source_key,
-            dict(action='physical_attempt', bill_id=bill_id, consent_id=consent_id, off_session=off_session), create, staff=off_session)
+        payload = dict(action='physical_attempt', bill_id=bill_id, consent_id=consent_id, off_session=off_session)
+        if expected_invoice_id is not None:
+            payload['expected_invoice_id'] = expected_invoice_id
+        return self._operation(actor, bill['customer_id'], source_key, payload, create, staff=off_session)
 
     def _adapter(self):
         if self.adapter is None:
@@ -338,7 +410,7 @@ class PhysicalPaymentService:
             if state != 'prepared':
                 return {'dispatch': False}
             if kind == 'payment':
-                self._fresh_bill(actor, self._row(actor, 'stage5_physical_bills', row['bill_id'], 'bill_id'))
+                self._fresh_bill(actor, self.bill_record(actor, row['bill_id']))
                 self._valid_consent(actor, row['consent_id'], row['customer_id'], bool(row['off_session']))
             self._event(kind, identifier, 'processing')
             return {'dispatch': True}
@@ -468,7 +540,8 @@ class PhysicalPaymentService:
             'state': self._state('refund', refund_id)['state'], 'execution_mode': 'test', 'real_payment_enabled': False}
 
     def get_bill(self, actor, bill_id):
-        row = self._row(actor, 'stage5_physical_bills', bill_id, 'bill_id')
+        original = self._row(actor, 'stage5_physical_bills', bill_id, 'bill_id')
+        row = self.bill_record(actor, bill_id)
         inspected = self.inspect_invoice(actor, row['invoice_id'])
         attempts = [self.get_attempt(actor, attempt['attempt_id']) for attempt in self.store.query('SELECT attempt_id FROM stage5_payment_attempts WHERE bill_id=? ORDER BY recorded_at,attempt_id', (bill_id,))]
         paid = sum(attempt['amount_yen'] for attempt in attempts if attempt['state'] == 'succeeded')
@@ -476,8 +549,14 @@ class PhysicalPaymentService:
         snapshot = json.loads(row['snapshot_json'])
         safe_lines = [{key: line.get(key) for key in ('draft_id', 'physical_item_id', 'fee_kind', 'original_draft_id',
             'amount_net_yen', 'tax_treatment', 'tax_rate_percent', 'occurred_at')} for line in snapshot['lines']]
+        history = self.store.query('SELECT invoice_id,amount_yen,recorded_at FROM stage5_physical_bill_revisions '
+                                   'WHERE bill_id=? AND source_revision<? ORDER BY source_revision DESC',
+                                   (bill_id, row.get('source_revision', 0)))
+        if row['invoice_id'] != original['invoice_id']:
+            history.append({key: original[key] for key in ('invoice_id', 'amount_yen', 'recorded_at')})
         return {key: row[key] for key in ('bill_id', 'invoice_id', 'customer_id', 'period', 'timezone_name', 'due_date', 'amount_yen', 'currency', 'recorded_at')} | {
             'lines': safe_lines, 'totals': snapshot['totals'], 'attempts': attempts, 'test_paid_yen': paid,
+            'replaced_versions': history,
             'test_refunded_yen': refunded, 'test_net_received_yen': paid - refunded,
             'current_review_reasons': inspected['review_reasons'], 'execution_mode': 'test', 'real_payment_enabled': False,
             'receipt_status': 'test_payment_record' if paid else 'not_paid', 'real_receipt_issued': False,

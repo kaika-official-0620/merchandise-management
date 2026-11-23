@@ -79,10 +79,11 @@ def register_stage9_payments(runtime):
     @bp.post('/payments/sandbox/bills/<bill_id>')
     @allowed()
     def queue_bill(bill_id):
-        key=service.verify('stage9_bill',bill_id)
+        expected=_text('invoice_id',100,True)
+        key=service.verify('stage9_bill',bill_id+':'+expected)
         api=service.payments()
-        if staff(): job=api.queue(service.actor(),'off_session',bill_id=bill_id,consent_id=_text('consent_id',100,True),source_key=key)
-        else: job=api.queue(service.actor(),'checkout',bill_id=bill_id,source_key=key)
+        if staff(): job=api.queue(service.actor(),'off_session',bill_id=bill_id,consent_id=_text('consent_id',100,True),source_key=key,expected_invoice_id=expected)
+        else: job=api.queue(service.actor(),'checkout',bill_id=bill_id,source_key=key,expected_invoice_id=expected)
         return redirect(url_for('sandbox_payments.job',job_id=job['job_id']))
 
     @bp.post('/payments/sandbox/consents')

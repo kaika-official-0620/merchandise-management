@@ -24,6 +24,9 @@ from PIL import Image, UnidentifiedImageError
 from werkzeug.exceptions import HTTPException, RequestEntityTooLarge
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from sales_reporting import ordinary_merchandise_source
+from security_access import staff_has_permission
+
 
 TOKEN_TTL = 30 * 24 * 60 * 60
 MAX_PHOTO_BYTES = 10 * 1024 * 1024
@@ -62,35 +65,41 @@ def _register_mobile_media(runtime):
         if not current_user.is_authenticated:
             abort(401)
         relative = 'uploads/mobile/' + filename
-        connection = runtime.get_db()
-        try:
-            cursor = connection.cursor()
+        security = app.extensions.get('kaika_security_access')
+        if security is not None:
+            security.require_upload_access(relative)
+        else:
+            connection = runtime.get_db()
             try:
-                sql = 'SELECT user_id, photo_path, additional_photos FROM merchandise WHERE (photo_path = ? OR additional_photos LIKE ?)'
-                parameters = [relative, '%' + relative + '%']
-                if not current_user.is_admin():
-                    sql += ' AND user_id = ?'
-                    parameters.append(current_user.id)
-                cursor.execute(sql.replace('?', '%s') if getattr(runtime, 'DATABASE_URL', None) else sql, parameters)
-                names = [column[0] for column in cursor.description]
-                allowed = False
-                for row in cursor.fetchall():
-                    item = dict(row) if hasattr(row, 'keys') else dict(zip(names, row))
-                    additional = item.get('additional_photos') or []
-                    if isinstance(additional, str):
-                        try:
-                            additional = json.loads(additional)
-                        except ValueError:
-                            additional = []
-                    if item.get('photo_path') == relative or (isinstance(additional, list) and relative in additional):
-                        allowed = True
-                        break
+                cursor = connection.cursor()
+                try:
+                    sql = 'SELECT user_id, photo_path, additional_photos FROM merchandise WHERE (photo_path = ? OR additional_photos LIKE ?)'
+                    parameters = [relative, '%' + relative + '%']
+                    if not staff_has_permission(current_user, 'merchandise'):
+                        sql += ' AND user_id = ?'
+                        parameters.append(current_user.id)
+                    cursor.execute(sql.replace('?', '%s') if getattr(runtime, 'DATABASE_URL', None) else sql, parameters)
+                    names = [column[0] for column in cursor.description]
+                    allowed = False
+                    for row in cursor.fetchall():
+                        item = dict(row) if hasattr(row, 'keys') else dict(zip(names, row))
+                        additional = item.get('additional_photos') or []
+                        if isinstance(additional, str):
+                            try:
+                                additional = json.loads(additional)
+                            except ValueError:
+                                additional = []
+                        if item.get('photo_path') == relative or (isinstance(additional, list) and relative in additional):
+                            allowed = True
+                            break
+                finally:
+                    cursor.close()
             finally:
-                cursor.close()
-        finally:
-            connection.close()
+                connection.close()
+            if not allowed:
+                abort(404)
         path = (private_root / filename).resolve()
-        if not allowed or private_root.resolve() not in path.parents or not path.is_file():
+        if private_root.resolve() not in path.parents or not path.is_file():
             abort(404)
         response = send_file(path, conditional=False)
         response.headers['Cache-Control'] = 'private, no-store'
@@ -254,13 +263,13 @@ def register_mobile_api(runtime):
             raise MobileError('invalid_input', f'{name} の値が正しくありません。')
         return int(raw)
 
-    def scope_clause():
-        if g.mobile_user.is_admin():
+    def scope_clause(*, photo=False):
+        if g.mobile_user.is_admin() and (not photo or staff_has_permission(g.mobile_user, 'merchandise')):
             return '1 = 1', []
         return 'm.user_id = ?', [int(g.mobile_user.id)]
 
-    def item_by_id(item_id):
-        condition, parameters = scope_clause()
+    def item_by_id(item_id, *, photo=False):
+        condition, parameters = scope_clause(photo=photo)
         with database() as (_, cursor):
             execute(cursor, f'SELECT m.* FROM merchandise m WHERE m.id = ? AND {condition}', [item_id] + parameters)
             item = one(cursor)
@@ -464,11 +473,14 @@ def register_mobile_api(runtime):
     @api.get('/items/<int:item_id>/photos/<int:photo_index>')
     @login_required
     def get_photo(item_id, photo_index):
-        paths = photo_paths(item_by_id(item_id))
+        paths = photo_paths(item_by_id(item_id, photo=True))
         if photo_index >= len(paths):
             raise MobileError('not_found', '写真が見つかりません。', 404)
         root = Path(app.static_folder).resolve()
         relative = paths[photo_index]
+        security = app.extensions.get('kaika_security_access')
+        if security is not None:
+            security.require_upload_access(relative)
         if relative.startswith('uploads/mobile/'):
             path = (private_photo_directory / PurePosixPath(relative).name).resolve()
             if private_photo_directory.resolve() not in path.parents or not path.is_file():
@@ -578,13 +590,16 @@ def register_mobile_api(runtime):
     @login_required
     def dashboard():
         condition, parameters = scope_clause()
-        with database() as (_, cursor):
-            execute(cursor, f'SELECT m.* FROM merchandise m WHERE {condition} ORDER BY m.id DESC', parameters)
+        with database() as (connection, cursor):
+            report_source = ordinary_merchandise_source(connection, postgres, keep_stock_state=True)
+            execute(cursor, f'SELECT m.* FROM {report_source} AS m WHERE {condition} ORDER BY m.id DESC', parameters)
             rows = many(cursor)
         summary = dict(inventory_count=0, inventory_value=0, sold_count=0, total_sales=0,
                        total_profit=0, current_month_sales=0, current_month_profit=0)
         current_month = runtime.get_jst_now().strftime('%Y-%m')
         for row in rows:
+            if row.get('reporting_sale_hidden'):
+                continue
             item = decorate(row)
             if item.get('is_sold'):
                 summary['sold_count'] += 1

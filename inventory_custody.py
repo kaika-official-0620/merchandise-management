@@ -20,6 +20,7 @@ from werkzeug.exceptions import HTTPException
 
 from business_display_time import database_event_time
 from customer_navigation import customer_product_detail_url, customer_product_list_url
+from item_registry import Actor, Registry, RegistryError
 from self_inventory import _row, _truthy, _lock_submission
 from stage2_self_management import (basic_self_management_allowed, enabled as stage2_enabled,
     record_item_photos, require_schema)
@@ -319,6 +320,48 @@ class InventoryCustody:
                                    and (basic_self_management_allowed(current_user, self.app) or
                                         (self.plans.has_feature('inventory_manage') and current_user.can_edit_merchandise()))}
 
+    def linked_item_details(self, connection, item_ids):
+        if not item_ids or not stage2_enabled(self.app):
+            return {}
+        from inventory_registry_web import STATE_LABELS
+        registry = Registry(connection, 'postgres' if self.pg else 'sqlite')
+        placeholders = ','.join('?' for _ in item_ids)
+        links = registry.query('SELECT merchandise_id,physical_item_id FROM business_item_links '
+                               f'WHERE merchandise_id IN ({placeholders})', tuple(item_ids))
+        staff = custody_staff_allowed()
+        actor = Actor(int(current_user.id), staff=staff)
+        commerce = all(self.app.config.get(flag) is True for flag in
+                       ('STAGE3_FINANCE_ENABLED', 'STAGE4_COMMERCE_ENABLED'))
+        details = {}
+        for link in links:
+            merchandise_id = link['merchandise_id']
+            item_id = link['physical_item_id']
+            try:
+                profile, roles, _ = registry._profile(actor, item_id)
+            except RegistryError as error:
+                if error.status not in (403, 404):
+                    raise
+                details[merchandise_id] = {'label': '個品の状態は開花へご確認ください'}
+                continue
+            custodian = roles.get('custodian', {}).get('kind')
+            physical_state = profile['physical_state']
+            label = ('開花で保管・管理' if custodian == 'kaika' and physical_state == 'received'
+                     else STATE_LABELS.get(physical_state, '保管先を確認してください'))
+            detail = {'detail_url': url_for('inventory_registry.detail', item_id=item_id),
+                      'label': label, 'sales_label': STATE_LABELS.get(profile['sales_state'], '要確認')}
+            if commerce and staff and current_user.has_permission('invoices'):
+                detail['commerce_url'] = url_for('commerce.channels')
+            elif commerce and current_user.role == 'user' and custodian == 'kaika' and physical_state == 'received':
+                detail['commerce_url'] = url_for('commerce.listing_item', item_id=item_id)
+            details[merchandise_id] = detail
+        return details
+
+    def linked_item_detail(self, item):
+        if not stage2_enabled(self.app):
+            return None
+        with self.db() as (connection, _):
+            return self.linked_item_details(connection, [item['id']]).get(item['id'])
+
     @staticmethod
     def text(name, maximum, required=False):
         value = request.form.get(name, '').strip()
@@ -580,10 +623,11 @@ class InventoryCustody:
                 self.notify(intake)
             flash('受付状況を更新しました。','success')
             return redirect(url_for('inventory_intake_detail',intake_id=intake_id))
-        with self.db() as (_,cur):
+        with self.db() as (connection,cur):
             intake=self.intake(cur,intake_id,staff=staff)
             cur.execute(f'SELECT m.* FROM merchandise m JOIN inventory_intake_items ii ON ii.merchandise_id=m.id WHERE ii.intake_id={self.mark} ORDER BY m.id',(intake_id,))
             items=[_row(r,cur) for r in cur.fetchall()]
+            linked_items = self.linked_item_details(connection, [item['id'] for item in items])
             public_events = '' if staff else " AND e.event_type<>'intake_discrepancy'"
             cur.execute(f'''SELECT e.*,u.display_name,u.username FROM inventory_custody_events e
                 JOIN users u ON u.id=e.actor_id
@@ -596,6 +640,7 @@ class InventoryCustody:
             if event['event_type'] == 'intake_discrepancy':
                 discrepancies.append({**event, 'observation': json.loads(event['details'])})
         return render_template('inventory_intake_detail.html',intake=intake,items=items,events=events,owner=owner,state_names=STATE_NAMES,
+                               linked_items=linked_items,
                                discrepancies=discrepancies, intake_time=self.event_time,
                                operation_token=self.token('intake',intake_id,intake['version']),csrf_token_value=self.plans.csrf_token())
 
@@ -673,6 +718,7 @@ def register_inventory_custody(runtime):
     app.extensions['inventory_custody']=service
     app.before_request(service.guard_legacy_operations)
     app.jinja_env.globals.update(custody_context=service.item_context,custody_location=custody_location,custody_label=custody_label)
+    app.jinja_env.globals['linked_custody_detail'] = service.linked_item_detail
     runtime.inventory_custody=service
     def recoverable(view):
         @wraps(view)

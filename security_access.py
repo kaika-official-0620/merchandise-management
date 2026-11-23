@@ -71,6 +71,15 @@ def _paths(value):
     return result
 
 
+def staff_has_permission(user, permission=None):
+    if not user.is_admin():
+        return False
+    if permission is None or getattr(user, 'role', None) == 'owner':
+        return True
+    checker = getattr(user, 'has_permission', None)
+    return bool(callable(checker) and checker(permission))
+
+
 class SecurityAccess:
     def __init__(self, runtime):
         self.runtime = runtime
@@ -111,12 +120,7 @@ class SecurityAccess:
         return [(row, field) for row in rows for field in selected if relative in _paths(row.get(field))]
 
     def staff(self, permission=None):
-        if not current_user.is_admin():
-            return False
-        if permission is None or getattr(current_user, 'role', None) == 'owner':
-            return True
-        checker = getattr(current_user, 'has_permission', None)
-        return bool(callable(checker) and checker(permission))
+        return staff_has_permission(current_user, permission)
 
     def own(self, row):
         return row.get('user_id') is not None and str(row['user_id']) == str(current_user.id)
@@ -157,7 +161,7 @@ class SecurityAccess:
             vendor_responses = self.references(cur, 'admin_kaitori_shoudaku', ('vendor_response_file_path',), relative)
             if sensitive or vendor or vendor_responses:
                 return self.staff('users') if sensitive else self.staff('invoices')
-            if any(self.own(row) or self.staff() for row, _ in merchandise):
+            if merchandise and (self.staff('merchandise') or any(self.own(row) for row, _ in merchandise)):
                 return True
             if any(self.catalog_photo(cur, row) for row, field in merchandise
                    if field in {'photo_path', 'additional_photos'}):
@@ -168,17 +172,59 @@ class SecurityAccess:
             ):
                 if any(self.own(row) or self.staff() for row, _ in self.references(cur, table, fields, relative)):
                     return True
-            # Old agency statements retain snapshots even after a photo edit.
-            snapshots = self.references(cur, 'sales_agency_request_items', ('snapshot_photo_path',), relative)
-            if snapshots and {'id', 'user_id'} <= self.columns(cur, 'sales_agency_requests'):
-                for row, _ in snapshots:
-                    cur.execute(f'SELECT user_id FROM sales_agency_requests WHERE id={self.mark}', (row.get('request_id'),))
-                    owner = cur.fetchone()
-                    if owner:
-                        owner_id = owner['user_id'] if hasattr(owner, 'keys') else owner[0]
-                        if self.staff() or str(owner_id) == str(current_user.id):
-                            return True
+            if self.agency_photo(cur, merchandise, relative):
+                return True
         return False
+
+    def agency_photo(self, cur, merchandise, relative):
+        if not {'id', 'user_id'} <= self.columns(cur, 'sales_agency_requests'):
+            return False
+        invoice_staff = self.staff('invoices')
+        inventory_staff = self.staff('merchandise')
+        # Historical agency documents retain their own photo after an item edit.
+        snapshots = self.references(cur, 'sales_agency_request_items', ('snapshot_photo_path',), relative)
+        for row, _ in snapshots:
+            cur.execute(f'SELECT user_id FROM sales_agency_requests WHERE id={self.mark}', (row.get('request_id'),))
+            owner = cur.fetchone()
+            if owner:
+                owner_id = owner['user_id'] if hasattr(owner, 'keys') else owner[0]
+                if invoice_staff or inventory_staff or str(owner_id) == str(current_user.id):
+                    return True
+        if not invoice_staff or not {'request_id', 'merchandise_id'} <= self.columns(cur, 'sales_agency_request_items'):
+            return False
+        # The agency detail and invoice forms can also show a linked item's
+        # current main photo. Require the request and item to have the same owner.
+        for row, field in merchandise:
+            if field == 'photo_path':
+                cur.execute(f'''SELECT 1 FROM sales_agency_request_items i
+                    JOIN sales_agency_requests r ON r.id=i.request_id
+                    WHERE i.merchandise_id={self.mark} AND r.user_id={self.mark} LIMIT 1''',
+                    (row['id'], row['user_id']))
+                if cur.fetchone():
+                    return True
+        return False
+
+    def require_upload_access(self, relative):
+        try:
+            allowed = self.allowed(relative)
+        except Exception:
+            # Fail closed without exposing connection or personal data.
+            self.app.logger.error('Private upload authorization unavailable')
+            abort(503)
+        if not allowed:
+            abort(404)
+
+    def authorize_photo_archive(self):
+        if not current_user.is_authenticated or not current_user.is_admin() or self.staff('merchandise'):
+            return  # The download route itself checks customer ownership.
+        item_id = (request.view_args or {}).get('id')
+        if not isinstance(item_id, int) or not 1 <= item_id <= 2_147_483_647:
+            abort(404)
+        with self.db() as cur:
+            cur.execute(f'SELECT 1 FROM merchandise WHERE id={self.mark} AND user_id={self.mark}',
+                        (item_id, current_user.id))
+            if not cur.fetchone():
+                abort(404)
 
     def upload(self, filename):
         root = Path(self.app.static_folder).resolve()
@@ -216,15 +262,7 @@ class SecurityAccess:
                 abort(404)
         if not candidate.is_file():
             abort(404)
-        try:
-            allowed = self.allowed(raw)
-        except Exception:
-            # Fail closed without putting connection strings or personal data
-            # from a DB exception in HTTP output/logs.
-            self.app.logger.error('Private upload authorization unavailable')
-            abort(503)
-        if not allowed:
-            abort(404)
+        self.require_upload_access(raw)
         inline = candidate.suffix.lower() in {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.pdf'}
         response = send_file(candidate, conditional=False, etag=False, as_attachment=not inline)
         response.headers.update({'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff',
@@ -251,6 +289,8 @@ class SecurityAccess:
         if request.endpoint == 'kaika_mobile_browser_photo':
             return self.upload('uploads/mobile/' + (request.view_args or {}).get('filename', ''))
         endpoint = request.endpoint or ''
+        if endpoint == 'download_all_images':
+            return self.authorize_photo_archive()
         if endpoint not in MUTATIONS:
             return None
         if not current_user.is_authenticated:

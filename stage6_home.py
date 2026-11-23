@@ -4,6 +4,7 @@ Read-only. No network, migration, customer terms, charges or balances change.
 Recorded calculations are not provider-verified funds; test orders stay separate.
 """
 from item_registry import Actor, RegistryError, _now
+from sales_reporting import current_sale_query
 from stage3_billing import BillingService
 from stage3_funds import FundsService
 from stage3_profit import ProfitService
@@ -58,14 +59,11 @@ class HomeService:
         for item in items:
             projection = profit_service.profit(actor, item['physical_item_id'])
             facts = projection['facts']
-            test_orders = self.store.query('''SELECT o.order_id FROM stage4_channel_orders o
-                JOIN stage4_channel_listings l ON l.listing_id=o.listing_id
-                WHERE o.physical_item_id=? AND l.ownership_assignment_id=? AND o.mode='test_only' ''',
-                (item['physical_item_id'], item['ownership_assignment_id']))
-            # Stage4 writes synthetic order facts into the existing profit ledger.
-            # Until a separate source provenance is available, the whole ownership
-            # period with a test order is conservatively excluded from actual KPIs.
-            mode = 'test' if test_orders else 'record_only'
+            events = self.store.query(current_sale_query('?', '?'), (item['physical_item_id'], customer_id))
+            cycle = events[0] if events else {}
+            sale_is_current = cycle.get('event_kind') == 'sold' and item['sales_state'] in ('sold', 'shipped')
+            facts_are_current = sale_is_current and facts.get('sale_event_id') == cycle['event_id']
+            mode = 'test' if sale_is_current and cycle['test_order_id'] else 'record_only'
             row = {key: projection[key] for key in ('recognition', 'profit_excluding_monthly_yen',
                 'profit_including_monthly_yen', 'realized_profit_yen', 'estimated_profit_yen',
                 'sales_margin_percent', 'cost_return_percent', 'monthly_sales_margin_percent',
@@ -74,17 +72,24 @@ class HomeService:
                 facts={key: facts.get(key) for key in ('purchase_cost_yen', 'sale_gross_yen', 'channel_fee_yen',
                     'shipping_cost_yen', 'materials_yen', 'kaika_fee_yen', 'return_adjustment_yen', 'monthly_allocation_yen')},
                 execution_mode=mode, provider_verified=False, path='/finance/items/' + item['physical_item_id'])
+            if not facts_are_current and (facts.get('sale_event_id') or mode == 'test'):
+                for key in ('profit_excluding_monthly_yen', 'profit_including_monthly_yen',
+                            'realized_profit_yen', 'estimated_profit_yen', 'sales_margin_percent', 'cost_return_percent',
+                            'monthly_sales_margin_percent', 'monthly_cost_return_percent'):
+                    row[key] = None
+                row['facts']['sale_gross_yen'] = None
             profits.append(row)
             if mode == 'test':
                 test.append(row)
-            elif facts['basis'] == 'actual' and facts.get('sale_event_id'):
+            elif facts['basis'] == 'actual' and facts_are_current:
                 actual.append(row)
-            else:
+            elif not facts.get('sale_event_id'):
                 estimates.append(row)
         funds = FundsService(self.store.finance)
         from stage8_self_sales import self_sale_reports
-        self_sales = self_sale_reports(self.store, items,
-            excluded_item_ids={row['physical_item_id'] for row in profits if row['facts']['sale_gross_yen'] is not None or row['execution_mode']=='test'})
+        self_sales = self_sale_reports(self.store, items, excluded_item_ids={
+            row['physical_item_id'] for row in actual if row['facts']['sale_gross_yen'] is not None
+        } | {row['physical_item_id'] for row in test})
         money = {
             'self_reported_sales': _total(row['sale_gross_yen'] for row in self_sales),
             'self_sale_reports': self_sales,

@@ -14,6 +14,21 @@ from stage5_common import Stage5Store
 from stage5_payments import PhysicalPaymentService
 
 
+def _staging_demo(app, api, actor, invoice_id):
+    from staging_invoice_payment import (DEMO_INVOICE_ID, RESALE_INVOICE_ID, describe, describe_resale,
+                                         enabled, resale_reconciliation)
+    if not enabled(app) or invoice_id not in (DEMO_INVOICE_ID, RESALE_INVOICE_ID):
+        return None
+    month = api.billing.get_month(actor, invoice_id)
+    demo = (describe_resale(api.store, month, actor, include_paid_history=True) if invoice_id == RESALE_INVOICE_ID
+            else describe(api.store, month, include_refunded_history=True))
+    if not demo or demo['status'] == 'unsent':
+        return None
+    reconciled = resale_reconciliation(api.store, month, demo)
+    return {'period': month['period'], 'revision': month['revision'], 'record': demo,
+            'sale_receipt': reconciled['sale_receipt'] if reconciled else None}
+
+
 def staff():
     return current_user.is_authenticated and current_user.is_admin() and current_user.has_permission('merchandise') and current_user.has_permission('invoices')
 
@@ -83,9 +98,12 @@ def register_stage5_payments(runtime):
             overview=api.overview(service.actor())
             rows=store.query('SELECT invoice_id,customer_id,period,revision,status FROM stage3_invoice_revisions'+
                 ('' if staff() else ' WHERE customer_id=?')+' ORDER BY period DESC,revision DESC',() if staff() else (service.actor().user_id,))
+            rehearsals = [demo for row in rows
+                          if (demo := _staging_demo(app, api, service.actor(), row['invoice_id']))]
         plans=app.extensions.get('kaika_feature_plans')
         management=plans.contract_management() if plans and not staff() else None
-        return render_template('payment_review/index.html',overview=overview,invoices=rows,management=management,staff=staff())
+        return render_template('payment_review/index.html',overview=overview,invoices=rows,management=management,
+                               rehearsals=rehearsals,staff=staff())
 
     @bp.route('/payments/invoices/<invoice_id>',methods=['GET','POST'])
     @allowed()
@@ -93,14 +111,26 @@ def register_stage5_payments(runtime):
         if request.method=='POST':
             if not staff():
                 abort(403)
-            key=service.verify('stage5_prepare',invoice_id)
+            previous = _text('previous_invoice_id',100)
+            key=service.verify('stage5_replace' if previous else 'stage5_prepare',
+                               invoice_id + ':' + previous if previous else invoice_id)
+            reference = _text('review_reference',1000,True)
             with service.db(True) as store:
-                bill=service.payments(store).prepare_invoice(service.actor(),invoice_id,
-                    review_reference=_text('review_reference',1000,True),source_key=key)
+                api = service.payments(store)
+                if previous:
+                    bill = api.replace_invoice(service.actor(), invoice_id, expected_invoice_id=previous,
+                                               review_reference=reference, source_key=key)
+                else:
+                    bill = api.prepare_invoice(service.actor(), invoice_id, review_reference=reference, source_key=key)
             return redirect(url_for('payment_review.bill',bill_id=bill['bill_id']))
         with service.db() as store:
-            result=service.payments(store).inspect_invoice(service.actor(),invoice_id)
-        return render_template('payment_review/invoice.html',invoice=result,invoice_id=invoice_id,staff=staff())
+            api, actor = service.payments(store), service.actor()
+            if _staging_demo(app, api, actor, invoice_id):
+                return redirect(url_for('finance_review.invoice', month_id=invoice_id))
+            result = api.inspect_invoice(actor, invoice_id)
+            replacement = api.replacement_context(actor, result) if staff() else None
+        return render_template('payment_review/invoice.html',invoice=result,invoice_id=invoice_id,staff=staff(),
+                               replacement=replacement)
 
     @bp.post('/payments/consents')
     @allowed()
@@ -129,10 +159,11 @@ def register_stage5_payments(runtime):
     @allowed()
     def bill(bill_id):
         if request.method=='POST':
-            key=service.verify('stage5_attempt',bill_id)
+            expected = _text('invoice_id',100,True)
+            key=service.verify('stage5_attempt',bill_id+':'+expected)
             with service.db(True) as store:
                 result=service.payments(store).create_attempt(service.actor(),bill_id,_text('consent_id',100,True),
-                    off_session=request.form.get('off_session')=='yes',source_key=key)
+                    off_session=request.form.get('off_session')=='yes',source_key=key,expected_invoice_id=expected)
             return redirect(url_for('payment_review.attempt',attempt_id=result['attempt_id']))
         with service.db() as store:
             api=service.payments(store)
