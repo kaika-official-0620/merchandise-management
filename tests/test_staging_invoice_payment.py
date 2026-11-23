@@ -129,15 +129,22 @@ class StagingInvoicePaymentTests(unittest.TestCase):
     def action_form(self, role, action):
         return self.form(role, INVOICE_PATH, INVOICE_PATH + '/test-payment/' + action)
 
-    def form(self, role, source_path, target_path):
+    def form(self, role, source_path, target_path, *, extra_fields=(), submit_label=None):
         page = self.clients[role].get(source_path)
         self.assertEqual(page.status_code, 200)
         form = re.search(r'<form\b[^>]*\baction="' + re.escape(target_path) + r'"[^>]*>(.*?)</form>',
                          page.get_data(as_text=True), re.DOTALL)
         if not form:
             return None
-        return {name: re.search(r'\bname="' + name + r'"\s+value="([^"]+)"', form.group(1))[1]
-                for name in ('registry_csrf', 'operation_token')}
+        body = form.group(1)
+        if submit_label:
+            self.assertRegex(body, r'<button\b[^>]*>\s*' + re.escape(submit_label) + r'\s*</button>')
+        values = {}
+        for name in ('registry_csrf', 'operation_token', *extra_fields):
+            field = re.search(r'\bname="' + re.escape(name) + r'"\s+value="([^"]*)"', body)
+            self.assertIsNotNone(field, f'Missing {name} in form for {target_path}')
+            values[name] = field[1]
+        return values
 
     def rehearsal_rows(self):
         with closing(self.connect()) as db:
@@ -183,11 +190,15 @@ class StagingInvoicePaymentTests(unittest.TestCase):
         self.assertEqual(costs['recorded_by'], STAFF.user_id)
         self.assertEqual({key: costs[key] for key in amounts}, {key: int(value) for key, value in amounts.items()})
         self.assertGreaterEqual(datetime.fromisoformat(costs['recorded_at']), datetime.fromisoformat(payment['paid_at']))
-        self.assertEqual(self.clients['staff'].post(target, data={**form, **amounts}).status_code, 302)
+        resave = self.form('staff', page_path, target, extra_fields=tuple(amounts), submit_label='同じ費用で再保存')
+        self.assertIsNotNone(resave, 'Saved costs must still offer the staff form to replay')
+        self.assertEqual({key: resave[key] for key in amounts}, amounts)
+        self.assertIsNone(self.form('member', page_path, target))
+        self.assertEqual(self.clients['staff'].post(target, data=resave).status_code, 302)
         self.assertEqual(self.clients['staff'].post(target,
-            data={**form, **amounts, 'shipping_cost_yen': '451'}).status_code, 409)
+            data={**resave, 'shipping_cost_yen': '451'}).status_code, 409)
         self.assertEqual(self.resale_cost_rows(), [costs])
-        return costs, {**form, **amounts}
+        return costs, resave
 
     def inbox(self, role):
         response = self.clients[role].get('/notifications')
@@ -659,6 +670,7 @@ class StagingInvoicePaymentTests(unittest.TestCase):
             db.commit()
         for path in (item_path, month_source):
             self.assertNotIn(reconciliation_label, self.clients['member'].get(path).get_data(as_text=True))
+        self.assertIsNone(self.form('staff', resale_path, costs_target))
         self.assertEqual(self.clients['staff'].post(costs_target, data=cost_request).status_code, 409)
         self.assertEqual(self.resale_cost_rows(), [costs])
         historic = self.clients['member'].get(resale_path).get_data(as_text=True)
