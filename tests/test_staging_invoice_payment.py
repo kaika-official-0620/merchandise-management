@@ -26,6 +26,7 @@ from stage3_profit import ProfitService
 from stage3_profit_schema import migration_statements as profit_schema
 from stage3_web import register_stage3_finance
 from stage4_listings_schema import migration_statements as listing_schema
+from stage5_web import register_stage5_payments
 from stage6_common import migration_statements as notifications_common_schema
 from stage6_notifications_schema import migration_statements as notification_schema
 from stage6_web import register_stage6_web
@@ -100,6 +101,8 @@ class StagingInvoicePaymentTests(unittest.TestCase):
         runtime = SimpleNamespace(app=self.app, DATABASE_URL=None, get_db=self.connect)
         register_inventory_registry(runtime)
         self.web = register_stage3_finance(runtime)
+        register_stage5_payments(runtime)
+        self.app.add_url_rule('/plans', 'feature_plans.plans', lambda: 'fixture')
         notifications = register_stage6_web(runtime)
         self.notification_projection = self.enterContext(patch.object(notifications, 'refresh', wraps=notifications.refresh))
         self.clients = {role: self.app.test_client() for role in (*self.users, 'anonymous')}
@@ -775,6 +778,15 @@ class StagingInvoicePaymentTests(unittest.TestCase):
         self.assertEqual(self.return_rows(), completed_return)
         self.assertEqual(self.clients['member'].get(INVOICE_PATH + '/export.csv').data, original_csv)
         self.assertIn('880円', self.clients['member'].get(INVOICE_PATH).get_data(as_text=True))
+        for role in ('member', 'staff'):
+            payment_index = self.clients[role].get('/payments')
+            self.assertEqual(payment_index.status_code, 200)
+            page = payment_index.get_data(as_text=True)
+            for text in ('検証用の支払い・精算', '精算済み（検証）', '7,200円', '返金済み（検証）', '880円', resale_path):
+                self.assertIn(text, page)
+            response = self.clients[role].get('/payments/invoices/' + current_id)
+            self.assertEqual((response.status_code, response.location), (302, resale_path))
+        self.assertNotIn('7,200円', self.clients['other'].get('/payments').get_data(as_text=True))
 
         with closing(self.connect()) as db:
             registry = Registry(db)
