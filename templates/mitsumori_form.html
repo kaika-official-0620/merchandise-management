@@ -3,23 +3,23 @@
 {% set form_items = items if items else [] %}
 {% set is_edit = mitsumori is defined and mitsumori %}
 {% set source_mode = source_invoice is defined and source_invoice %}
-{% set issue_date_value = source_invoice.issue_date if source_mode else (mitsumori.issue_date if is_edit else today) %}
+{% set issue_date_value = (mitsumori.issue_date or today) if is_edit else today %}
 
-{% block title %}{% if is_edit %}見積り依頼書編集{% else %}見積り依頼書作成{% endif %} - 株式会社 開花{% endblock %}
+{% block title %}{% if is_edit %}見積依頼書を編集{% else %}見積依頼書を作成{% endif %} - 株式会社 開花{% endblock %}
 
 {% block content %}
 <div class="mitsumori-form-page{% if source_mode %} source-mode{% endif %}">
     <div class="page-header">
         <div>
-            <h1>{% if is_edit %}見積り依頼書編集{% else %}見積り依頼書作成{% endif %}</h1>
+            <h1>{% if is_edit %}見積依頼書を編集{% else %}見積依頼書を作成{% endif %}</h1>
             <p class="page-subtitle">商品を選んで書類を作成し、作成後の画面から開花へ送信します。</p>
         </div>
         <a href="{{ url_for('user_document_list') }}" class="btn btn-secondary">書類一覧へ戻る</a>
     </div>
 
     <div class="form-info-box">
-        <strong>見積り依頼書について</strong>
-        <span>商品名・ブランド・管理番号で検索して明細に追加できます。作成完了だけでは開花へ送信されません。プレビューは任意で確認できます。</span>
+        <strong>見積依頼書について</strong>
+        <span>{% if source_mode %}元の買取明細書から、見積を依頼する商品を選んでください。{% else %}商品名・ブランド・管理番号で検索して明細に追加できます。{% endif %}作成後の詳細画面から開花へ送信できます。プレビューは任意です。</span>
     </div>
 
     <form method="POST" class="mitsumori-form" id="mitsumori-form">
@@ -64,13 +64,13 @@
             <h2>見積依頼内容</h2>
             <div class="form-group">
                 <label for="subject">件名 <span class="required">*</span></label>
-                <input type="text" id="subject" name="subject" value="{{ mitsumori.subject if is_edit else '見積り依頼書' }}" required placeholder="例: ブランド品の見積り依頼" class="form-control">
+                <input type="text" id="subject" name="subject" value="{{ mitsumori.subject if is_edit else '見積依頼書' }}" required placeholder="例: ブランド品の見積依頼" class="form-control">
             </div>
 
             {% if source_mode %}
             <div class="source-invoice-panel">
                 <div>
-                    <strong>&#20803;&#12398;&#36023;&#21462;&#26126;&#32048;&#26360;: {{ source_invoice.invoice_no or source_invoice.id }}</strong>
+                    <strong><a href="{{ url_for('user_invoice_view', id=source_invoice.id) }}">元の買取明細書 {{ source_invoice.invoice_no or source_invoice.id }}を確認</a></strong>
                     <span>{{ source_invoice.issue_date or '-' }}</span>
                 </div>
                 <button type="button" class="btn btn-info" id="reflect-all-source-items">&#12377;&#12409;&#12390;&#21453;&#26144;</button>
@@ -78,7 +78,7 @@
             <div class="source-items-list" id="source-items-list">
                 {% for item in source_items %}
                 <label class="source-item-row">
-                    <input type="checkbox" name="source_invoice_item_choice[]" value="{{ item.id }}" checked>
+                    <input type="checkbox" name="source_invoice_item_choice[]" value="{{ item.id }}" {% if item.selected|default(true) %}checked{% endif %}>
                     <span class="source-item-name">{{ item.product_name }}</span>
                     <span class="source-item-amount">&#165;{{ "{:,}".format(item.amount or 0) }}</span>
                 </label>
@@ -224,7 +224,7 @@
             <div class="document-preview-toolbar">
                 <div>
                     <span class="preview-kicker">書類のデモ表示・未送信</span>
-                    <h2 id="preview-title">見積り依頼書の確認</h2>
+                    <h2 id="preview-title">見積依頼書の確認</h2>
                 </div>
                 <button type="button" class="preview-close-btn" data-close-preview>閉じる</button>
             </div>
@@ -254,7 +254,7 @@
                     </div>
                     <div class="preview-sender-box">
                         <strong>{{ current_user.display_name or current_user.username or 'ご依頼者' }}</strong>
-                        <span>見積り依頼者</span>
+                        <span>見積依頼者</span>
                         <span>件名：<span id="preview-subject-inline"></span></span>
                     </div>
                 </div>
@@ -1168,22 +1168,25 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function updateRowAmount(row) {
-        const quantity = Number(row.querySelector('input[name="quantity[]"]')?.value || 0);
+    function rowAmount(row) {
+        if (row.dataset.sourceAmount !== undefined) {
+            return Number(row.dataset.sourceAmount);
+        }
+        const quantity = Number(row.querySelector('input[name="quantity[]"]')?.value || 1);
         const unitPrice = Number(row.querySelector('input[name="unit_price[]"]')?.value || 0);
+        return quantity * unitPrice;
+    }
+
+    function updateRowAmount(row) {
         const amountCell = row.querySelector('.row-amount');
         if (amountCell) {
-            amountCell.textContent = formatYen(quantity * unitPrice);
+            amountCell.textContent = formatYen(rowAmount(row));
         }
     }
 
     function updateTotalAmount() {
-        let total = 0;
-        document.querySelectorAll('#items-body .item-row').forEach((row) => {
-            const quantity = Number(row.querySelector('input[name="quantity[]"]')?.value || 0);
-            const unitPrice = Number(row.querySelector('input[name="unit_price[]"]')?.value || 0);
-            total += quantity * unitPrice;
-        });
+        const rows = Array.from(document.querySelectorAll('#items-body .item-row'));
+        const total = rows.reduce((sum, row) => sum + rowAmount(row), 0);
         document.getElementById('total-amount').textContent = formatYen(total);
     }
 
@@ -1260,6 +1263,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function createSourceRow(item = {}) {
         const row = document.createElement('tr');
         row.className = 'item-row source-item-reflected';
+        row.dataset.sourceAmount = item.amount;
         row.innerHTML = `
             <td class="item-no"></td>
             <td>
@@ -1419,7 +1423,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 itemName,
                 quantity: quantity || 1,
                 unitPrice,
-                amount: (quantity || 1) * unitPrice
+                amount: rowAmount(row)
             });
         });
 
@@ -1430,7 +1434,7 @@ document.addEventListener('DOMContentLoaded', () => {
             companyName: document.getElementById('company_name')?.value || '株式会社 開花',
             department: document.getElementById('department')?.value || '',
             contactPerson: document.getElementById('contact_person')?.value || '',
-            subject: document.getElementById('subject')?.value || '見積り依頼書',
+            subject: document.getElementById('subject')?.value || '見積依頼書',
             notes: document.querySelector('textarea[name="notes"]')?.value || '',
             rows,
             total

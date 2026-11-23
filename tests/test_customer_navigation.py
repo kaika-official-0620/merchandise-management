@@ -7,6 +7,7 @@ from flask_login import LoginManager, UserMixin
 from jinja2 import DictLoader
 
 from customer_navigation import STAGE_FLAGS, current_section, register_customer_navigation
+from inventory_custody import InventoryCustody
 
 
 class Customer(UserMixin):
@@ -25,11 +26,15 @@ class Plans:
     enabled = True
     allowed = True
     fail = False
+    plan_code = 'normal'
 
     def has_feature(self, feature):
         if self.fail:
             raise RuntimeError('private capability failure detail')
         return self.allowed and feature == 'inventory_manage'
+
+    def snapshot(self):
+        return {'plan_code': self.plan_code}
 
 
 DESTINATIONS = (
@@ -70,7 +75,8 @@ class CustomerNavigationTests(unittest.TestCase):
             '{{ {"available":customer_navigation_available,"navigation":customer_nav_sections,"current":customer_nav_current}|tojson }}'))
         self.plans = Plans()
         self.app.extensions['kaika_feature_plans'] = self.plans
-        self.runtime = SimpleNamespace(app=self.app, get_db=self.unexpected_db)
+        self.runtime = SimpleNamespace(app=self.app, DATABASE_URL=None, get_db=self.unexpected_db)
+        self.app.extensions['inventory_custody'] = InventoryCustody(self.runtime)
         register_customer_navigation(self.runtime)
         self.client = self.app.test_client()
 
@@ -180,6 +186,17 @@ class CustomerNavigationTests(unittest.TestCase):
         self.assertNotIn('/dest/inventory_intake_new', self.card_urls('requests'))
         self.assertIn('/dest/inventory_intakes', self.card_urls('requests'))
         self.assertIn('/dest/feature_plans.plans', self.card_urls('money'))
+
+    def test_free_member_sees_intake_conditions_and_can_keep_registering_and_reading_history(self):
+        self.login()
+        self.assertIn('/dest/inventory_intake_new', self.card_urls('requests'))
+        self.plans.plan_code = None
+        requests = self.hub('requests')['section']['cards']
+        self.assertNotIn('/dest/inventory_intake_new', {card['url'] for card in requests})
+        self.assertIn('/dest/inventory_intakes', {card['url'] for card in requests})
+        conditions = next(card for card in requests if card['url'] == '/dest/feature_plans.plans')
+        self.assertEqual(conditions['title'], '預け入れの利用条件を確認')
+        self.assertIn('/dest/self_inventory_new', self.card_urls('products'))
 
     def test_disabled_plans_and_inventory_do_not_offer_registration(self):
         self.login()

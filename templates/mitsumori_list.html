@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}見積り依頼書一覧 - 株式会社 開花{% endblock %}
+{% block title %}見積依頼書一覧 - 株式会社 開花{% endblock %}
 
 {% block content %}
 {% set current_return_url = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path %}
@@ -47,7 +47,7 @@
                 </span>
             </div>
             <div class="doc-card-body">
-                <h2>{{ doc.subject or '見積り依頼書' }}</h2>
+                <h2>{{ doc.subject or '見積依頼書' }}</h2>
                 <dl>
                     <div>
                         <dt>発行日</dt>
@@ -73,7 +73,7 @@
                 <a href="{{ url_for('user_mitsumori_edit', id=doc.id) }}" class="btn btn-secondary">編集</a>
                 {% endif %}
                 {% if status in ['draft', 'in_progress'] %}
-                <form method="POST" action="{{ url_for('user_mitsumori_delete', id=doc.id) }}" class="inline-delete-form" onsubmit="return confirm('この見積り依頼書を削除しますか？')">
+                <form method="POST" action="{{ url_for('user_mitsumori_delete', id=doc.id) }}" class="inline-delete-form" onsubmit="return confirm('この見積依頼書を削除しますか？')">
                     <input type="hidden" name="next" value="{{ current_return_url }}">
                     <button type="submit" class="btn btn-danger">削除</button>
                 </form>
@@ -87,7 +87,7 @@
     <div class="empty-state-card">
         <h2>作成中の見積依頼書はありません</h2>
         <p>下書き保存すると、この画面と書類一覧に表示されます。</p>
-        <a href="{{ url_for('user_mitsumori_add') }}" class="btn btn-primary">見積り依頼書を作成</a>
+        <a href="{{ url_for('user_mitsumori_add') }}" class="btn btn-primary">見積依頼書を作成</a>
     </div>
     {% endif %}
 </div>

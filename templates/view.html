@@ -950,7 +950,10 @@
   <div class="item-detail-action-summary"><span class="item-detail-action-label">現在の状態</span><strong>{{ item.mobile_status_label }}</strong></div>
   <div class="item-detail-action-buttons">{% include '_inventory_custody_actions.html' %}</div>
 </section>
-<p class="custody-note">自己保管中の登録・販売・発送の記録はご本人が行います。開花に預ける場合は、預け入れの受付を作成してください。開花が受領を確認すると、開花で保管・記帳する商品に切り替わります。</p>
+<p class="custody-note">自己保管中の登録・販売・発送の記録はご本人が行います。
+{% set intake_access = custody_intake_access() if custody_intake_access is defined else none %}
+{% if intake_access and intake_access.allowed %}開花に預ける場合は、預け入れの受付を作成してください。開花が受領を確認すると、開花で保管・記帳する商品に切り替わります。
+{% elif intake_access and intake_access.conditions_url %}<a href="{{ intake_access.conditions_url }}">預け入れの利用条件を確認</a>できます。{% endif %}</p>
 {% else %}
 <section class="item-detail-action-panel">
     <div class="item-detail-action-summary">

@@ -784,7 +784,7 @@ def apply(module: Any) -> None:
                         "document_key": "vendor_estimate" if is_vendor_outgoing else "client_mitsumori",
                         "id": row["id"],
                         "request_id": request_info.get("id"),
-                        "document_type": "業者向け依頼書" if is_vendor_outgoing else "見積り依頼書",
+                        "document_type": "業者向け依頼書" if is_vendor_outgoing else "見積依頼書",
                         "document_no": row.get("document_no") or "-",
                         "client_name": row.get("client_name") or row.get("username") or "未設定",
                         "service_type": request_info.get("service_type") or "",
@@ -1400,12 +1400,12 @@ def apply(module: Any) -> None:
                 "flow_label": "クライアント → 開花",
                 "stage_title": "1. クライアントから受付",
                 "summary": "クライアントから届いた依頼書を確認して、どのサービスの案件かを整理する段階です。",
-                "documents": ["見積り依頼書", "買取依頼書"],
+                "documents": ["見積依頼書", "買取依頼書"],
                 "create_guidance": "この段階ではクライアント側で作成された書類を確認します。開花側の書類作成は不要で、内容確認後に案件行から次の業者向け書類作成へ進みます。",
                 "check_points": [
                     "依頼書の内容と対象商品に漏れがないかを確認します。",
                     "業者卸販売 / 業者オークション / 同時出品のどの案件かを確認します。",
-                    "内容確認後、次は業者向け見積り依頼書の作成へ進みます。",
+                    "内容確認後、次は業者向け見積依頼書の作成へ進みます。",
                 ],
                 "action_title": "受付中の案件",
                 "action_note": "未完了の受付案件だけを表示しています。過去の受付履歴は左メニューの「書類履歴」から確認してください。",
@@ -1414,8 +1414,8 @@ def apply(module: Any) -> None:
             "vendor_outgoing": {
                 "flow_label": "開花 → 業者",
                 "stage_title": "2. 開花から業者へ依頼",
-                "summary": "クライアントの依頼内容を確認し、開花名義で業者へ見積り依頼を出す段階です。",
-                "documents": ["業者向け見積り依頼書"],
+                "summary": "クライアントの依頼内容を確認し、開花名義で業者へ見積依頼を出す段階です。",
+                "documents": ["業者向け見積依頼書"],
                 "create_guidance": "各案件行の「業者向け依頼書を作成」から、クライアントの依頼内容を引用した業者向け書類を作成できます。",
                 "check_points": [
                     "クライアントから届いた内容を業者へ流す前に再確認します。",
@@ -1424,7 +1424,7 @@ def apply(module: Any) -> None:
                 ],
                 "action_title": "業者へ依頼中の案件",
                 "action_note": "この段階では、業者へ依頼済みで回答待ちの案件を確認します。",
-                "documents_title": "業者へ送った見積り依頼書",
+                "documents_title": "業者へ送った見積依頼書",
             },
             "vendor_incoming": {
                 "flow_label": "業者 → 開花",
@@ -1604,7 +1604,7 @@ def apply(module: Any) -> None:
         client_options = sorted({row.get("client_name") for row in all_rows if row.get("client_name")})
         status_options = sorted({(row.get("status"), row.get("status_label")) for row in all_rows if row.get("status")})
         document_type_options = [
-            ("client_mitsumori", "見積り依頼書"),
+            ("client_mitsumori", "見積依頼書"),
             ("client_kaitori_request", "買取依頼書"),
             ("vendor_estimate", "業者向け依頼書"),
             ("vendor_statement", "業者買取明細書"),
@@ -1826,7 +1826,7 @@ def apply(module: Any) -> None:
     def user_mitsumori_edit_v2(id: int):
         mitsumori = (load_mitsumori_for_user(id) or [None])[0]
         if mitsumori and not is_visible_user_scope(mitsumori, "client_incoming"):
-            flash("この見積り依頼書は編集できません。", "error")
+            flash("この見積依頼書は編集できません。", "error")
             return redirect(url_for("user_mitsumori_list"))
         return originals["user_mitsumori_edit"](id)
 
@@ -1834,7 +1834,7 @@ def apply(module: Any) -> None:
     def user_mitsumori_delete_v2(id: int):
         mitsumori = (load_mitsumori_for_user(id) or [None])[0]
         if mitsumori and not is_visible_user_scope(mitsumori, "client_incoming"):
-            flash("この見積り依頼書は削除できません。", "error")
+            flash("この見積依頼書は削除できません。", "error")
             return document_delete_redirect(url_for("user_document_list"))
         return originals["user_mitsumori_delete"](id)
 
@@ -1913,7 +1913,7 @@ def apply(module: Any) -> None:
                 flash("対象クライアントを特定できませんでした。", "error")
                 return redirect(request.url)
             if not items_data:
-                flash("見積り依頼書に追加する商品を選択してください。", "error")
+                flash("見積依頼書に追加する商品を選択してください。", "error")
                 return redirect(request.url)
 
             conn, cur = open_cursor()

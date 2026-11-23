@@ -126,6 +126,21 @@ class DocumentWorkflowTests(unittest.TestCase):
         self.assertEqual(self.client.get('/mitsumori/download/102').status_code,200)
         self.assertEqual([row['id'] for row in self.client.get('/admin/customer-submissions').get_json(force=True)], [101])
 
+    def test_legacy_staff_estimate_does_not_block_member_product(self):
+        self.add_doc(id=101, status='submitted', item=12)
+        for id in (102, 103, 104):
+            self.add_doc(id=id, status='submitted', item=11)
+        with self.connect() as db:
+            db.execute("UPDATE user_mitsumori SET document_no=' km-20261121-010 ', document_scope=NULL WHERE id=102")
+            db.execute("UPDATE user_mitsumori SET document_no='MT-20261121-011' WHERE id=103")
+            db.execute("UPDATE user_mitsumori SET created_by_admin_id=9 WHERE id=104")
+            db.execute("UPDATE user_mitsumori SET document_scope='' WHERE id=101")
+        data = self.client.get('/mitsumori/add').get_json(force=True)
+        self.assertEqual([row['id'] for row in data['available']], [11])
+        self.assertEqual([row['id'] for row in data['history']], [12])
+        self.assertEqual(self.client.post('/mitsumori/add', data=self.form_data()).status_code, 200)
+        self.assertEqual(self.client.post('/mitsumori/add', data=self.form_data(**{'merchandise_id[]':['12']})).status_code, 409)
+
     def test_cannot_forge_sent_status_on_save(self):
         self.assertEqual(self.client.post('/mitsumori/add',data=self.form_data(status='submitted')).status_code,400)
 
@@ -332,6 +347,22 @@ class DocumentWorkflowTests(unittest.TestCase):
         form={'status':'completed','source_invoice_id':'501','source_invoice_item_id[]':[str(source_item)]}
         self.assertEqual(self.client.post('/mitsumori/add',data=form).status_code,200)
         self.assertEqual(self.send().status_code,302)
+
+    def test_source_edit_uses_stored_source_and_cannot_attach_or_switch_sources(self):
+        source_item = self.source_pair()
+        self.add_doc(id=502, kind='purchase_statement', status='sent', item=12, scope='client_outgoing')
+        self.add_doc(id=102, status='draft')
+        with self.connect() as db:
+            db.execute("UPDATE user_mitsumori SET status='draft' WHERE id=101")
+            replacement_item = db.execute('SELECT id FROM invoice_items WHERE invoice_id=502').fetchone()[0]
+        form = {'status':'completed', 'source_invoice_item_id[]':[str(source_item)]}
+        self.assertEqual(self.client.post('/mitsumori/edit/101', data=form).status_code, 200)
+        replacement = {'source_invoice_id':'502', 'source_invoice_item_id[]':[str(replacement_item)]}
+        self.assertEqual(self.client.post('/mitsumori/edit/101', data={**form, **replacement}).status_code, 409)
+        self.assertEqual(self.client.post('/mitsumori/edit/101?source_invoice_id=502', data={**form, 'source_invoice_id':'501'}).status_code, 409)
+        self.assertEqual(self.client.post('/mitsumori/edit/102', data={**form, **replacement}).status_code, 409)
+        self.login(2)
+        self.assertEqual(self.client.post('/mitsumori/edit/101', data=form).status_code, 404)
 
     def test_source_exception_does_not_allow_unrelated_new_request(self):
         self.source_pair()

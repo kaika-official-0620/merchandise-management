@@ -12,6 +12,7 @@ from flask import Flask
 import test_inventory_custody as custody_fixtures
 import test_mobile_api as mobile_fixtures
 from feature_plans import FeaturePlans
+from inventory_registry_web import register_inventory_registry
 from item_registry import Registry, Actor, RegistryError
 from item_registry_schema import migrate_registry
 from stage2_self_management import (PHOTO_RECORDS_DDL, basic_self_management_allowed,
@@ -46,6 +47,7 @@ class Stage2SelfManagementTests(unittest.TestCase):
             migrate_registry(conn, allowed_test_path=self.path)
             conn.execute(PHOTO_RECORDS_DDL)
         self.app.config.update(STAGE2_INVENTORY_ENABLED=True, STAGE2_FREE_LIMIT_PROPOSAL_ENABLED=True)
+        register_inventory_registry(self.runtime)
         self.plans.snapshot = lambda user=None: {'plan_code': None}
 
     def add_unlinked(self, count, user_id=1, **extra):
@@ -266,8 +268,16 @@ class Stage2SelfManagementTests(unittest.TestCase):
         self.plans.snapshot = lambda user=None: {'plan_code': 'normal'}
         item_id = self.create()
         intake_id, _ = self.new_intake(item_id)
+        prepared = self.operation('/inventory/intakes/new')
         self.plans.snapshot = lambda user=None: {'plan_code': None}
         self.assertEqual(self.client.get('/inventory/intakes/new').status_code, 403)
+        blocked = self.client.post('/inventory/intakes/new', data={**prepared, 'kind': 'registration', 'expected_count': '1'})
+        self.assertEqual(blocked.status_code, 403)
+        self.assertIn('追加サービスの利用条件', blocked.get_data(as_text=True))
+        history = self.client.get('/inventory/intakes')
+        self.assertEqual(history.status_code, 200)
+        self.assertNotIn('href="/inventory/intakes/new"', history.get_data(as_text=True))
+        self.assertEqual(self.row('SELECT COUNT(*) AS n FROM inventory_intakes')['n'], 1)
         self.action(intake_id, 'cancel')
         self.assertEqual(self.row('SELECT status FROM inventory_intakes WHERE id=?', (intake_id,))['status'], 'cancelled')
 

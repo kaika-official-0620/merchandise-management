@@ -7,7 +7,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, viewport-fit=cover">
-    <title>見積り依頼書 - {{ mitsumori.document_no if mitsumori else '' }}</title>
+    <title>見積依頼書 - {{ mitsumori.document_no if mitsumori else '' }}</title>
     <style>
         * {
             box-sizing: border-box;
@@ -437,8 +437,8 @@
             <div class="company-info">
                 <div class="company-name">{{ current_user.display_name or current_user.username or 'ご依頼者' }}</div>
                 <div class="company-address">
-                    見積り依頼者<br>
-                    {% if mitsumori and mitsumori.subject %}件名：{{ mitsumori.subject }}{% else %}件名：見積り依頼書{% endif %}
+                    見積依頼者<br>
+                    {% if mitsumori and mitsumori.subject %}件名：{{ mitsumori.subject }}{% else %}件名：見積依頼書{% endif %}
                 </div>
                 <div class="registration-number">送付先：株式会社 開花</div>
             </div>
@@ -471,7 +471,7 @@
 
         <div class="footer-section">
             <div class="footer-left">
-                本書は見積り依頼内容の控えです。正式な査定・買取金額は開花側の確認後に確定します。
+                本書は見積依頼内容の控えです。正式な査定・買取金額は開花側の確認後に確定します。
             </div>
             <table class="summary-table">
                 <tr>

@@ -42,7 +42,12 @@
     {% if stage2_quota.needs_reconciliation %}<br>{{ stage2_quota.unreconciled_items }}件は個品の照合待ちです。重複を推測して件数から外していません。{% endif %}
     {% if not stage2_quota.can_add and not item %}<br>現在は新しい商品の追加を保留しています。{% endif %}
   </div>{% endif %}
-  {% if custody_context is defined and not item %}<div class="notice">こちらはご自身で保管・登録する商品です。開花に商品を送って登録も任せる場合は、<a href="{{ url_for('inventory_intake_new') }}">開花へ預ける・登録を依頼</a>から受け付けできます。商品名だけでも登録でき、詳細は後から追加できます。</div>{% endif %}
+  {% if custody_intake_access is defined and not item %}
+  {% set intake_access = custody_intake_access() %}
+  <div class="notice">こちらはご自身で保管・登録する商品です。商品名だけでも登録でき、詳細は後から追加できます。
+    {% if intake_access.allowed %}開花に登録を任せる場合は、<a href="{{ url_for('inventory_intake_new') }}">開花へ預ける・登録を依頼</a>へ進んでください。
+    {% elif intake_access.conditions_url %}<a href="{{ intake_access.conditions_url }}">預け入れの利用条件を確認</a>できます。{% endif %}
+  </div>{% endif %}
   {% if locked %}<div class="notice" role="status">開花への依頼中・配送中・開花管理中の商品は、この画面で編集できません。預け入れの受付状況をご確認ください。変更が必要な場合は開花へお問い合わせください。</div>{% endif %}
   <form method="POST" enctype="multipart/form-data" id="self-inventory-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token_value }}">

@@ -473,20 +473,26 @@ def exercise_workflows(module, preview, users, clients, request, report):
         check('customer delete own fixture only after confirmed POST', deleted is not None and deleted.status_code == 302 and
               row('SELECT id FROM customers WHERE id=?', (customer_id,)) is None)
 
-    request('normal', '/inquiry/new', 'POST', {'category': 'general', 'title': '確認問い合わせ', 'content': '架空データの問合せ確認'}, 'inquiry_create')
+    inquiry_fields = tokens(expect_page('normal', '/inquiry/new', '開花に問い合わせる'), security=True)
+    created = request('normal', '/inquiry/new', 'POST', {**inquiry_fields, 'category': 'general',
+                      'title': '確認問い合わせ', 'content': '架空データの問合せ確認'}, 'inquiry_create')
     inquiry = row('SELECT * FROM inquiries WHERE title=?', ('確認問い合わせ',))
-    check('inquiry create persists', inquiry and inquiry['user_id'] == users['normal']['id'])
+    check('inquiry create persists', created is not None and created.status_code == 302 and
+          inquiry and inquiry['user_id'] == users['normal']['id'])
     if inquiry:
         inquiry_id = inquiry['id']
-        expect_page('normal', f'/inquiry/{inquiry_id}', '確認問い合わせ')
-        expect_page('admin', f'/admin/inquiry/{inquiry_id}', '確認問い合わせ')
-        request('admin', f'/admin/inquiry/{inquiry_id}/reply', 'POST', {'content': '確認返信'}, 'inquiry_admin_reply')
+        customer_detail = f'/inquiry/{inquiry_id}'
+        staff_detail = f'/admin/inquiry/{inquiry_id}'
+        customer_fields = tokens(expect_page('normal', customer_detail, '確認問い合わせ'), security=True)
+        staff_fields = tokens(expect_page('admin', staff_detail, '確認問い合わせ'), security=True)
+        request('admin', staff_detail + '/reply', 'POST', {**staff_fields, 'content': '確認返信'}, 'inquiry_admin_reply')
         check('admin inquiry reply persists', row('SELECT COUNT(*) AS n FROM inquiry_replies WHERE inquiry_id=?', (inquiry_id,))['n'] == 1)
-        request('normal', f'/inquiry/{inquiry_id}/reply', 'POST', {'content': '確認再返信'}, 'inquiry_user_reply')
+        request('normal', customer_detail + '/reply', 'POST', {**customer_fields, 'content': '確認再返信'}, 'inquiry_user_reply')
         check('user inquiry reply persists', row('SELECT COUNT(*) AS n FROM inquiry_replies WHERE inquiry_id=?', (inquiry_id,))['n'] == 2)
-        request('business', f'/inquiry/{inquiry_id}/delete', 'POST', {}, 'inquiry_cross_owner_delete')
+        other_fields = tokens(expect_page('business', '/inquiry/new'), security=True)
+        request('business', customer_detail + '/delete', 'POST', other_fields, 'inquiry_cross_owner_delete')
         check('inquiry cross owner deletion denied', row('SELECT id FROM inquiries WHERE id=?', (inquiry_id,)) is not None)
-        request('normal', f'/inquiry/{inquiry_id}/delete', 'POST', {}, 'inquiry_delete')
+        request('normal', customer_detail + '/delete', 'POST', customer_fields, 'inquiry_delete')
         check('inquiry delete removes fixture and replies', row('SELECT id FROM inquiries WHERE id=?', (inquiry_id,)) is None and
               row('SELECT COUNT(*) AS n FROM inquiry_replies WHERE inquiry_id=?', (inquiry_id,))['n'] == 0)
 
@@ -518,8 +524,9 @@ def exercise_workflows(module, preview, users, clients, request, report):
                   '<td class="text-right">2 点</td>' in printable.get_data(as_text=True))
         if printable is not None and root == '/invoices':
             printed = printable.get_data(as_text=True)
-            check('user invoice printed tax matches existing additive calculation',
-                  '金額(税抜)' in printed and '消費税(8%)' in printed and '消費税(10%)' in printed and
+            check('unconfirmed member invoice prints input values without a payment demand',
+                  document['service_type'] == 'pending_review' and '金額（入力値）' in printed and
+                  '参考合計・請求未確定' in printed and '下記の通りご請求申し上げます。' not in printed and
                   '内税(10%)' not in printed and '2,640' in printed and document['total_amount'] == 2640)
         artifact(root.strip('/') + '-print.html', printable)
         downloaded = request('normal', download_pattern.format(document_id), label='document_download')
@@ -550,7 +557,7 @@ def exercise_workflows(module, preview, users, clients, request, report):
             clone = dict(document)
             clone.pop('id')
             clone.update(invoice_no=str(document['invoice_no']) + '-ADMIN', document_scope='client_outgoing',
-                         source_admin_kaitori_id=1, status='draft')
+                         source_admin_kaitori_id=1, service_type='normal', status='draft')
             conn = module.get_db()
             try:
                 cur = conn.execute(f'INSERT INTO invoices ({",".join(clone)}) VALUES ({",".join("?" for _ in clone)})', tuple(clone.values()))
@@ -1059,6 +1066,113 @@ def exercise_workflows(module, preview, users, clients, request, report):
               database_fingerprint() == before_invoice)
         check('unapproved client invoice leaves step4 ready and unlinked', stage_item['workflow_status'] == 'step4_ready' and
               stage_item['client_invoice_id'] is None)
+
+    # Quote regressions: complete a normal draft, then resume a sold-item draft
+    # from the exact issued purchase statement, without allocating a new number.
+    member_id = users['business']['id']
+    member_product = insert_fixture('merchandise', {'user_id': member_id, 'scope': 'user',
+                                    'product_name': '架空の通常見積商品', 'listing_price': 5000})
+    legacy_estimate = insert_fixture('user_mitsumori', {
+        'user_id': member_id, 'document_no': 'KM-20260910-998', 'issue_date': '2026-09-10',
+        'document_scope': 'client_incoming', 'status': 'submitted', 'total_amount': 1000,
+    })
+    insert_fixture('user_mitsumori_items', {'mitsumori_id': legacy_estimate, 'item_no': 1, 'item_name': '架空の通常見積商品',
+        'merchandise_id': member_product, 'quantity': 1, 'unit': '点', 'unit_price': 1000, 'amount': 1000})
+    picker = request('business', '/api/document-products?inventory_only=1', label='quote_legacy_staff_products')
+    check('quote picker does not exclude stock found only in a legacy staff estimate',
+          picker is not None and picker.status_code == 200 and
+          any(item['id'] == member_product for item in picker.get_json()))
+    ordinary = {'subject': '架空の通常見積・再開', 'issue_date': '2026-09-10', 'company_name': '株式会社 開花',
+                'item_name[]': '架空の通常見積商品', 'merchandise_id[]': str(member_product),
+                'quantity[]': '1', 'unit[]': '点', 'unit_price[]': '5000', 'status': 'draft'}
+    created_quote = request('business', '/mitsumori/add', 'POST', ordinary, 'quote_ordinary_draft')
+    ordinary_draft = row('SELECT id,document_no FROM user_mitsumori WHERE subject=?', (ordinary['subject'],))
+    check('quote ordinary stock selection saves as a member draft', created_quote is not None and
+          created_quote.status_code == 302 and bool(ordinary_draft))
+    if ordinary_draft:
+        quote_id = ordinary_draft['id']
+        edit_path = f'/mitsumori/edit/{quote_id}'
+        reopened = request('business', edit_path, label='quote_ordinary_reopen')
+        check('quote ordinary draft reopens with selected member stock', reopened is not None and reopened.status_code == 200 and
+              f'name="merchandise_id[]" value="{member_product}"' in reopened.get_data(as_text=True))
+        result = request('business', edit_path, 'POST', {**ordinary, 'status': 'completed'}, 'quote_ordinary_complete')
+        check('quote ordinary completion opens detail and retains selected stock and original number',
+              result is not None and result.status_code == 302 and result.location == f'/mitsumori/view/{quote_id}' and
+              row('SELECT document_no,status FROM user_mitsumori WHERE id=?', (quote_id,)) ==
+              {'document_no': ordinary_draft['document_no'], 'status': 'completed'} and
+              row('SELECT merchandise_id FROM user_mitsumori_items WHERE mitsumori_id=?', (quote_id,)) ==
+              {'merchandise_id': member_product})
+
+    sold_product = insert_fixture('merchandise', {'user_id': member_id, 'scope': 'user',
+        'product_name': '架空の買取明細売却済み商品', 'listing_price': 1500, 'sale_date': '2026-09-10'})
+    source_fixture = {'sender_id': member_id, 'issue_date': '2026-09-10', 'subtotal': 3001, 'total_amount': 3001,
+                      'status': 'sent', 'document_scope': 'client_outgoing', 'service_type': 'pending_review'}
+    source_id = insert_fixture('invoices', {**source_fixture, 'invoice_no': 'KT-VERIFY-QUOTE-DRAFT'})
+    replacement_id = insert_fixture('invoices', {**source_fixture, 'invoice_no': 'KT-VERIFY-QUOTE-OTHER'})
+    exact_row = insert_fixture('invoice_items', {'invoice_id': source_id, 'item_no': 1,
+        'product_name': '架空の買取明細売却済み商品', 'merchandise_id': sold_product,
+        'quantity': 2, 'unit': '点', 'unit_price': 1500, 'amount': 3001})
+    other_item = {'product_name': '架空の未選択商品', 'quantity': 1, 'unit': '点', 'unit_price': 200, 'amount': 200}
+    unchecked_row = insert_fixture('invoice_items', {**other_item, 'invoice_id': source_id, 'item_no': 2})
+    replacement_row = insert_fixture('invoice_items', {**other_item, 'invoice_id': replacement_id, 'item_no': 1})
+    source_form = {'subject': '架空の買取明細・見積再開', 'status': 'draft',
+                   'source_invoice_id': str(source_id), 'source_invoice_item_id[]': str(exact_row)}
+    source_create = request('business', f'/mitsumori/add?source_invoice_id={source_id}', 'POST', source_form, 'quote_linked_draft')
+    source_draft = row('SELECT id,document_no FROM user_mitsumori WHERE source_invoice_id=?', (source_id,))
+    check('quote creation from an issued purchase statement permits its sold item',
+          source_create is not None and source_create.status_code == 302 and bool(source_draft))
+    if source_draft:
+        quote_id = source_draft['id']
+        edit_path = f'/mitsumori/edit/{quote_id}'
+        source_number_series = source_draft['document_no'].rsplit('-', 1)[0] + '-'
+        previous_suffix = row('SELECT last_suffix FROM quote_number_high_water WHERE series=?', (source_number_series,))
+        reopened = request('business', edit_path, label='quote_linked_draft_reopen')
+        html = reopened.get_data(as_text=True) if reopened is not None else ''
+        checked_box = re.search(rf'name="source_invoice_item_choice\[\]" value="{exact_row}"[^>]*\bchecked\b', html)
+        unchecked_box = re.search(rf'name="source_invoice_item_choice\[\]" value="{unchecked_row}"[^>]*>', html)
+        check('quote reopening retains exact origin and only previously selected source lines',
+              reopened is not None and reopened.status_code == 200 and
+              f'href="/invoices/view/{source_id}"' in html and
+              f'name="source_invoice_id" value="{source_id}"' in html and checked_box and unchecked_box and
+              checked_box.start() < unchecked_box.start() and 'checked' not in unchecked_box.group(0))
+        other = request('normal', edit_path, label='quote_linked_other_member_denied')
+        check('quote linked draft is private to its author', other is not None and other.status_code == 404)
+        tampered = request('business', edit_path, 'POST', {**source_form, 'source_invoice_id': str(replacement_id),
+            'source_invoice_item_id[]': str(replacement_row)}, 'quote_linked_source_tampering')
+        check('quote linked draft rejects substitution of an otherwise valid source',
+              tampered is not None and tampered.status_code == 409)
+        with module.get_db() as conn:
+            conn.execute('UPDATE invoice_items SET amount=3002 WHERE id=?', (exact_row,))
+        stale = request('business', edit_path, 'POST', source_form, 'quote_linked_source_changed')
+        check('quote linked draft keeps its saved amount if a source line changed',
+              stale is not None and stale.status_code == 409 and
+              row('SELECT total_amount,status FROM user_mitsumori WHERE id=?', (quote_id,)) ==
+              {'total_amount': 3001, 'status': 'draft'})
+        with module.get_db() as conn:
+            conn.execute('UPDATE invoice_items SET amount=3001 WHERE id=?', (exact_row,))
+        completed = request('business', edit_path, 'POST', {**source_form, 'status': 'completed',
+            'item_name[]': '書換え不可', 'unit_price[]': '20'}, 'quote_linked_complete')
+        snapshot = row('SELECT document_no,source_invoice_id,source_document_id,source_document_type,total_amount,status '
+                       'FROM user_mitsumori WHERE id=?', (quote_id,))
+        check('quote linked completion keeps one number, origin and source amount and opens detail',
+              completed is not None and completed.status_code == 302 and completed.location == f'/mitsumori/view/{quote_id}' and
+              snapshot == {'document_no': source_draft['document_no'], 'source_invoice_id': source_id,
+                           'source_document_id': source_id, 'source_document_type': 'invoice',
+                           'total_amount': 3001, 'status': 'completed'} and
+              row('SELECT COUNT(*) AS lines,SUM(amount) AS total FROM user_mitsumori_items WHERE mitsumori_id=?', (quote_id,)) ==
+              {'lines': 1, 'total': 3001} and
+              row('SELECT last_suffix FROM quote_number_high_water WHERE series=?', (source_number_series,)) == previous_suffix)
+        detail = request('business', f'/mitsumori/view/{quote_id}', label='quote_linked_detail')
+        send_path = f'/documents/submit/estimate/{quote_id}'
+        if detail is not None and detail.status_code == 200 and send_path in detail.get_data(as_text=True):
+            submitted = request('business', send_path, 'POST', {**tokens(detail, security=True), 'destination': 'kaika'}, 'quote_linked_send')
+        else:
+            submitted = None
+        staff_receipt = request('admin', f'/admin/customer-submissions/estimate/{quote_id}', label='quote_linked_staff_receipt')
+        check('quote linked completion requires separate send then appears in staff receipt',
+              submitted is not None and submitted.status_code == 302 and
+              row('SELECT status FROM user_mitsumori WHERE id=?', (quote_id,)) == {'status': 'submitted'} and
+              staff_receipt is not None and staff_receipt.status_code == 200)
 
     # Exercise the real exception handler without disclosing diagnostic text.
     records = []

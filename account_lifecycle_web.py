@@ -88,7 +88,17 @@ def register_account_lifecycle(runtime):
 
     @bp.get('/account-deletion-info')
     def information():
-        return render_template('account_deletion/info.html',enabled=app.config.get('ACCOUNT_LIFECYCLE_ENABLED') is True)
+        enabled = app.config.get('ACCOUNT_LIFECYCLE_ENABLED') is True
+        entry = None
+        if enabled and not current_user.is_authenticated:
+            entry = 'login'
+        elif enabled:
+            try:
+                with service.db() as store:
+                    entry = 'staff' if LifecycleService(store).authorize(service.actor()) else 'customer'
+            except RegistryError:
+                pass  # Keep the information available when no action is ready for this account.
+        return render_template('account_deletion/info.html', enabled=enabled, entry=entry)
 
     @bp.get('/account/deletion')
     @allowed()

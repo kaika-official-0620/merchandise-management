@@ -33,6 +33,9 @@
             {% if feature_plans_enabled or stage2_inventory_available|default(false) %}
             {% if has_plan_feature('inventory_manage') %}
             <a href="{{ url_for('self_inventory_new') }}">自分の在庫を登録</a>
+            {% endif %}
+            {% set intake_access = custody_intake_access() if custody_intake_access is defined else none %}
+            {% if intake_access and intake_access.allowed %}
             <a href="{{ url_for('inventory_intake_new') }}">開花へ預ける・登録を依頼</a>
             {% endif %}
             <a href="{{ url_for('inventory_intakes') }}">預け入れ・登録受付</a>

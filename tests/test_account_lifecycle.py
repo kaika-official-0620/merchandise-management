@@ -179,8 +179,22 @@ class LifecycleHttpTests(LifecycleFixture):
             'password':self.password,'confirm':'delete_account'}
 
     def test_public_info_anonymous_and_auth_required_request(self):
-        self.assertEqual(200,self.client.get('/account-deletion-info').status_code)
+        response = self.client.get('/account-deletion-info')
+        self.assertEqual(200,response.status_code)
+        self.assertIn('ログインして削除申請へ', response.get_data(as_text=True))
         self.assertEqual(302,self.client.get('/account/deletion').status_code)
+
+    def test_public_info_links_to_the_action_each_role_can_open(self):
+        for user, expected in ((1, '/account/deletion'), (3, '/admin/account-deletions'), (4, None)):
+            self.authenticate(user)
+            response = self.client.get('/account-deletion-info')
+            self.assertEqual(response.status_code, 200)
+            page = response.get_data(as_text=True)
+            for path in ('/account/deletion', '/admin/account-deletions'):
+                self.assertEqual(f'href="{path}"' in page, path == expected, (user, path))
+            if expected:
+                self.assertEqual(self.client.get(expected).status_code, 200)
+        self.assertEqual(self.db.execute('SELECT COUNT(*) FROM account_deletion_requests').fetchone()[0], 0)
 
     def test_private_pages_are_not_cached(self):
         self.authenticate()

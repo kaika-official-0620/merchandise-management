@@ -2391,7 +2391,12 @@
         {% if not current_user.is_admin() %}
         {% if (feature_plans_enabled or stage2_inventory_available|default(false)) and has_plan_feature('inventory_manage') %}
         <a href="{{ url_for('self_inventory_new', back_url=current_back_url) }}" class="btn btn-primary">+ 自分の在庫を登録</a>
+        {% endif %}
+        {% set intake_access = custody_intake_access() if custody_intake_access is defined else none %}
+        {% if intake_access and intake_access.allowed %}
         <a href="{{ url_for('inventory_intake_new') }}" class="btn btn-secondary">開花へ預ける・登録を依頼</a>
+        {% elif intake_access and intake_access.conditions_url %}
+        <a href="{{ intake_access.conditions_url }}" class="btn btn-secondary">預け入れの利用条件を確認</a>
         {% endif %}
         {% if not feature_plans_enabled or has_plan_feature('dealer_sales') %}
         <button type="button" class="btn btn-sales-agency" onclick="openSalesAgencyModal()">販売代行</button>

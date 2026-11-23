@@ -5,8 +5,11 @@
 <div class="custody-page">
   <h1>預け入れ・登録受付</h1>
   <p>{{ '到着した商品の受領と、ご依頼者の商品登録を行います。' if staff else '開花への発送案内、受領、登録の進み具合を確認できます。' }}</p>
+  {% set intake_access = custody_intake_access() if not staff else none %}
+  {% if intake_access and not intake_access.allowed %}<p class="custody-meta">{{ intake_access.message }} これまでの受付は引き続き確認できます。</p>{% endif %}
   <div class="custody-actions">
-    {% if not staff %}<a class="btn btn-primary" href="{{ url_for('inventory_intake_new') }}">新しく預ける・登録を依頼</a>{% endif %}
+    {% if intake_access and intake_access.allowed %}<a class="btn btn-primary" href="{{ url_for('inventory_intake_new') }}">新しく預ける・登録を依頼</a>
+    {% elif intake_access and intake_access.conditions_url %}<a class="btn btn-secondary" href="{{ intake_access.conditions_url }}">預け入れの利用条件を確認</a>{% endif %}
     <a class="btn btn-secondary" href="{{ url_for('index') }}">商品一覧へ</a>
   </div>
   <form method="get" action="{{ url_for('inventory_intakes') }}" class="custody-card">
@@ -45,7 +48,7 @@
         <h2>条件に一致する受付はありません</h2>
       {% else %}
         <h2>受付はまだありません</h2>
-        {% if not staff %}<p>開花に商品を送る場合は、預け入れの受付を作成してください。</p>{% endif %}
+        {% if intake_access and intake_access.allowed %}<p>開花に商品を送る場合は、預け入れの受付を作成してください。</p>{% endif %}
       {% endif %}
     </div>
   {% endfor %}

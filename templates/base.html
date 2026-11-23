@@ -373,6 +373,11 @@
     <div class="app-loading-screen" id="appLoadingScreen" aria-label="読み込み中">
         <img src="{{ url_for('static', filename='brand/kaika-header-logo-transparent.png') }}" alt="開花">
     </div>
+    {% set show_profit_calculator = current_user.is_authenticated and request.endpoint in [
+        'user_analytics', 'admin_analytics', 'admin_analytics_kaika', 'admin_analytics_kaika_sales',
+        'admin_company_sales_analytics', 'client_analytics_reports', 'reports',
+        'self_inventory_sale', 'finance_review.index', 'finance_review.item'
+    ] %}
     {% if current_user.is_authenticated %}
     {% set nav_display_name = format_header_display_name(current_user.display_name, current_user.username, role=current_user.role, last_name=current_user.last_name) %}
     <nav class="navbar">
@@ -386,7 +391,7 @@
                 <img src="{{ url_for('static', filename='brand/kaika-header-logo-transparent.png') }}" alt="開花">
             </div>
             <div class="nav-right">
-                {% if current_user.is_admin() or request.endpoint in ['user_analytics', 'reports', 'self_inventory_sale', 'finance_review.index', 'finance_review.item', 'finance_review.customer'] %}
+                {% if show_profit_calculator %}
                 <button onclick="openProfitCalculator()" class="btn btn-calculator btn-sm" aria-label="計算式" title="計算式">計算式</button>
                 {% endif %}
             </div>
@@ -524,7 +529,7 @@
     </div>
     {% endif %}
     
-    {% include "_profit_calculator.html" %}
+    {% if show_profit_calculator %}{% include "_profit_calculator.html" %}{% endif %}
 
     <style>
     /* 利益計算ボタン */

@@ -112,6 +112,17 @@ class DocumentWorkflow:
             abort(404)
         return row
 
+    @staticmethod
+    def customer_estimate_predicates(columns):
+        predicates = []
+        if 'created_by_admin_id' in columns:
+            predicates.append('COALESCE(d.created_by_admin_id, 0)=0')
+        if 'document_scope' in columns:
+            predicates.append("COALESCE(NULLIF(d.document_scope, ''), 'client_incoming')='client_incoming'")
+        if 'document_no' in columns:
+            predicates.append("SUBSTR(UPPER(TRIM(COALESCE(d.document_no,''))),1,3) NOT IN ('KM-','MT-')")
+        return predicates
+
     def submitted_item_ids(self, cur, user_id, *, exclude=None, source_invoice_id=None):
         found = set()
         for kind, (table, items, key, owner, *_) in KINDS.items():
@@ -124,13 +135,13 @@ class DocumentWorkflow:
             values = [user_id]
             if 'is_admin_created' in cols:
                 where.append('COALESCE(d.is_admin_created, FALSE)=FALSE' if self.pg else 'COALESCE(d.is_admin_created,0)=0')
-            if 'document_scope' in cols:
-                scope = 'client_outgoing' if kind == 'purchase_statement' else 'client_incoming'
+            if kind == 'estimate':
+                where.extend(self.customer_estimate_predicates(cols))
+            elif 'document_scope' in cols:
                 if kind == 'purchase_statement':
                     where.append("COALESCE(d.document_scope, 'user_created') IN ('user_created','client_outgoing')")
                 else:
-                    where.append(f"COALESCE(d.document_scope, '{scope}')={self.mark}")
-                    values.append(scope)
+                    where.append("COALESCE(d.document_scope, 'client_incoming')='client_incoming'")
             if exclude and exclude[0] == kind:
                 where.append(f'd.id<>{self.mark}')
                 values.append(exclude[1])
@@ -202,17 +213,32 @@ class DocumentWorkflow:
         return (row.get('merchandise_id'), row.get('product_name') or row.get('item_name') or f'Item {index}',
                 quantity, row.get('unit') or '点', price, amount)
 
+    @staticmethod
+    def saved_source_snapshot(row):
+        return (row.get('merchandise_id'), row.get('item_name'), int(row.get('quantity') or 1),
+                row.get('unit') or '点', int(row.get('unit_price') or 0), int(row.get('amount') or 0))
+
     def validate_form(self, kind, document_id=None):
         status = request.form.get('status', 'draft')
         if status not in {'draft', 'completed'}:
             abort(400, description='まず作成を完了し、詳細画面の送信欄から送信してください。')
-        if document_id:
-            with self.db() as (_, cur):
+        source_id = None
+        if kind == 'estimate':
+            source_ids = set(request.form.getlist('source_invoice_id', type=int)
+                             + request.args.getlist('source_invoice_id', type=int))
+            if len(source_ids) > 1:
+                abort(409, description='元の買取明細書が一致しません。')
+            source_id = next(iter(source_ids), None)
+        with self.db() as (_, cur):
+            if document_id:
                 doc = self.document(cur, kind, document_id, current_user.id)
                 if doc.get('status') not in {'draft', 'in_progress', None, ''}:
                     abort(409, description='この書類は編集できません。')
-        source_id = request.form.get('source_invoice_id', type=int) or request.args.get('source_invoice_id', type=int)
-        with self.db() as (_, cur):
+                if kind == 'estimate':
+                    stored_source_id = doc.get('source_invoice_id')
+                    if source_id is not None and source_id != stored_source_id:
+                        abort(409, description='下書きの元の買取明細書を変更できません。')
+                    source_id = stored_source_id
             if kind == 'estimate' and source_id:
                 source_rows = self.source_invoice(cur, source_id, current_user.id)
                 ids = request.form.getlist('source_invoice_item_id[]') or request.form.getlist('source_invoice_item_choice[]')
@@ -272,8 +298,7 @@ class DocumentWorkflow:
                     abort(409, description='元書類の対応関係を確認してください。')
                 source_rows = self.source_invoice(cur, source_id, user_id, lock=True)
                 source_values = Counter(self.source_snapshot(row, i) for i,row in enumerate(source_rows, 1))
-                snapshots = Counter((row.get('merchandise_id'), row.get('item_name'), int(row.get('quantity') or 1),
-                    row.get('unit') or '点', int(row.get('unit_price') or 0), int(row.get('amount') or 0)) for row in details)
+                snapshots = Counter(self.saved_source_snapshot(row) for row in details)
                 if snapshots - source_values:
                     abort(409, description='元の買取明細と見積依頼の内容が一致しません。内容を確認してください。')
             self.check_items(cur, user_id, ids, exclude=(kind, document_id), lock=True,
@@ -312,12 +337,13 @@ class DocumentWorkflow:
                 predicates = ["d.status='submitted'"]
                 if 'is_admin_created' in columns:
                     predicates.append('COALESCE(d.is_admin_created, FALSE)=FALSE')
-                if 'created_by_admin_id' in columns:
-                    predicates.append('COALESCE(d.created_by_admin_id, 0)=0')
-                if kind in {'estimate', 'consent'} and 'document_scope' in columns:
-                    predicates.append("COALESCE(NULLIF(d.document_scope, ''), 'client_incoming')='client_incoming'")
-                if kind == 'estimate' and 'document_no' in columns:
-                    predicates.append("SUBSTR(UPPER(TRIM(COALESCE(d.document_no,''))),1,3) NOT IN ('KM-','MT-')")
+                if kind == 'estimate':
+                    predicates.extend(self.customer_estimate_predicates(columns))
+                else:
+                    if 'created_by_admin_id' in columns:
+                        predicates.append('COALESCE(d.created_by_admin_id, 0)=0')
+                    if kind == 'consent' and 'document_scope' in columns:
+                        predicates.append("COALESCE(NULLIF(d.document_scope, ''), 'client_incoming')='client_incoming'")
                 if kind == 'calculation' and 'proxy_service_auction_id' in columns:
                     predicates.append('COALESCE(d.proxy_service_auction_id, 0)=0')
                 if kind == 'purchase_statement':

@@ -164,6 +164,31 @@ class InventoryCustody:
         if feature and (not self.plans.has_feature('inventory_manage') or not current_user.can_edit_merchandise()):
             abort(403, description='この操作には在庫管理を利用できる契約が必要です。利用プランをご確認ください。')
 
+    def intake_request_access(self):
+        """Use the same current entitlement for the entry points and the request itself."""
+        cached = g.get('_intake_request_access')
+        if cached is not None:
+            return cached
+        access = {'allowed': False, 'message': '', 'conditions_url': None, 'status': 403}
+        if current_user.is_authenticated and current_user.role == 'user':
+            if self.plans.enabled and 'feature_plans.plans' in self.app.view_functions:
+                access['conditions_url'] = url_for('feature_plans.plans')
+            try:
+                if not current_user.can_edit_merchandise():
+                    access['message'] = 'このアカウントでは新しい預け入れを申し込めません。利用条件をご確認ください。'
+                elif not self.plans.has_feature('inventory_manage'):
+                    access['message'] = '新しい預け入れには、在庫管理を利用できる契約が必要です。'
+                elif stage2_enabled(self.app) and self.plans.snapshot().get('plan_code') not in ('normal', 'business'):
+                    access['message'] = '開花に新しく預けるには、追加サービスの利用条件を満たす必要があります。自分で保管する商品の管理は無料で続けられます。'
+                else:
+                    access.update(allowed=True, status=200)
+            except Exception:
+                self.app.logger.warning('Intake entitlement check unavailable')
+                access.update(status=503, conditions_url=None,
+                              message='預け入れの利用条件を確認できませんでした。時間をおいて再度お試しください。')
+        g._intake_request_access = access
+        return access
+
     def require_intake_viewer(self, *, staff_only=False):
         if custody_staff_allowed():
             return True
@@ -439,14 +464,9 @@ class InventoryCustody:
         return redirect(detail_url)
 
     def new_intake(self):
-        self.require_user()
-        if stage2_enabled(self.app):
-            # snapshot only returns a plan code for a verified current paid
-            # period/grace period or an unexpired explicit manual grant. The
-            # free inventory feature alone does not open Kaika service intake.
-            state = self.plans.snapshot(current_user)
-            if state.get('plan_code') not in ('normal', 'business'):
-                abort(403, description='自己管理は無料で続けられます。新しい開花への依頼は、追加サービスの利用条件を確認してから受け付けます。')
+        access = self.intake_request_access()
+        if not access['allowed']:
+            abort(access['status'], description=access['message'] or '預け入れは会員のアカウントからお申し込みください。')
         helper = self.app.extensions.get('kaika_self_inventory')
         if request.method == 'GET':
             items = []
@@ -719,6 +739,7 @@ def register_inventory_custody(runtime):
     app.before_request(service.guard_legacy_operations)
     app.jinja_env.globals.update(custody_context=service.item_context,custody_location=custody_location,custody_label=custody_label)
     app.jinja_env.globals['linked_custody_detail'] = service.linked_item_detail
+    app.jinja_env.globals['custody_intake_access'] = service.intake_request_access
     runtime.inventory_custody=service
     def recoverable(view):
         @wraps(view)
@@ -726,19 +747,22 @@ def register_inventory_custody(runtime):
             try:
                 return view(*args, **kwargs)
             except HTTPException as error:
-                if error.code not in (400, 403, 404, 409, 413):
+                if error.code not in (400, 403, 404, 409, 413, 503):
                     raise
                 messages = {400:'入力内容と画面の有効期限をご確認ください。',
                             403:'この操作を利用できません。利用プランと受付状況をご確認ください。',
                             404:'対象の受付・商品は見つかりません。ご自身の一覧から開き直してください。',
                             409:'商品の状態が更新されています。画面を開き直して最新の状況をご確認ください。',
-                            413:'写真の合計サイズを40MB以下にして、もう一度選択してください。'}
+                            413:'写真の合計サイズを40MB以下にして、もう一度選択してください。',
+                            503:'受付の準備状況を確認できませんでした。時間をおいて再度お試しください。'}
                 detail = str(error.description or '')
                 # Default Werkzeug English messages add no useful guidance.
                 if not any(ord(char)>127 for char in detail):
                     detail = messages[error.code]
                 return render_template('inventory_custody_error.html', message=detail,
                                        retry_path=request.path, error_code=error.code,
+                                       intake_conditions_url=(service.intake_request_access()['conditions_url']
+                                                              if request.endpoint == 'inventory_intake_new' and error.code == 403 else None),
                                        can_view_intakes=current_user.role == 'user' or custody_staff_allowed()), error.code
         return wrapped
     for rule,endpoint,view,methods in [

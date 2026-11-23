@@ -125,14 +125,9 @@ def section_cards(key):
                               secondary=secondary, group=group, badge=badge))
 
     can_register = False
-    can_request_intake = False
-    if key in ('products', 'requests') and intake_available and plans:
+    if key == 'products' and intake_available and plans:
         try:
             can_register = plans.has_feature('inventory_manage') is True
-            # Free self-management may remain available while new Kaika work
-            # is restricted. Match InventoryCustody.require_user exactly here.
-            if key == 'requests' and can_register:
-                can_request_intake = bool(current_user.can_edit_merchandise())
         except Exception:
             # An unavailable capability check must not advertise an actionable
             # write or turn a read-only menu into an error page.
@@ -146,7 +141,12 @@ def section_cards(key):
         add('commerce.orders', '購入・予約の履歴', '選んだ商品の予約と購入の検証記録を確認します。', enabled=stage_available(4), secondary=True, badge='検証中')
         add('long_term_items', '以前の預かり記録', '以前の在庫記録を参照します。経過日数だけで預かり期限や処分は決まりません。', secondary=True)
     elif key == 'requests':
-        add('inventory_intake_new', '開花へ預ける', '商品を開花へ送り、撮影・登録などを依頼します。', enabled=can_request_intake)
+        custody = current_app.extensions.get('inventory_custody')
+        access = custody.intake_request_access() if intake_available and custody else None
+        if access and access['allowed']:
+            add('inventory_intake_new', '開花へ預ける', '商品を開花へ送り、撮影・登録などを依頼します。')
+        elif access and access['conditions_url']:
+            add('feature_plans.plans', '預け入れの利用条件を確認', access['message'])
         add('inventory_intakes', '依頼・受付状況', '依頼した商品の受付、受領と登録の進み具合を確認します。', enabled=intake_available)
         add('commerce.listing_index', '出品内容を確認', '写真、説明、販売価格を確認し、出品案を承認するための確認画面です。外部への出品は未接続です。', enabled=stage_available(4), badge='検証中')
         add('sales_agency_my_requests', '販売依頼の履歴', 'これまでの業者販売などの申請と対応状況を確認します。', secondary=True)

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+from collections import Counter
 import json
 import sqlite3
 from html import escape
@@ -9,7 +10,7 @@ from datetime import datetime
 from flask import abort, flash, make_response, redirect, render_template, request, url_for
 from flask_login import current_user
 from customer_navigation import is_customer
-from document_workflow import ISSUED_STAFF_DOCUMENT_STATUSES, STAFF_INBOX_EVENT, is_issued_staff_document_status
+from document_workflow import DocumentWorkflow, ISSUED_STAFF_DOCUMENT_STATUSES, STAFF_INBOX_EVENT, is_issued_staff_document_status
 from quote_documents import allocate_quote_number, validate_quote_dates
 
 
@@ -27,6 +28,7 @@ def apply(module):
     get_jst_now = getattr(module, "get_jst_now", lambda: datetime.now())
     DATABASE_URL = getattr(module, "DATABASE_URL", None)
     RealDictCursor = getattr(module, "RealDictCursor", None)
+    workflow = DocumentWorkflow(module)
 
     original_views = {
         name: app.view_functions.get(name)
@@ -34,6 +36,7 @@ def apply(module):
             "documents",
             "user_invoice_view",
             "user_mitsumori_add",
+            "user_mitsumori_edit",
             "user_mitsumori_list",
             "user_mitsumori_view",
             "admin_user_mitsumori_view",
@@ -635,7 +638,7 @@ def apply(module):
                 annotate_invoice_mitsumori_state(invoice, cur)
             for doc in user_mitsumori_list:
                 doc["can_user_delete"] = is_user_deletable_mitsumori_document(doc)
-                doc["can_user_edit"] = doc["can_user_delete"] and not doc.get("source_invoice_id")
+                doc["can_user_edit"] = doc["can_user_delete"]
             for doc in user_kaitori_shoudaku_list:
                 doc["can_user_delete"] = is_deletable_document_status(doc.get("status"))
                 doc["can_user_edit"] = doc["can_user_delete"]
@@ -869,44 +872,70 @@ def apply(module):
                 return original()
             flash("見積依頼書作成画面を表示できません。", "error")
             return redirect(url_for("user_document_list"))
+        return source_quote_form(source_invoice_id)
 
+    def user_mitsumori_edit_v3(id):
+        with workflow.db() as (_, cur):
+            quote = workflow.document(cur, "estimate", id, current_user.id)
+        if quote.get("source_invoice_id"):
+            return source_quote_form(quote["source_invoice_id"], quote_id=id)
+        return original_views["user_mitsumori_edit"](id)
+
+    def source_quote_form(source_invoice_id, quote_id=None):
         conn, cur = open_cursor()
         try:
             is_post = request.method == "POST"
             if is_post and not DATABASE_URL:
                 cur.execute("BEGIN IMMEDIATE")
+            quote, saved_items = None, []
+            if quote_id is not None:
+                quote = workflow.document(cur, "estimate", quote_id, current_user.id, lock=is_post)
+                if not module.is_user_deletable_mitsumori_document(quote):
+                    abort(409, description="この見積依頼書は編集できません。")
+                if (quote.get("source_invoice_id") != source_invoice_id
+                        or quote.get("source_document_type") not in {None, "", "invoice"}
+                        or quote.get("source_document_id") not in {None, source_invoice_id}):
+                    abort(409, description="元の買取明細書との紐付けを確認してください。")
+                cur.execute(
+                    f"SELECT * FROM user_mitsumori_items WHERE mitsumori_id = {mark()} ORDER BY item_no, id",
+                    (quote_id,),
+                )
+                saved_items = rows_to_dicts(cur.fetchall())
+
             source_invoice, source_invoice_items = load_source_invoice(cur, source_invoice_id, lock=is_post)
             if not source_invoice:
+                if quote:
+                    abort(409, description="元の買取明細書はこの見積依頼に利用できない状態です。下書きは保存されています。")
                 flash("元の買取明細書が見つからないか、見積依頼書を作成できない状態です。", "error")
                 return redirect(url_for("user_document_list"))
             source_items = normalize_source_items(source_invoice_items)
             existing_id = linked_mitsumori_id_for_invoice(cur, source_invoice_id, current_user.id)
-            if existing_id:
+            if existing_id and existing_id != quote_id:
+                if quote:
+                    abort(409, description="この買取明細書には別の見積依頼書が紐付いています。")
                 return redirect(url_for("user_mitsumori_view", id=existing_id))
+
+            if quote:
+                unmatched = Counter(workflow.saved_source_snapshot(item) for item in saved_items)
+                for index, item in enumerate(source_items, 1):
+                    snapshot = workflow.source_snapshot(item, index)
+                    item["selected"] = unmatched[snapshot] > 0
+                    if item["selected"]:
+                        unmatched[snapshot] -= 1
+                if +unmatched:
+                    abort(409, description="元の買取明細書の商品内容が変わっています。下書きは保存されています。")
+            issue_date = (quote or {}).get("issue_date") or source_invoice.get("issue_date") or get_jst_now().strftime("%Y-%m-%d")
 
             if is_post:
                 selected_ids = request.form.getlist("source_invoice_item_id[]") or request.form.getlist("source_invoice_item_choice[]")
-                selected_ids = [int(value) for value in selected_ids if str(value).isdigit()]
-                if not selected_ids:
-                    flash("見積依頼書に反映する商品を選択してください。", "error")
-                    return render_template(
-                        "mitsumori_form.html",
-                        mitsumori=None,
-                        items=[],
-                        today=source_invoice.get("issue_date"),
-                        my_merchandise=[],
-                        source_invoice=source_invoice,
-                        source_items=source_items,
-                    )
-
-                allowed = {int(item["id"]): item for item in source_items if item.get("id") is not None}
-                selected_items = [allowed[item_id] for item_id in selected_ids if item_id in allowed]
-                if not selected_items:
-                    flash("元の買取明細書の商品だけを選択してください。", "error")
-                    return redirect(url_for("user_mitsumori_add", source_invoice_id=source_invoice_id))
-
+                allowed = {str(item["id"]): item for item in source_items if item.get("id") is not None}
+                if not selected_ids or len(selected_ids) != len(set(selected_ids)) or any(value not in allowed for value in selected_ids):
+                    abort(400, description="元の買取明細書から商品を選択してください。")
+                selected_items = [allowed[value] for value in selected_ids]
+                product_ids = [int(item["merchandise_id"]) for item in selected_items if item.get("merchandise_id")]
+                workflow.check_items(cur, current_user.id, product_ids, exclude=("estimate", quote_id) if quote else None,
+                                     lock=True, allow_sold=True, source_invoice_id=source_invoice_id)
                 total_amount = sum(int(item.get("amount") or 0) for item in selected_items)
-                issue_date = source_invoice.get("issue_date") or get_jst_now().strftime("%Y-%m-%d")
                 valid_until = request.form.get("valid_until") or None
                 try:
                     validate_quote_dates(issue_date, valid_until)
@@ -916,47 +945,41 @@ def apply(module):
                 raw_status = request.form.get("status") or "draft"
                 status = "completed" if raw_status == "completed" else "draft"
                 subject = (request.form.get("subject") or "").strip() or "買取明細書に基づく見積依頼書"
-                company_name = (request.form.get("company_name") or "").strip() or "株式会社 開花"
-                department = (request.form.get("department") or "").strip()
-                contact_person = (request.form.get("contact_person") or "").strip()
-                address = (request.form.get("address") or "").strip()
-
-                document_no = allocate_quote_number(conn, cur, get_jst_now(), postgres=bool(DATABASE_URL), user_id=current_user.id)
-                cur.execute(
-                    f"""
-                    INSERT INTO user_mitsumori
-                        (document_no, user_id, issue_date, valid_until, company_name, department,
-                         contact_person, address, subject, total_amount, notes, status,
-                         document_scope, source_invoice_id, source_document_id, source_document_type)
-                    VALUES
-                        ({mark()}, {mark()}, {mark()}, {mark()}, {mark()}, {mark()},
-                         {mark()}, {mark()}, {mark()}, {mark()}, {mark()}, {mark()},
-                         {mark()}, {mark()}, {mark()}, {mark()})
-                    """
-                    + (" RETURNING id" if DATABASE_URL else ""),
-                    (
-                        document_no,
-                        current_user.id,
-                        issue_date,
-                        valid_until,
-                        company_name,
-                        department,
-                        contact_person,
-                        address,
-                        subject,
-                        total_amount,
-                        notes,
-                        status,
-                        "client_incoming",
-                        source_invoice_id,
-                        source_invoice_id,
-                        "invoice",
-                    ),
-                )
-                if DATABASE_URL:
-                    mitsumori_id = fetch_one_dict(cur)["id"]
+                if quote:
+                    mitsumori_id = quote_id
+                    cur.execute(
+                        f"""
+                        UPDATE user_mitsumori
+                        SET valid_until = {mark()}, subject = {mark()}, total_amount = {mark()},
+                            notes = {mark()}, status = {mark()}, updated_at = CURRENT_TIMESTAMP
+                        WHERE id = {mark()}
+                        """,
+                        (valid_until, subject, total_amount, notes, status, quote_id),
+                    )
+                    cur.execute(f"DELETE FROM user_mitsumori_items WHERE mitsumori_id = {mark()}", (quote_id,))
                 else:
-                    mitsumori_id = cur.lastrowid
+                    company_name = (request.form.get("company_name") or "").strip() or "株式会社 開花"
+                    department = (request.form.get("department") or "").strip()
+                    contact_person = (request.form.get("contact_person") or "").strip()
+                    address = (request.form.get("address") or "").strip()
+                    document_no = allocate_quote_number(conn, cur, get_jst_now(), postgres=bool(DATABASE_URL), user_id=current_user.id)
+                    cur.execute(
+                        f"""
+                        INSERT INTO user_mitsumori
+                            (document_no, user_id, issue_date, valid_until, company_name, department,
+                             contact_person, address, subject, total_amount, notes, status,
+                             document_scope, source_invoice_id, source_document_id, source_document_type)
+                        VALUES
+                            ({mark()}, {mark()}, {mark()}, {mark()}, {mark()}, {mark()},
+                             {mark()}, {mark()}, {mark()}, {mark()}, {mark()}, {mark()},
+                             {mark()}, {mark()}, {mark()}, {mark()})
+                        """
+                        + (" RETURNING id" if DATABASE_URL else ""),
+                        (document_no, current_user.id, issue_date, valid_until, company_name, department,
+                         contact_person, address, subject, total_amount, notes, status,
+                         "client_incoming", source_invoice_id, source_invoice_id, "invoice"),
+                    )
+                    mitsumori_id = fetch_one_dict(cur)["id"] if DATABASE_URL else cur.lastrowid
 
                 for index, item in enumerate(selected_items, 1):
                     cur.execute(
@@ -980,14 +1003,14 @@ def apply(module):
                     cur,
                     "user_mitsumori",
                     mitsumori_id,
-                    "create_from_invoice",
-                    "買取明細書から見積依頼書を作成",
-                    None,
+                    "edit_from_invoice" if quote else "create_from_invoice",
+                    "買取明細書に基づく見積依頼書を更新" if quote else "買取明細書から見積依頼書を作成",
+                    quote.get("status") if quote else None,
                     status,
                     {"source_invoice_id": source_invoice_id},
                 )
                 conn.commit()
-                flash("見積依頼書を作成しました。", "success")
+                flash("見積依頼書を更新しました。" if quote else "見積依頼書を作成しました。", "success")
                 if status == "draft":
                     return redirect(url_for("user_mitsumori_list"))
                 return redirect(url_for("user_mitsumori_view", id=mitsumori_id))
@@ -1000,9 +1023,9 @@ def apply(module):
 
         return render_template(
             "mitsumori_form.html",
-            mitsumori=None,
-            items=[],
-            today=source_invoice.get("issue_date"),
+            mitsumori=quote,
+            items=saved_items,
+            today=issue_date,
             my_merchandise=[],
             source_invoice=source_invoice,
             source_items=source_items,
@@ -1688,6 +1711,7 @@ def apply(module):
     module.user_mitsumori_requests = user_mitsumori_requests_v3
     module.user_mitsumori_list = user_mitsumori_list_v3
     module.user_mitsumori_add = user_mitsumori_add_v3
+    module.user_mitsumori_edit = user_mitsumori_edit_v3
     module.user_mitsumori_view = user_mitsumori_view_v3
     module.admin_kaitori_view = admin_kaitori_view_v3
     module.admin_user_mitsumori_view = admin_user_mitsumori_view_v3
@@ -1710,6 +1734,7 @@ def apply(module):
         app.view_functions["user_mitsumori_requests"] = require_login(user_mitsumori_requests_v3)
     app.view_functions["user_mitsumori_list"] = require_login(user_mitsumori_list_v3)
     app.view_functions["user_mitsumori_add"] = require_login(user_mitsumori_add_v3)
+    app.view_functions["user_mitsumori_edit"] = require_login(user_mitsumori_edit_v3)
     app.view_functions["user_mitsumori_view"] = require_login(user_mitsumori_view_v3)
     app.view_functions["admin_kaitori_view"] = admin_kaitori_view_v3
     app.view_functions["admin_user_mitsumori_view"] = admin_user_mitsumori_view_v3

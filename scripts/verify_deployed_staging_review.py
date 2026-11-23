@@ -140,7 +140,7 @@ def verify_review(environ=None, *, session_factory=None):
                             '/workspace-home' in parsed.links)
                 for key, path, heading in (
                     ('document_list', '/documents/list', '書類一覧'),
-                    ('estimate_form', '/mitsumori/add', '見積り依頼書作成'),
+                    ('estimate_form', '/mitsumori/add', '見積依頼書を作成'),
                     ('consent_form', '/kaitori-shoudaku/add', '買取承諾書作成'),
                     ('support_guide', '/my/support/guide', '使い方・よくある質問'),
                     ('inquiry_form', '/inquiry/new', '開花に問い合わせる'),

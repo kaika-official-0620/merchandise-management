@@ -16,10 +16,16 @@
     <li>ご本人のアカウントでログインし、説明を確認して、パスワードで本人確認を行います。</li>
     <li>申請後は受付状態と開花からの案内を同じ画面で確認できます。処理開始前の申請は、この画面から取り下げられます。</li>
   </ol>
-  {% if enabled %}
+  {% if entry == 'staff' %}
+  <a class="ad-button" href="{{ url_for('account_lifecycle.admin_list') }}">削除申請の一覧へ</a>
+  {% elif entry == 'login' %}
   <a class="ad-button" href="{{ url_for('account_lifecycle.page') }}">ログインして削除申請へ</a>
-  {% else %}
+  {% elif entry == 'customer' %}
+  <a class="ad-button" href="{{ url_for('account_lifecycle.page') }}">削除申請へ</a>
+  {% elif not enabled %}
   <p class="ad-notice">削除申請の受付機能は準備中です。現在、このページから本番の削除申請を受け付けることはできません。</p>
+  {% else %}
+  <p class="ad-muted">お客様の削除申請は、ご本人の会員アカウントから受け付けます。</p>
   {% endif %}
 </div>
 <div class="ad-card">

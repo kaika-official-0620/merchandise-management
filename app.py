@@ -28425,7 +28425,7 @@ def user_mitsumori_edit(id):
         flash('見積依頼書を更新しました', 'success')
         if status == 'draft':
             return redirect(url_for('user_document_list'))
-        return redirect(url_for('documents', tab='mitsumori') + '#document-history-tabs')
+        return redirect(url_for('user_mitsumori_view', id=id))
     
     # GETリクエスト - 明細取得
     if DATABASE_URL:
@@ -40842,7 +40842,7 @@ def fetch_admin_document_history_rows_v2():
             rows.append({
                 'kind': 'user_mitsumori',
                 'id': row['id'],
-                'document_type': '見積り依頼書',
+                'document_type': '見積依頼書',
                 'document_no': row.get('document_no') or '-',
                 'client_name': row.get('client_name') or row.get('username') or '未設定',
                 'service_type': service_type,
@@ -41261,7 +41261,7 @@ def normalize_admin_document_history_row_v2(row):
             normalized['document_key'] = 'client_mitsumori'
             normalized['direction_key'] = 'client_incoming'
             normalized['direction_label'] = 'クライアント → 開花'
-            normalized['document_type'] = '見積り依頼書'
+            normalized['document_type'] = '見積依頼書'
     elif kind == 'user_kaitori_shoudaku':
         normalized['document_key'] = 'client_kaitori_request'
         normalized['direction_key'] = 'client_incoming'
@@ -41295,8 +41295,8 @@ def build_admin_document_type_cards_v2(rows):
     normalized_rows = [normalize_admin_document_history_row_v2(row) for row in rows or []]
     card_definitions = [
         {
-            'title': '見積り依頼書',
-            'description': 'クライアントから届いた見積り依頼書の履歴を確認します。',
+            'title': '見積依頼書',
+            'description': 'クライアントから届いた見積依頼書の履歴を確認します。',
             'doc_type': 'user_mitsumori',
             'direction': 'client_incoming',
         },
@@ -41928,7 +41928,7 @@ def admin_documents_history_v2():
     status_options = sorted({(row.get('status'), row.get('status_label')) for row in all_rows if row.get('status')})
     document_type_options = [
         ('shikiriosho', '精算書'),
-        ('user_mitsumori', '見積り依頼書 / 業者向け依頼書'),
+        ('user_mitsumori', '見積依頼書 / 業者向け依頼書'),
         ('user_kaitori_shoudaku', '買取依頼書'),
         ('invoice', '買取明細書'),
         ('user_keisan', 'オークション計算書'),
