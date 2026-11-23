@@ -357,7 +357,7 @@ def run(module, users):
               http('customer', revised_path, replacement).status_code == 403 and
               not Forms(http('customer', revised_path)).fields(revised_path))
         check('changing the previous invoice on the signed form is rejected',
-              http('staff', revised_path, {**replacement, 'previous_invoice_id': invoices['automatic_payment']}).status_code == 400)
+              http('staff', revised_path, {**replacement, 'previous_invoice_id': invoices['automatic_payment']}).status_code == 403)
         result = http('staff', revised_path, replacement)
         check('replacement returns to the same physical bill',
               result.status_code == 302 and urlsplit(result.location).path == correction_bill_path)
