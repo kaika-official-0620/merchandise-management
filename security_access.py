@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
 import hmac
 import json
+import mimetypes
 import re
 import secrets
 
@@ -78,6 +79,15 @@ def staff_has_permission(user, permission=None):
         return True
     checker = getattr(user, 'has_permission', None)
     return bool(callable(checker) and checker(permission))
+
+
+def upload_parts(raw):
+    if not isinstance(raw, str) or not raw.startswith('uploads/') or any(char in raw for char in '\\%:\x00'):
+        return None
+    parts = raw.split('/')
+    if any(not part or part.startswith('.') for part in parts) or PurePosixPath(raw).is_absolute():
+        return None
+    return parts
 
 
 class SecurityAccess:
@@ -152,29 +162,30 @@ class SecurityAccess:
 
     def allowed(self, relative):
         with self.db() as cur:
-            merchandise = self.references(cur, 'merchandise',
-                ('photo_path', 'additional_photos', 'id_document_path', 'consent_form_path'), relative)
-            # Personal source documents must never inherit a photograph's
-            # wider visibility when the same path has multiple references.
-            sensitive = any(field in ('id_document_path', 'consent_form_path') for _, field in merchandise)
-            vendor = self.references(cur, 'vendor_documents', ('stored_path',), relative)
-            vendor_responses = self.references(cur, 'admin_kaitori_shoudaku', ('vendor_response_file_path',), relative)
-            if sensitive or vendor or vendor_responses:
-                return self.staff('users') if sensitive else self.staff('invoices')
-            if merchandise and (self.staff('merchandise') or any(self.own(row) for row, _ in merchandise)):
+            return self.allowed_reference(cur, relative)
+
+    def allowed_reference(self, cur, relative):
+        merchandise = self.references(cur, 'merchandise',
+            ('photo_path', 'additional_photos', 'id_document_path', 'consent_form_path'), relative)
+        # Personal source documents must never inherit a photograph's
+        # wider visibility when the same path has multiple references.
+        sensitive = any(field in ('id_document_path', 'consent_form_path') for _, field in merchandise)
+        vendor = self.references(cur, 'vendor_documents', ('stored_path',), relative)
+        vendor_responses = self.references(cur, 'admin_kaitori_shoudaku', ('vendor_response_file_path',), relative)
+        if sensitive or vendor or vendor_responses:
+            return self.staff('users') if sensitive else self.staff('invoices')
+        if merchandise and (self.staff('merchandise') or any(self.own(row) for row, _ in merchandise)):
+            return True
+        if any(self.catalog_photo(cur, row) for row, field in merchandise
+               if field in {'photo_path', 'additional_photos'}):
+            return True
+        for table, fields in (
+            ('sale_requests', ('qr_image_path', 'qr_image_path2', 'additional_image_paths')),
+            ('inquiries', ('image_path',)),
+        ):
+            if any(self.own(row) or self.staff() for row, _ in self.references(cur, table, fields, relative)):
                 return True
-            if any(self.catalog_photo(cur, row) for row, field in merchandise
-                   if field in {'photo_path', 'additional_photos'}):
-                return True
-            for table, fields in (
-                ('sale_requests', ('qr_image_path', 'qr_image_path2', 'additional_image_paths')),
-                ('inquiries', ('image_path',)),
-            ):
-                if any(self.own(row) or self.staff() for row, _ in self.references(cur, table, fields, relative)):
-                    return True
-            if self.agency_photo(cur, merchandise, relative):
-                return True
-        return False
+        return self.agency_photo(cur, merchandise, relative)
 
     def agency_photo(self, cur, merchandise, relative):
         if not {'id', 'user_id'} <= self.columns(cur, 'sales_agency_requests'):
@@ -226,6 +237,49 @@ class SecurityAccess:
             if not cur.fetchone():
                 abort(404)
 
+    @staticmethod
+    def upload_file(root, parts, candidate=None):
+        uploads = (root / 'uploads').resolve()
+        target = root
+        for part in parts:
+            target = target / part
+            if target.is_symlink() or getattr(target, 'is_junction', lambda: False)():
+                return None
+        if candidate is None:
+            candidate = target.resolve()
+        if root in candidate.parents and uploads in candidate.parents and candidate.is_file():
+            return candidate
+        return None
+
+    def item_gallery(self, item):
+        paths = item.get('all_photos') or []
+        if not paths or not current_user.is_authenticated:
+            return [], False
+        root = Path(self.app.static_folder).resolve()
+        visible = []
+        try:
+            with self.db() as cur:
+                for relative in paths:
+                    parts = upload_parts(relative)
+                    if not parts:
+                        continue
+                    if parts[1] == 'mobile':
+                        if ('kaika_mobile_browser_photo' not in self.app.view_functions or len(parts) != 3
+                                or not re.fullmatch(r'[a-f0-9]{40}\.jpg', parts[2])):
+                            continue
+                        parts[1] = '.mobile-private'
+                    file_path = self.upload_file(root, parts)
+                    if file_path is None:
+                        continue
+                    media_type = mimetypes.guess_type(file_path.name)[0] or ''
+                    if media_type.startswith('image/') and self.allowed_reference(cur, relative):
+                        visible.append(relative)
+        except Exception:
+            self.app.logger.error('Private gallery authorization unavailable')
+            return [], False
+        archive_allowed = self.own(item) or self.staff('merchandise')
+        return visible, archive_allowed and len(visible) > 1 and len(visible) == len(paths)
+
     def upload(self, filename):
         root = Path(self.app.static_folder).resolve()
         raw = str(filename or '')
@@ -241,9 +295,8 @@ class SecurityAccess:
         is_upload = 'uploads' in parts or candidate == uploads or uploads in candidate.parents
         if not is_upload:
             return None
-        if (not raw.startswith('uploads/') or '\\' in raw or '%' in raw or ':' in raw
-                or any(part in ('', '.', '..') or part.startswith('.') for part in parts)
-                or PurePosixPath(raw).is_absolute()):
+        parts = upload_parts(raw)
+        if not parts:
             abort(404)
         if not current_user.is_authenticated:
             abort(401)
@@ -253,14 +306,8 @@ class SecurityAccess:
             if request.endpoint != 'kaika_mobile_browser_photo':
                 abort(404)
             return None
-        if root not in candidate.parents or uploads not in candidate.parents:
-            abort(404)
-        target = root
-        for part in parts:
-            target = target / part
-            if target.is_symlink() or getattr(target, 'is_junction', lambda: False)():
-                abort(404)
-        if not candidate.is_file():
+        candidate = self.upload_file(root, parts, candidate)
+        if candidate is None:
             abort(404)
         self.require_upload_access(raw)
         inline = candidate.suffix.lower() in {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.pdf'}
@@ -345,6 +392,7 @@ def register_security_access(runtime):
             patterns.append(pattern)
         return {'security_form_token': service.csrf_token() if current_user.is_authenticated else None,
                 'security_guarded_form_patterns': sorted(set(patterns)),
+                'security_item_gallery': service.item_gallery,
                 'security_business_review_available': 'business_review.index' in app.view_functions}
     app.before_request_funcs.setdefault(None, []).insert(0, service.boundary)
     return service

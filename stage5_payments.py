@@ -404,7 +404,7 @@ class PhysicalPaymentService:
         row = self._row(actor, table, identifier, key)
         if kind == 'payment':
             self._require_payment_initiator(actor, row['customer_id'], bool(row['off_session']))
-            if self._replaced_before_dispatch(identifier):
+            if self._replaced_before_dispatch(self._state('payment', identifier)):
                 return self.get_attempt(actor, identifier)
         adapter = self._adapter()
         def mark():
@@ -434,8 +434,8 @@ class PhysicalPaymentService:
                 return self.get_attempt(actor, identifier) if kind == 'payment' else self.get_refund(actor, identifier)
         return self._reconcile(actor, identifier, kind, source_key + ':retrieve')
 
-    def _replaced_before_dispatch(self, attempt_id):
-        state = self._state('payment', attempt_id)
+    @staticmethod
+    def _replaced_before_dispatch(state):
         return (state['state'] == 'canceled' and state['provider_revision'] is None
                 and json.loads(state['snapshot_json']).get('reason') == 'bill_replaced_before_dispatch')
 
@@ -470,7 +470,7 @@ class PhysicalPaymentService:
         table, key = ('stage5_payment_attempts', 'attempt_id') if kind == 'payment' else ('stage5_payment_refunds', 'refund_id')
         row = self._row(actor, table, identifier, key)
         self.store.authorize(actor, row['customer_id'], staff_required=kind == 'refund' or bool(row['off_session']), finance=True)
-        if kind == 'payment' and self._replaced_before_dispatch(identifier):
+        if kind == 'payment' and self._replaced_before_dispatch(self._state('payment', identifier)):
             return self.get_attempt(actor, identifier)
         adapter = self._adapter()
         retrieved = adapter.retrieve(row['provider_idempotency_key'])
@@ -536,6 +536,7 @@ class PhysicalPaymentService:
         state = self._state('payment', attempt_id)
         result = {k: row[k] for k in ('attempt_id', 'bill_id', 'customer_id', 'amount_yen', 'currency', 'off_session', 'recorded_at')}
         result.update(state=state['state'], execution_mode='test', real_payment_enabled=False,
+                      replaced_before_dispatch=self._replaced_before_dispatch(state),
                       next_action='test_authentication_required' if state['state'] == 'requires_action' else None,
                       flow='off_session' if row['off_session'] else 'customer_initiated')
         result['refunds'] = [self.get_refund(actor, item['refund_id']) for item in self.store.query('SELECT refund_id FROM stage5_payment_refunds WHERE attempt_id=? ORDER BY recorded_at,refund_id', (attempt_id,))]
