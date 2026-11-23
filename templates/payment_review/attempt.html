@@ -1,6 +1,15 @@
 {% extends 'payment_review/base.html' %}{% block payment_content %}
-<h1>現物料金のお支払い状況</h1><section class="card"><h2>{{ status(attempt.state) }}</h2><p>{{ money(attempt.amount_yen) }} ／ {{ '自動請求方式' if attempt.off_session else 'お客様が毎回操作する方式' }}</p><p><a href="{{ url_for('payment_review.bill',bill_id=attempt.bill_id) }}">請求対象の明細へ</a></p>{% if attempt.state == 'requires_action' %}<p class="notice">本人認証待ちを模擬しています。この画面だけで成功扱いにはしません。検証側の認証結果を照合して反映します。</p>{% endif %}{% if attempt.state == 'unknown' %}<p class="notice">支払いが済んでいる可能性があります。同じ料金をもう一度請求せず、結果を照合します。</p>{% endif %}
-{% if connected %}
+<h1>現物料金のお支払い状況</h1>
+<section class="card">
+<h2>{{ '明細訂正により取消済み' if attempt.replaced_before_dispatch else status(attempt.state) }}</h2>
+<p>{{ money(attempt.amount_yen) }} ／ {{ '同意済みカードへの自動請求' if attempt.off_session else 'お客様が毎回確認して支払う方式' }}</p>
+<p>手続きの準備日時（日本時間） <time datetime="{{ attempt.recorded_at }}">{{ registry_time(attempt.recorded_at) }}</time></p>
+<p><a href="{{ url_for('payment_review.bill',bill_id=attempt.bill_id) }}">{{ '訂正後の明細へ' if attempt.replaced_before_dispatch else '請求対象の明細へ' }}</a></p>
+{% if attempt.state == 'requires_action' %}<p class="notice">検証用の本人認証を待っています。認証結果を照合すると、お支払い状況に反映されます。</p>{% endif %}
+{% if attempt.state == 'unknown' %}<p class="notice">支払いが済んでいる可能性があります。同じ料金をもう一度請求せず、結果を照合します。</p>{% endif %}
+{% if attempt.replaced_before_dispatch %}
+  <p>この手続きは決済へ送る前に取り消されました。お支払いを試す場合は、訂正後の明細を開いてください。</p>
+{% elif connected %}
   {% if attempt.state == 'prepared' %}
     {% if (staff and attempt.off_session) or (not staff and not attempt.off_session) %}
     <form method="post" action="{{ url_for('payment_review.payment_action',attempt_id=attempt.attempt_id,action='dispatch') }}">{{ tokens('stage5_payment_dispatch',attempt.attempt_id) }}<button>模擬の決済処理へ進む</button></form>
