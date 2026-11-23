@@ -3,7 +3,7 @@
 {% if not overview.connected %}<p class="notice">Stripeのテスト送信は未接続または停止中です。設定の準備だけでは実接続テストを完了したことにはなりません。</p>{% endif %}
 <section><h2>支払い対象の明細</h2><p>料金・契約・税の確認が完了した検証用明細だけが対象です。</p>
 {% for bill in overview.bills %}<article><h3>{{ bill.period }} ／ {{ '{:,}'.format(bill.amount_yen) }}円</h3><p><a href="/payments/bills/{{ bill.bill_id }}">元の明細を確認</a>{% if staff %} ／ 検証顧客ID {{ bill.customer_id }}{% endif %}</p>
-<form method="post" action="{{ url_for('sandbox_payments.queue_bill',bill_id=bill.bill_id) }}">{{ tokens('stage9_bill',bill.bill_id) }}
+<form method="post" action="{{ url_for('sandbox_payments.queue_bill',bill_id=bill.bill_id) }}">{{ tokens('stage9_bill',bill.bill_id ~ ':' ~ bill.invoice_id) }}<input type="hidden" name="invoice_id" value="{{ bill.invoice_id }}">
 {% if staff %}<label>確認済みカードの同意<select name="consent_id" required><option value="">選んでください</option>{% for consent in overview.consents if consent.customer_id==bill.customer_id and consent.verified and consent.revoked_at is none %}<option value="{{ consent.consent_id }}">{{ consent.consent_id }}</option>{% endfor %}</select></label>{% endif %}
 <button>{{ '同意済みカードへのテスト請求を準備' if staff else 'この明細のテスト支払いを準備' }}</button></form></article>{% else %}<p>支払い対象の検証明細はありません。</p>{% endfor %}</section>
 <section><h2>処理と結果</h2>{% for job in overview.jobs %}<p><a href="{{ url_for('sandbox_payments.job',job_id=job.job_id) }}">{{ stage9_status(job.state) }} ／ {{ '{:,}'.format(job.amount_yen) }}円 ／ {{ job.job_id }}</a></p>{% else %}<p>まだ処理はありません。</p>{% endfor %}</section>
