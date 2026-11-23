@@ -17,7 +17,7 @@
     <a href="#channel-orders">受注・発送・返品</a>
     <a href="#channel-accounts">販売アカウント</a>
 </nav>
-<section class="card"><h2>出品の承認と停止の確認</h2><form method="post" action="{{ url_for('commerce.audit_approvals') }}">{{ tokens('commerce_audit') }}<p>期限切れ・差戻し・新しい版への変更を確認し、停止が必要な出品を作業一覧へ追加します。</p><button type="submit">承認状況を確認して停止作業を整理</button></form></section>
+<section class="card"><h2>出品の承認と停止の確認</h2><form method="post" action="{{ url_for('commerce.audit_approvals') }}">{{ tokens('commerce_audit') }}<p>期限切れ・差し戻し・新しい版への変更を確認し、停止が必要な出品を作業一覧へ追加します。</p><button type="submit">承認状況を確認して停止作業を整理</button></form></section>
 <section class="card" id="listing-stops" tabindex="-1" aria-labelledby="listing-stops-heading">
     <h2 id="listing-stops-heading">出品停止の確認</h2>
     <p class="muted">販路ごとに外部の出品を停止し、確認結果を記録してください。</p>
@@ -27,12 +27,12 @@
         <h3 id="stop-heading-{{ task.task_id }}">{{ listing.approved_snapshot.title if listing else '出品情報を確認' }}</h3>
         <p><span class="badge">{{ status(task.status) }}</span> {{ stop_listing_reference(task, listing, accounts_by_id) }}</p>
         <p class="muted">照合用出品ID <code>{{ task.listing_id }}</code></p>
-        <p>停止の根拠：{{ task.reason }}</p>
+        <p>停止確認を始めた理由：{{ task.reason }}</p>
         {% if task.status != 'confirmed_stopped' %}
         <form method="post" action="{{ url_for('commerce.stop_task', task_id=task.task_id) }}">
             {{ tokens('commerce_stop', task.task_id) }}
             <label>確認結果<select name="status"><option value="confirmed_stopped">停止を確認した</option><option value="failed">停止できなかった・再対応が必要</option></select></label>
-            {{ evidence('停止結果の確認資料・確認先') }}
+            {{ evidence('停止状況を確認した資料・確認先') }}
             <button type="submit">停止の確認結果を記録</button>
         </form>
         {% endif %}
@@ -48,7 +48,12 @@
 <p class="muted">照合用出品ID：<code>{{ listing.listing_id }}</code></p>
 <p><a href="{{ url_for('commerce.listing_item',item_id=listing.physical_item_id) }}">出品内容・承認を確認</a></p>
 {% if listing.approval_review_reasons %}<ul class="warning">{% for code in listing.approval_review_reasons %}<li>{{ reason(code) }}</li>{% endfor %}</ul>{% endif %}
-{% if listing.local_sale_blocked %}<p class="warning">この出品は再確認・停止対応の対象です。遅れて届いた注文も記録して競合を確認してください。</p>{% endif %}
+{% set pending_listing_stops = listing.stop_tasks|rejectattr('status', 'equalto', 'confirmed_stopped')|list %}
+{% if listing.stop_tasks and not pending_listing_stops %}
+<p class="good">出品停止を確認しました。遅れて届いた注文があれば、記録して競合を確認してください。</p>
+{% elif listing.local_sale_blocked %}
+<p class="warning">出品停止または承認の確認が必要です。遅れて届いた注文があれば、記録して競合を確認してください。</p>
+{% endif %}
 {% if not listing.stop_tasks %}
 <details><summary>返送などのため、この商品の全出品を停止確認へ</summary>
 <p>同じ商品の全販路を確認作業に追加します。外部の販売先で停止し、上の一覧に確認結果を記録してから返送してください。</p>
