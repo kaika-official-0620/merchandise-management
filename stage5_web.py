@@ -20,11 +20,12 @@ def _staging_demo(app, api, actor, invoice_id):
     if not enabled(app) or invoice_id not in (DEMO_INVOICE_ID, RESALE_INVOICE_ID):
         return None
     month = api.billing.get_month(actor, invoice_id)
-    demo = (describe_resale(api.store, month, actor, include_paid_history=True) if invoice_id == RESALE_INVOICE_ID
-            else describe(api.store, month, include_refunded_history=True))
+    finance = api.store.finance
+    demo = (describe_resale(finance, month, actor, include_paid_history=True) if invoice_id == RESALE_INVOICE_ID
+            else describe(finance, month, include_refunded_history=True))
     if not demo or demo['status'] == 'unsent':
         return None
-    reconciled = resale_reconciliation(api.store, month, demo)
+    reconciled = resale_reconciliation(finance, month, demo)
     return {'period': month['period'], 'revision': month['revision'], 'record': demo,
             'sale_receipt': reconciled['sale_receipt'] if reconciled else None}
 
