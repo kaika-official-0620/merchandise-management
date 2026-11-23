@@ -7,8 +7,10 @@
 }
 .resale-reconciliation-values dd { margin: 0; font-variant-numeric: tabular-nums; }
 .resale-reconciliation-costs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.resale-reconciliation-form { margin-top: 1rem; }
 @media (max-width: 650px) {
     .resale-reconciliation-values { grid-template-columns: minmax(0, 1fr); }
+    .resale-reconciliation-form button { width: 100%; }
 }
 </style>
 {% set costs=resale_reconciliation.costs|default(none) %}
@@ -50,16 +52,22 @@
     <p>最終利益の計算には、仕入原価やその他費用の確認が必要です。</p>
     {% endif %}
     {% if reconciliation_location == 'invoice' and can_record_resale_costs|default(false) %}
-    <form method="post" action="{{ url_for('finance_review.staging_resale_costs', month_id=resale_reconciliation.invoice_id) }}">
+    <form id="resale-costs-form" class="resale-reconciliation-form" method="post"
+          action="{{ url_for('finance_review.staging_resale_costs', month_id=resale_reconciliation.invoice_id) }}"
+          aria-labelledby="resale-costs-form-heading">
         {{ tokens('finance_staging_resale_costs', resale_reconciliation.invoice_id) }}
-        <h3>検証用の費用を記録</h3>
+        <h3 id="resale-costs-form-heading">検証用の費用を記録</h3>
+        {% if costs %}
+        <p>保存済みの金額で再保存できます。費用は重複計上されません。</p>
+        {% else %}
         <p>この再販売の検証に使う金額を1円単位で入力してください。</p>
+        {% endif %}
         <div class="grid">
-            <label>仕入原価（円）<input type="number" min="0" step="1" inputmode="numeric" name="purchase_cost_yen" value="{{ costs.purchase_cost_yen if costs else '' }}" required></label>
-            <label>送料（円）<input type="number" min="0" step="1" inputmode="numeric" name="shipping_cost_yen" value="{{ costs.shipping_cost_yen if costs else '' }}" required></label>
-            <label>販売先手数料（円）<input type="number" min="0" step="1" inputmode="numeric" name="channel_fee_yen" value="{{ costs.channel_fee_yen if costs else '' }}" required></label>
+            <label>仕入原価（円）<input type="number" min="0" step="1" inputmode="numeric" name="purchase_cost_yen" value="{{ costs.purchase_cost_yen if costs else '' }}" required{% if costs %} readonly{% endif %}></label>
+            <label>送料（円）<input type="number" min="0" step="1" inputmode="numeric" name="shipping_cost_yen" value="{{ costs.shipping_cost_yen if costs else '' }}" required{% if costs %} readonly{% endif %}></label>
+            <label>販売先手数料（円）<input type="number" min="0" step="1" inputmode="numeric" name="channel_fee_yen" value="{{ costs.channel_fee_yen if costs else '' }}" required{% if costs %} readonly{% endif %}></label>
         </div>
-        <button type="submit">検証用の費用を保存</button>
+        <button type="submit">{{ '同じ費用で再保存' if costs else '検証用の費用を保存' }}</button>
     </form>
     {% endif %}
     {% if reconciliation_location in ('item', 'customer') %}
