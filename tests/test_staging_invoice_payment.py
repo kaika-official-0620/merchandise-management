@@ -26,13 +26,15 @@ from stage3_profit import ProfitService
 from stage3_profit_schema import migration_statements as profit_schema
 from stage3_web import register_stage3_finance
 from stage4_listings_schema import migration_statements as listing_schema
+from stage5_common import Stage5Store
+from stage5_payments import MemoryTestPSP, PhysicalPaymentService
 from stage5_web import register_stage5_payments
 from stage6_common import migration_statements as notifications_common_schema
 from stage6_notifications_schema import migration_statements as notification_schema
 from stage6_web import register_stage6_web
 from stage9_payment_schema import statements as sandbox_payments_schema
 from staging_invoice_payment import DEMO_INVOICE_ID, migration_statements as demo_schema
-from test_stage5_payments import CUSTOMER, STAFF, fixture as finance_fixture
+from test_stage5_payments import CUSTOMER, STAFF, approved_component, fixture as finance_fixture
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -114,6 +116,54 @@ class StagingInvoicePaymentTests(unittest.TestCase):
         db = sqlite3.connect(self.path)
         db.row_factory = sqlite3.Row
         return db
+
+    def test_corrected_unsubmitted_payment_shows_jst_history_without_provider_action(self):
+        adapter = self.app.extensions['stage5_test_provider'] = MemoryTestPSP()
+        retrieve = self.enterContext(patch.object(adapter, 'retrieve', wraps=adapter.retrieve))
+        prepared_at = '2026-11-23T23:30:00+00:00'
+        with closing(self.connect()) as db, patch('stage5_payments._now', return_value=prepared_at):
+            store = Stage5Store(Registry(db))
+            api = PhysicalPaymentService(store, adapter)
+            billing = BillingService(store.finance)
+            approved_component(db, 'test-original', 1000, period='2026-11')
+            original = billing.create_month(STAFF, CUSTOMER.user_id, '2026-11', source_key='test-original-month')
+            bill = api.prepare_invoice(STAFF, original['invoice_id'], review_reference='fixture',
+                                       source_key='test-initial-bill')
+            consent = api.record_consent(CUSTOMER, CUSTOMER.user_id, terms_reference='fixture',
+                payment_method_reference='pm_test_fixture', provider_customer_reference='cus_test_fixture',
+                off_session=False, source_key='test-consent')
+            attempt = api.create_attempt(CUSTOMER, bill['bill_id'], consent['consent_id'],
+                                         source_key='test-unsubmitted-attempt')
+            approved_component(db, 'test-correction', 500, period='2026-11')
+            newer = billing.create_month(STAFF, CUSTOMER.user_id, '2026-11', source_key='test-new-month')
+            api.replace_invoice(STAFF, newer['invoice_id'], expected_invoice_id=original['invoice_id'],
+                                review_reference='fixture', source_key='test-replace-bill')
+            db.commit()
+        attempt_path = '/payments/attempts/' + attempt['attempt_id']
+        bill_path = '/payments/bills/' + bill['bill_id']
+        for role in ('member', 'staff'):
+            with self.subTest(role=role):
+                detail = self.clients[role].get(attempt_path)
+                self.assertEqual(detail.status_code, 200)
+                content = detail.get_data(as_text=True)
+                self.assertIn('明細訂正により取消済み', content)
+                self.assertIn('訂正後の明細へ', content)
+                self.assertIn('2026/11/24 08:30', content)
+                self.assertNotIn('照合</button>', content)
+                self.assertNotIn('決済処理へ進む', content)
+                self.assertNotIn('action="' + attempt_path + '/reconcile"', content)
+                history = self.clients[role].get(bill_path)
+                self.assertEqual(history.status_code, 200)
+                self.assertIn('明細訂正により取消済み', history.get_data(as_text=True))
+        customer_history = self.clients['member'].get(bill_path).get_data(as_text=True)
+        self.assertIn('毎回確認して支払う ／ 2026/11/24 08:30', customer_history)
+        self.assertEqual(self.clients['other'].get(attempt_path).status_code, 403)
+        for action in ('dispatch', 'reconcile'):
+            fields = self.signed_fields('member', action, attempt['attempt_id'],
+                                        purpose='stage5_payment_' + action)
+            self.assertEqual(self.clients['member'].post(attempt_path + '/' + action, data=fields).status_code, 302)
+        self.assertEqual(adapter.create_calls, 0)
+        retrieve.assert_not_called()
 
     def post(self, role, action, fields=None, *, invoice_path=INVOICE_PATH):
         return self.clients[role].post(f'{invoice_path}/test-payment/{action}', data=fields or {})

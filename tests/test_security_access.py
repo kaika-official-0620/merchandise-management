@@ -101,6 +101,14 @@ class SecurityAccessTest(unittest.TestCase):
                 abort(404)
             self.calls.append('photo_archive')
             return 'archive fixture'
+        @self.app.get('/gallery/<int:id>')
+        @login_required
+        def gallery(id):
+            with self.db() as connection:
+                item = dict(connection.execute('SELECT * FROM merchandise WHERE id=?', (id,)).fetchone())
+            item['all_photos'] = [item['photo_path'], *json.loads(item['additional_photos'] or '[]')]
+            photos, zip_available = self.service.item_gallery(item)
+            return {'photos': photos, 'zip': zip_available}
         @self.app.get('/form')
         def form():
             return render_template_string('<meta name="kaika-security-csrf" content="{{ security_form_token }}">')
@@ -191,6 +199,25 @@ class SecurityAccessTest(unittest.TestCase):
             self.assertEqual(response.status_code, status, (user, item))
             response.close()
         self.assertEqual(self.calls, ['photo_archive'] * 4)
+
+    def test_item_gallery_authorizes_photo_and_archive_controls_separately(self):
+        owner_photos = ['uploads/main.jpg', 'uploads/extra.jpg']
+        for user, photos, archive in ((1, owner_photos, True), (2, [], False), (3, owner_photos, True),
+                                      (4, [], False), (5, owner_photos, True)):
+            self.login(user)
+            response = self.client.get('/gallery/11')
+            self.assertEqual(response.get_json(), {'photos': photos, 'zip': archive}, user)
+        self.login(4)
+        self.assertEqual(self.client.get('/gallery/14').get_json(),
+                         {'photos': ['uploads/agency-main.jpg'], 'zip': False})
+
+    def test_item_gallery_omits_missing_files_and_protected_document_aliases(self):
+        with self.db() as connection:
+            connection.execute('UPDATE merchandise SET additional_photos=? WHERE id=11',
+                               (json.dumps(['uploads/missing.jpg', 'uploads/id.pdf', 'uploads/extra.jpg']),))
+        self.login(1)
+        response = self.client.get('/gallery/11')
+        self.assertEqual(response.get_json(), {'photos': ['uploads/main.jpg', 'uploads/extra.jpg'], 'zip': False})
 
     def test_identity_and_consent_only_authorized_staff(self):
         for user, expected in ((1, 404), (2, 404), (4, 404), (3, 200)):
@@ -321,6 +348,10 @@ class SecurityAccessTest(unittest.TestCase):
             self.get('mobile/' + name, expected)
         self.login(1)
         self.get('.mobile-private/' + name, 404)
+        self.assertEqual(self.client.get('/gallery/11').get_json(),
+                         {'photos': ['uploads/mobile/' + name, 'uploads/extra.jpg'], 'zip': True})
+        self.login(4)
+        self.assertEqual(self.client.get('/gallery/11').get_json(), {'photos': [], 'zip': False})
 
     def test_account_and_item_deletes_never_call_original_or_delete_file(self):
         self.login(3)
