@@ -309,10 +309,14 @@ def register_stage3_finance(runtime):
         preview = demo['fee_preview'] if demo else None
         if preview is None and app.extensions.get('kaika_staging') is True:
             preview = provisional_fee_preview(month)
-        return render_template('finance_review/invoice.html', month=month, staff=_staff(),
+        staff = _staff()
+        can_record_costs = bool(staff and reconciliation and month['is_current_snapshot'])
+        receipt = reconciliation['sale_receipt'] if reconciliation else None
+        return render_template('finance_review/invoice.html', month=month, staff=staff,
                                provisional_fee_preview=preview, demo_payment=demo,
                                resale_reconciliation=reconciliation,
-                               can_record_resale_costs=bool(_staff() and reconciliation and month['is_current_snapshot']))
+                               can_record_resale_costs=can_record_costs,
+                               can_confirm_resale_receipt=bool(can_record_costs and receipt and receipt['status'] == 'pending'))
 
     @bp.post('/finance/months/<month_id>/test-payment/<action>')
     @allowed()
@@ -339,6 +343,20 @@ def register_stage3_finance(runtime):
         flash('検証用の費用を保存しました。' if created
               else '同じ費用で再保存しました。記録は1件のままです。', 'success')
         return redirect(url_for('finance_review.invoice', month_id=month_id))
+
+    @bp.post('/finance/months/<month_id>/test-sale-receipt')
+    @allowed(staff=True)
+    def staging_resale_receipt(month_id):
+        from staging_invoice_payment import (RESALE_INVOICE_ID, confirm_resale_receipt,
+                                             enabled as staging_payment_enabled)
+        if not staging_payment_enabled(app) or month_id != RESALE_INVOICE_ID:
+            abort(404)
+        service.verify('finance_staging_resale_receipt', month_id)
+        with service.db(write=True) as store:
+            changed = confirm_resale_receipt(store, service.actor())
+        if changed:
+            flash('売上のテスト入金を確認しました。精算は未実施です。', 'success')
+        return redirect(url_for('finance_review.invoice', month_id=month_id, _anchor='resale-receipt'))
 
     @bp.get('/finance/months/<month_id>/export.csv')
     @allowed()

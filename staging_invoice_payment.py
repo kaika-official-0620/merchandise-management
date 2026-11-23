@@ -2,6 +2,7 @@
 
 import csv
 import io
+from contextlib import contextmanager
 
 from item_registry import RegistryError, _now
 from stage3_billing import BillingService, invoice_totals, provisional_fee_preview
@@ -13,6 +14,7 @@ DEMO_AMOUNT_YEN = 880
 RESALE_INVOICE_ID = 'in3_13d28ed903074e4886b1e9ff7666fa43'
 RESALE_SALES_FEE_NET_YEN = 300
 RESALE_AMOUNT_YEN = 330
+RESALE_PLANNED_SETTLEMENT_YEN = 7200
 RESALE_COST_FIELDS = ('purchase_cost_yen', 'shipping_cost_yen', 'channel_fee_yen')
 ACTIONS = ('send', 'pay', 'return', 'refund')
 
@@ -57,6 +59,13 @@ def migration_statements(dialect='postgres'):
         channel_fee_yen BIGINT NOT NULL CHECK (channel_fee_yen BETWEEN 0 AND 9000000000000),
         recorded_by INTEGER NOT NULL REFERENCES users(id),
         recorded_at TEXT NOT NULL
+    )''', '''CREATE TABLE IF NOT EXISTS staging_wallet_resale_receipt_demo (
+        invoice_id TEXT PRIMARY KEY NOT NULL REFERENCES staging_wallet_resale_payment_demo(invoice_id),
+        sale_event_id TEXT NOT NULL REFERENCES business_item_observations(observation_id),
+        sale_gross_yen BIGINT NOT NULL CHECK (sale_gross_yen = 8500),
+        planned_settlement_yen BIGINT NOT NULL CHECK (planned_settlement_yen = 7200),
+        confirmed_by INTEGER NOT NULL REFERENCES users(id),
+        confirmed_at TEXT NOT NULL
     )''')
 
 
@@ -201,6 +210,20 @@ def _resale_costs(store):
     return rows[0] if rows else None
 
 
+def _resale_receipt(store, sale_id, sale_gross, costs):
+    if not costs:
+        return None
+    planned = sale_gross - costs['channel_fee_yen'] - costs['shipping_cost_yen']
+    if planned != RESALE_PLANNED_SETTLEMENT_YEN:
+        return None
+    rows = store.query('SELECT * FROM staging_wallet_resale_receipt_demo WHERE invoice_id=?', (RESALE_INVOICE_ID,))
+    saved = rows[0] if rows else None
+    if saved and (saved['sale_event_id'], saved['sale_gross_yen'], saved['planned_settlement_yen']) != (sale_id, sale_gross, planned):
+        return None
+    return {'status': 'confirmed' if saved else 'pending', 'planned_settlement_yen': planned,
+            'confirmed_at': saved['confirmed_at'] if saved else None}
+
+
 def resale_reconciliation(store, month, demo):
     if not demo or not demo.get('resale') or demo['status'] != 'paid':
         return None
@@ -224,7 +247,8 @@ def resale_reconciliation(store, month, demo):
     return {'invoice_id': month['invoice_id'], 'item_id': demo['fee_preview']['physical_item_id'],
             'title': demo['fee_preview']['title'], 'period': month['period'], 'sale_event_id': sale_id,
             'sale_gross_yen': sale_gross, 'paid_fee_yen': paid_fee,
-            'reference_difference_yen': difference, 'paid_at': demo['paid_at'], 'costs': costs}
+            'reference_difference_yen': difference, 'paid_at': demo['paid_at'], 'costs': costs,
+            'sale_receipt': _resale_receipt(store, sale_id, sale_gross, costs)}
 
 
 def current_resale_reconciliation(store, actor, customer_id, *, item_id=None, profit=None):
@@ -256,8 +280,8 @@ def _matches_current_resale(store, actor, customer_id, result, profit=None):
             and facts['sale_gross_yen'] == result['sale_gross_yen'])
 
 
-def record_resale_costs(store, actor, *, purchase_cost_yen, shipping_cost_yen, channel_fee_yen):
-    amounts = (yen(purchase_cost_yen), yen(shipping_cost_yen), yen(channel_fee_yen))
+@contextmanager
+def _writable_resale_reconciliation(store, actor, unavailable_code):
     billing = BillingService(store)
     draft = billing.get_month(actor, RESALE_INVOICE_ID)
     customer_id = draft['customer_id']
@@ -270,9 +294,14 @@ def record_resale_costs(store, actor, *, purchase_cost_yen, shipping_cost_yen, c
             # Use the registry lock shared by sale / return writers.
             store.registry._profile(actor, result['item_id'], lock=True)
         if not result or not _matches_current_resale(store, actor, customer_id, result):
-            raise RegistryError('staging_resale_costs_unavailable',
+            raise RegistryError(unavailable_code,
                                 '支払い済みの再販売明細を開き直して確認してください。', 409)
+        yield result
 
+
+def record_resale_costs(store, actor, *, purchase_cost_yen, shipping_cost_yen, channel_fee_yen):
+    amounts = (yen(purchase_cost_yen), yen(shipping_cost_yen), yen(channel_fee_yen))
+    with _writable_resale_reconciliation(store, actor, 'staging_resale_costs_unavailable') as result:
         saved = _resale_costs(store)
         if saved:
             if saved['sale_event_id'] != result['sale_event_id'] or tuple(saved[field] for field in RESALE_COST_FIELDS) != amounts:
@@ -281,6 +310,21 @@ def record_resale_costs(store, actor, *, purchase_cost_yen, shipping_cost_yen, c
         store.execute('''INSERT INTO staging_wallet_resale_test_costs
             (invoice_id, sale_event_id, purchase_cost_yen, shipping_cost_yen, channel_fee_yen, recorded_by, recorded_at)
             VALUES (?,?,?,?,?,?,?)''', (RESALE_INVOICE_ID, result['sale_event_id'], *amounts, actor.user_id, _now()))
+        return True
+
+
+def confirm_resale_receipt(store, actor):
+    with _writable_resale_reconciliation(store, actor, 'staging_resale_receipt_unavailable') as result:
+        receipt = result['sale_receipt']
+        if not receipt:
+            raise RegistryError('staging_resale_receipt_unavailable',
+                                '再販売分の費用とテスト精算予定額を確認してください。', 409)
+        if receipt['status'] == 'confirmed':
+            return False
+        store.execute('''INSERT INTO staging_wallet_resale_receipt_demo
+            (invoice_id, sale_event_id, sale_gross_yen, planned_settlement_yen, confirmed_by, confirmed_at)
+            VALUES (?,?,?,?,?,?)''', (RESALE_INVOICE_ID, result['sale_event_id'], result['sale_gross_yen'],
+                                      receipt['planned_settlement_yen'], actor.user_id, _now()))
         return True
 
 
