@@ -57,9 +57,10 @@
     }
     if (typeof module !== 'undefined' && module.exports) module.exports = { compute, ratio };
     if (typeof document === 'undefined') return;
+    const openButton = document.querySelector('[data-profit-open]');
     const modal = document.getElementById('profitCalcModal');
     const form = document.getElementById('profit-estimate-form');
-    if (!modal || !form) return;
+    if (!openButton || !modal || !form) return;
     const message = document.getElementById('pe-message');
     const results = document.getElementById('pe-results');
     let returnFocus = null, previousOverflow = '';
@@ -70,23 +71,23 @@
         results.hidden = true;
         message.textContent = '条件を変更した場合は、もう一度「この条件で計算する」を押してください。';
     }
-    window.openProfitCalculator = function () {
+    function openProfitCalculator() {
         returnFocus = document.activeElement;
         previousOverflow = document.body.style.overflow;
         modal.classList.add('open'); modal.setAttribute('aria-hidden', 'false');
         document.body.style.overflow = 'hidden';
         document.getElementById('pe-mode').focus();
-    };
-    window.closeProfitCalculator = function () {
+    }
+    function closeProfitCalculator() {
         if (!modal.classList.contains('open')) return;
         modal.classList.remove('open'); modal.setAttribute('aria-hidden', 'true');
         document.body.style.overflow = previousOverflow;
         if (returnFocus && returnFocus.isConnected) returnFocus.focus();
-    };
-    modal.querySelectorAll('[data-profit-close]').forEach(button => button.addEventListener('click', window.closeProfitCalculator));
+    }
+    modal.querySelectorAll('[data-profit-close]').forEach(button => button.addEventListener('click', closeProfitCalculator));
     document.addEventListener('keydown', event => {
         if (!modal.classList.contains('open')) return;
-        if (event.key === 'Escape') { event.preventDefault(); window.closeProfitCalculator(); }
+        if (event.key === 'Escape') { event.preventDefault(); closeProfitCalculator(); }
         if (event.key === 'Tab') {
             const focusable = Array.from(modal.querySelectorAll('button,input,select,summary,a[href]')).filter(el => !el.disabled && el.getClientRects().length);
             const first = focusable[0], last = focusable[focusable.length - 1];
@@ -115,4 +116,6 @@
             results.hidden = false;
         } catch (error) { message.textContent = error.message; }
     });
+    openButton.addEventListener('click', openProfitCalculator);
+    openButton.disabled = false;
 }());

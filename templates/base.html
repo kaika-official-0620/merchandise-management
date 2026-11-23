@@ -392,7 +392,7 @@
             </div>
             <div class="nav-right">
                 {% if show_profit_calculator %}
-                <button onclick="openProfitCalculator()" class="btn btn-calculator btn-sm" aria-label="計算式" title="計算式">計算式</button>
+                <button type="button" class="btn btn-calculator btn-sm" data-profit-open aria-controls="profitCalcModal" aria-haspopup="dialog" disabled>計算式</button>
                 {% endif %}
             </div>
             <div class="nav-user" id="navUser">
