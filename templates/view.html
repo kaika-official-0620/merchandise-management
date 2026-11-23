@@ -909,12 +909,14 @@
 }
 </style>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/sale_request_image_picker.css') }}">
+{% set linked_record = linked_custody_detail(item) if linked_custody_detail is defined else none %}
+{% set linked_kaika = linked_record and custody_location(item) == 'kaika' %}
 <div class="page-actions">
     <div class="header-actions context-back-inline-source">
         {% if (feature_plans_enabled or stage2_inventory_available|default(false)) and not current_user.is_admin() and can_edit_self_inventory_item(item) %}
         <a href="{{ url_for('self_inventory_edit', item_id=item.id, back_url=back_url) }}" class="btn btn-primary">編集</a>
         {% endif %}
-        {% if current_user.is_admin() and custody_location(item) == 'kaika' %}
+        {% if current_user.is_admin() and custody_location(item) == 'kaika' and not linked_record %}
         <a href="{{ url_for('edit_item', id=item.id, back_url=back_url) }}" class="btn btn-primary">編集</a>
         {% endif %}
         <a href="{{ back_url }}" class="btn btn-secondary context-back-inline">一覧へ戻る</a>
@@ -924,8 +926,18 @@
 {% set is_admin_view = current_user.is_admin() or current_user.is_owner() %}
 {% set detail_status_label = item.long_term_result_label or (item.long_term_request.status_label if item.long_term_request else '') or item.mobile_status_label or '状態未設定' %}
 {% include '_inventory_custody_styles.html' %}
-<p><span class="custody-badge">{{ custody_label(item) }}</span></p>
-{% if custody_location(item) != 'kaika' %}
+<p><span class="custody-badge">{{ linked_record.label if linked_kaika else custody_label(item) }}</span></p>
+{% if linked_kaika %}
+<section class="item-detail-action-panel">
+  {% if linked_record.sales_label %}
+  <div class="item-detail-action-summary"><span class="item-detail-action-label">販売の状態</span><strong>{{ linked_record.sales_label }}</strong></div>
+  {% endif %}
+  <div class="item-detail-action-buttons">
+    {% if linked_record.detail_url %}<a href="{{ linked_record.detail_url }}" class="btn btn-primary">保管場所・作業履歴を確認</a>{% endif %}
+    {% if linked_record.commerce_url %}<a href="{{ linked_record.commerce_url }}" class="btn btn-secondary">{{ '販路・受注・発送を確認' if is_admin_view else '出品内容・承認を確認' }}</a>{% endif %}
+  </div>
+</section>
+{% elif custody_location(item) != 'kaika' %}
 <section class="item-detail-action-panel">
   <div class="item-detail-action-summary"><span class="item-detail-action-label">現在の状態</span><strong>{{ item.mobile_status_label }}</strong></div>
   <div class="item-detail-action-buttons">{% include '_inventory_custody_actions.html' %}</div>
@@ -1040,7 +1052,7 @@
 </section>
 
 {% endif %}
-{% if not current_user.is_admin() and custody_location(item) == 'kaika' %}
+{% if not current_user.is_admin() and custody_location(item) == 'kaika' and not linked_record %}
 <section class="sales-agency-detail-panel">
     <h3>販売代行申請</h3>
     {% if item.is_sold or item.sale_date %}
