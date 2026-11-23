@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import patch
 
 from flask import Flask, abort, render_template_string
-from flask_login import LoginManager, UserMixin
+from flask_login import LoginManager, UserMixin, current_user, login_required
 
 from mobile_api import _register_mobile_media
 from security_access import CUSTOMER_DOCUMENT_MUTATIONS, register_security_access, HELD_DELETIONS, MUTATIONS
@@ -25,7 +25,7 @@ class FixtureUser(UserMixin):
         return self.role in ('owner', 'admin')
 
     def has_permission(self, permission):
-        return self.id == 3 or (self.id == 4 and permission == 'invoices')
+        return self.id == 3 or (self.id == 4 and permission == 'invoices') or (self.id == 5 and permission == 'merchandise')
 
 
 class SecurityAccessTest(unittest.TestCase):
@@ -52,7 +52,7 @@ class SecurityAccessTest(unittest.TestCase):
                 CREATE TABLE vendor_documents(id INTEGER PRIMARY KEY,user_id INTEGER,stored_path TEXT);
                 CREATE TABLE admin_kaitori_shoudaku(id INTEGER PRIMARY KEY,vendor_response_file_path TEXT);
                 CREATE TABLE sales_agency_requests(id INTEGER PRIMARY KEY,user_id INTEGER);
-                CREATE TABLE sales_agency_request_items(id INTEGER PRIMARY KEY,request_id INTEGER,snapshot_photo_path TEXT);
+                CREATE TABLE sales_agency_request_items(id INTEGER PRIMARY KEY,request_id INTEGER,merchandise_id INTEGER,snapshot_photo_path TEXT);
                 CREATE TABLE proxy_service_settings(id INTEGER PRIMARY KEY,is_public INTEGER);
                 CREATE TABLE proxy_service_auction_users(auction_id INTEGER,user_id INTEGER,is_enabled INTEGER);
                 INSERT INTO merchandise VALUES(11,1,'uploads/main.jpg','["uploads/extra.jpg"]',
@@ -63,14 +63,17 @@ class SecurityAccessTest(unittest.TestCase):
                 INSERT INTO vendor_documents VALUES(41,1,'uploads/vendor.pdf');
                 INSERT INTO admin_kaitori_shoudaku VALUES(51,'uploads/vendor-response.pdf');
                 INSERT INTO sales_agency_requests VALUES(61,1);
-                INSERT INTO sales_agency_request_items VALUES(71,61,'uploads/snapshot.jpg');
+                INSERT INTO sales_agency_request_items VALUES(71,61,14,'uploads/snapshot.jpg');
                 INSERT INTO proxy_service_settings VALUES(81,1);
                 INSERT INTO proxy_service_auction_users VALUES(81,1,1);
                 INSERT INTO merchandise VALUES(13,3,'uploads/catalog.jpg',NULL,NULL,NULL,81,1);
+                INSERT INTO merchandise VALUES(14,1,'uploads/agency-main.jpg','["uploads/agency-extra.jpg"]',NULL,NULL,NULL,0);
+                INSERT INTO merchandise VALUES(15,4,'uploads/staff-own.jpg',NULL,NULL,NULL,NULL,0);
             ''')
         for name in ('main.jpg', 'extra.jpg', 'other.jpg', 'id.pdf', 'consent.pdf',
                      'qr/a.png', 'qr/b.png', 'qr/c.png', 'inquiry.jpg', 'vendor.pdf',
-                     'vendor-response.pdf', 'snapshot.jpg', 'orphan.jpg', 'catalog.jpg'):
+                     'vendor-response.pdf', 'snapshot.jpg', 'orphan.jpg', 'catalog.jpg',
+                     'agency-main.jpg', 'agency-extra.jpg', 'staff-own.jpg'):
             self.file(name)
         (self.static / 'test.css').write_text('body{}', encoding='utf-8')
         self.app = Flask(__name__, static_folder=str(self.static), static_url_path='/static')
@@ -89,6 +92,15 @@ class SecurityAccessTest(unittest.TestCase):
             self.app.add_url_rule('/fixture/' + endpoint + '/<int:id>', endpoint, original, methods=methods)
         self.app.add_url_rule('/admin/users/<int:id>/set_role/<role>', 'admin_set_role',
                              self.app.view_functions['admin_set_role'], methods=['GET'])
+        @self.app.get('/item/<int:id>/download_all')
+        @login_required
+        def download_all_images(id):
+            with self.db() as connection:
+                row = connection.execute('SELECT user_id FROM merchandise WHERE id=?', (id,)).fetchone()
+            if not row or (not current_user.is_admin() and row['user_id'] != current_user.id):
+                abort(404)
+            self.calls.append('photo_archive')
+            return 'archive fixture'
         @self.app.get('/form')
         def form():
             return render_template_string('<meta name="kaika-security-csrf" content="{{ security_form_token }}">')
@@ -158,10 +170,27 @@ class SecurityAccessTest(unittest.TestCase):
         self.get('other.jpg', 200)
 
     def test_staff_can_read_existing_photos_but_not_orphans(self):
-        self.login(3)
-        self.get('main.jpg', 200)
-        self.get('other.jpg', 200)
-        self.get('orphan.jpg', 404)
+        for user in (3, 5):
+            self.login(user)
+            self.get('main.jpg', 200)
+            self.get('extra.jpg', 200)
+            self.get('other.jpg', 200)
+            self.get('orphan.jpg', 404)
+
+    def test_invoice_staff_cannot_read_unrelated_private_merchandise_photos(self):
+        self.login(4)
+        for name in ('main.jpg', 'extra.jpg', 'other.jpg'):
+            self.get(name, 404)
+        self.get('staff-own.jpg', 200)
+
+    def test_archive_requires_owner_or_inventory_rights(self):
+        for user, item, status in ((4, 11, 404), (4, 12, 404), (4, 14, 404), (4, 15, 200),
+                                   (1, 11, 200), (2, 11, 404), (5, 11, 200), (3, 11, 200)):
+            self.login(user)
+            response = self.client.get(f'/item/{item}/download_all')
+            self.assertEqual(response.status_code, status, (user, item))
+            response.close()
+        self.assertEqual(self.calls, ['photo_archive'] * 4)
 
     def test_identity_and_consent_only_authorized_staff(self):
         for user, expected in ((1, 404), (2, 404), (4, 404), (3, 200)):
@@ -176,7 +205,7 @@ class SecurityAccessTest(unittest.TestCase):
         self.get('id.pdf', 404)
 
     def test_qr_images_only_request_owner_and_staff(self):
-        for user, expected in ((1, 200), (2, 404), (3, 200)):
+        for user, expected in ((1, 200), (2, 404), (3, 200), (4, 200)):
             self.login(user)
             for name in ('qr/a.png', 'qr/b.png', 'qr/c.png'):
                 self.get(name, expected)
@@ -189,6 +218,8 @@ class SecurityAccessTest(unittest.TestCase):
         self.get('inquiry.jpg', 200)
         self.login(2)
         self.get('inquiry.jpg', 404)
+        self.login(4)
+        self.get('inquiry.jpg', 200)
 
     def test_vendor_originals_are_not_customer_documents(self):
         for user, expected in ((1, 404), (2, 404), (3, 200), (4, 200)):
@@ -197,20 +228,33 @@ class SecurityAccessTest(unittest.TestCase):
             self.get('vendor-response.pdf', expected)
 
     def test_agency_historical_snapshot_has_request_owner_scope(self):
-        self.login(1)
-        self.get('snapshot.jpg', 200)
-        self.login(2)
-        self.get('snapshot.jpg', 404)
+        for user, expected in ((1, 200), (2, 404), (3, 200), (4, 200), (5, 200), (6, 404)):
+            self.login(user)
+            self.get('snapshot.jpg', expected)
         with self.db() as connection:
             connection.execute('DELETE FROM sales_agency_requests')
         self.login(3)
         self.get('snapshot.jpg', 404)
+
+    def test_invoice_staff_can_read_only_the_linked_agency_items_main_photo(self):
+        self.login(4)
+        self.get('agency-main.jpg', 200)
+        self.get('agency-extra.jpg', 404)
+        with self.db() as connection:
+            connection.execute('UPDATE merchandise SET user_id=2 WHERE id=14')
+        self.get('agency-main.jpg', 404)
+        self.get('snapshot.jpg', 200)
 
     def test_catalog_photos_require_published_company_stock_and_explicit_audience(self):
         self.login(1)
         self.get('catalog.jpg', 200)
         self.login(2)
         self.get('catalog.jpg', 404)
+        self.login(4)
+        self.get('catalog.jpg', 404)
+        with self.db() as connection:
+            connection.execute('INSERT INTO proxy_service_auction_users VALUES(81,4,1)')
+        self.get('catalog.jpg', 200)
         self.login(1)
         with self.db() as connection:
             connection.execute('UPDATE proxy_service_settings SET is_public=0')
@@ -272,13 +316,11 @@ class SecurityAccessTest(unittest.TestCase):
         self.file('.mobile-private/' + name)
         with self.db() as connection:
             connection.execute('UPDATE merchandise SET photo_path=? WHERE id=11', ('uploads/mobile/' + name,))
+        for user, expected in ((1, 200), (2, 404), (3, 200), (4, 404), (5, 200)):
+            self.login(user)
+            self.get('mobile/' + name, expected)
         self.login(1)
-        response = self.client.get('/static/uploads/mobile/' + name)
-        self.assertEqual(response.status_code, 200)
-        response.close()
         self.get('.mobile-private/' + name, 404)
-        self.login(2)
-        self.get('mobile/' + name, 404)
 
     def test_account_and_item_deletes_never_call_original_or_delete_file(self):
         self.login(3)

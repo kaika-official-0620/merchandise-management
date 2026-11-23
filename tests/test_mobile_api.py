@@ -327,6 +327,25 @@ class MobileApiTest(unittest.TestCase):
         self.assertEqual(self.client.get(url, headers=self.auth(2)).status_code, 404)
         self.assertEqual(len(list((self.static / 'uploads' / '.mobile-private').glob('*.jpg'))), 1)
 
+    def test_bearer_photo_access_requires_item_owner_or_merchandise_permission(self):
+        uploaded = self.client.post('/api/mobile/v1/items/11/photo', headers=self.auth(3),
+                                    data={'photo': (io.BytesIO(self.image_bytes()), 'image.png')})
+        self.assertEqual(uploaded.status_code, 200)
+        legacy = self.static / 'uploads' / 'legacy.png'
+        legacy.write_bytes(self.image_bytes())
+        with self.db() as conn:
+            conn.execute('UPDATE merchandise SET additional_photos=? WHERE id=11', (json.dumps(['uploads/legacy.png']),))
+            conn.execute('UPDATE users SET admin_permissions=? WHERE id=7', (json.dumps(['invoices']),))
+            conn.execute('UPDATE users SET admin_permissions=? WHERE id=3', (json.dumps(['merchandise']),))
+        for user, expected in ((1, 200), (2, 404), (3, 200), (4, 200), (7, 404)):
+            headers = self.auth(user)
+            for position in (0, 1):
+                response = self.get(f'/items/11/photos/{position}', headers)
+                try:
+                    self.assertEqual(response.status_code, expected, (user, position))
+                finally:
+                    response.close()
+
     def test_native_photo_preserves_previous_and_denies_static_aliases(self):
         headers = self.auth(3)
         uploaded = []

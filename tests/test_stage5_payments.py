@@ -165,6 +165,59 @@ class PhysicalPaymentTests(unittest.TestCase):
         invoice = self.month(amount=100)
         self.assertCode('physical_period_already_prepared', lambda: self.service.prepare_invoice(STAFF, invoice, review_reference='review', source_key=self.key()))
 
+    def test_unattempted_revision_can_be_replaced_with_snapshot_history(self):
+        bill_id = self.bill()
+        original = self.service.get_bill(CUSTOMER, bill_id)
+        latest = self.month(amount=100)
+        old_invoice = original['invoice_id']
+        consent_id = self.consent()
+        source = self.key()
+        corrected = self.service.replace_invoice(STAFF, latest, expected_invoice_id=old_invoice,
+                                                 review_reference='corrected-fixture-expense', source_key=source)
+        self.assertEqual((corrected['bill_id'], corrected['invoice_id'], corrected['amount_yen']),
+                         (bill_id, latest, 1210))
+        self.assertEqual(corrected['replaced_versions'], [
+            {'invoice_id': old_invoice, 'amount_yen': 1100, 'recorded_at': original['recorded_at']}])
+        self.assertEqual(self.service.get_bill(CUSTOMER, bill_id), corrected)
+        self.assertEqual(self.service.replace_invoice(STAFF, latest, expected_invoice_id=old_invoice,
+                         review_reference='corrected-fixture-expense', source_key=source), corrected)
+        for table in ('stage5_physical_bills', 'stage5_physical_bill_revisions'):
+            self.assertEqual(self.db.execute('SELECT COUNT(*) FROM ' + table).fetchone()[0], 1)
+        self.assertCode('physical_invoice_stale', lambda: self.service.create_attempt(CUSTOMER, bill_id, consent_id,
+                        source_key=self.key(), expected_invoice_id=old_invoice))
+        attempt = self.service.create_attempt(CUSTOMER, bill_id, consent_id, source_key=self.key(), expected_invoice_id=latest)
+        self.assertEqual(attempt['amount_yen'], 1210)
+        self.assertEqual(self.adapter.create_calls, 0)
+
+    def test_replacement_holds_after_payment_and_preserves_refund_access(self):
+        attempt_id = self.paid()
+        original = self.service.get_attempt(STAFF, attempt_id)
+        invoice_id = self.service.get_bill(STAFF, original['bill_id'])['invoice_id']
+        latest = self.month(amount=100)
+        self.assertCode('physical_replacement_unavailable', lambda: self.service.replace_invoice(
+            STAFF, latest, expected_invoice_id=invoice_id, review_reference='fixture-corrected', source_key=self.key()))
+        self.assertCode('staff_permission_required', lambda: self.service.replace_invoice(
+            CUSTOMER, latest, expected_invoice_id=invoice_id, review_reference='fixture-corrected', source_key=self.key()))
+        refund = self.service.request_refund(STAFF, attempt_id, 100, reason='fixture-return', source_key=self.key())
+        self.assertEqual(refund['amount_yen'], 100)
+        self.assertEqual(self.service.get_bill(CUSTOMER, original['bill_id'])['invoice_id'], invoice_id)
+        self.assertEqual(self.db.execute('SELECT COUNT(*) FROM stage5_physical_bill_revisions').fetchone()[0], 0)
+
+    def test_unsubmitted_attempt_is_closed_when_bill_is_replaced(self):
+        attempt_id = self.attempt()
+        bill_id = self.service.get_attempt(CUSTOMER, attempt_id)['bill_id']
+        previous = self.service.get_bill(CUSTOMER, bill_id)['invoice_id']
+        newer = self.month(amount=500)
+        revised = self.service.replace_invoice(STAFF, newer, expected_invoice_id=previous,
+                                              review_reference='fixture-only change', source_key=self.key())
+        self.assertEqual(revised['amount_yen'], 1650)
+        self.assertEqual(self.service.get_attempt(CUSTOMER, attempt_id)['state'], 'canceled')
+        self.service.dispatch_attempt(CUSTOMER, attempt_id, source_key=self.key())
+        self.assertEqual(self.adapter.create_calls, 0)
+        new_attempt = self.service.create_attempt(CUSTOMER, bill_id, self.consent(),
+                                                  source_key=self.key(), expected_invoice_id=newer)
+        self.assertEqual(new_attempt['amount_yen'], 1650)
+
     def test_duplicate_review_returns_same_bill(self):
         bill = self.bill()
         row = self.service.get_bill(STAFF, bill)

@@ -179,7 +179,26 @@ class ChannelTests(unittest.TestCase):
         self.assertEqual(second['conflicting_order_id'],first['order_id'])
         self.assertEqual(second['tasks'][0]['kind'],'conflict_resolution')
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM business_item_observations WHERE kind='sold'").fetchone()[0],1)
+        self.assertEqual(len(self.service.overview(self.staff)['stop_tasks']), 2)
         self.code('order_not_active',lambda:self.ship(second))
+
+    def test_late_competing_order_does_not_reopen_confirmed_stops(self):
+        listing = self.ready()
+        accepted = self.order(listing)
+        self.stop_all()
+        confirmed = self.service.overview(self.staff)['stop_tasks']
+
+        conflict = self.order(listing, key='late-order', external_order_id='late-order', occurred_at=time(10))
+        self.assertEqual(conflict['status'], 'conflict')
+        self.assertEqual(conflict['conflicting_order_id'], accepted['order_id'])
+        self.assertEqual([task['kind'] for task in conflict['tasks']], ['conflict_resolution'])
+        self.assertEqual(self.service.overview(self.staff)['stop_tasks'], confirmed)
+        self.assertEqual(self.db.execute('SELECT COUNT(*) FROM stage4_stop_tasks').fetchone()[0], 2)
+
+        shipped = self.service.ship_order(self.staff, accepted['order_id'], tracking_reference='original-order',
+            occurred_at=time(11), source_key='original-ship', evidence_reference='fixture')
+        self.assertEqual(shipped['status'], 'shipped')
+        self.assertEqual(self.db.execute('SELECT COUNT(*) FROM stage4_order_shipments').fetchone()[0], 1)
 
     def test_price_outside_approved_version_is_conflict_even_above_minimum(self):
         listing=self.ready();order=self.order(listing,sale_gross_yen=38000)
@@ -231,6 +250,41 @@ class ChannelTests(unittest.TestCase):
         self.assertEqual(self.service.profit.profit(self.customer,self.item)['sale_payment_status'],'return_hold')
         self.assertEqual(self.db.execute('SELECT COUNT(*) FROM stage4_order_claims').fetchone()[0],0)
         self.assertEqual(self.db.execute('SELECT COUNT(*) FROM stage3_charge_drafts').fetchone()[0],2)
+
+    def test_resale_only_requires_a_stop_for_the_new_listing(self):
+        original = self.order()
+        self.ship(original)
+        self.service.return_order(self.staff, original['order_id'], reason='サイズ相違', occurred_at=time(11),
+            source_key='return', evidence_reference='fixture')
+        for minute, kind in ((12, 'release_hold'), (13, 'photographed'), (14, 'registration_completed')):
+            self.registry.record_event(self.staff, self.item, kind, time(minute), 'resale-' + kind, 'fixture', {'note': '返品確認済み'})
+        confirmed = self.service.overview(self.staff)['stop_tasks']
+
+        revision = self.listings.propose(self.customer, self.item, title='返品確認後の再出品', description='検品後の説明',
+            condition='中古', photo_references=['photo'], price_gross_yen=39000, minimum_price_gross_yen=35000,
+            channels=[dict(channel=self.accounts[0]['channel'], account_id=self.accounts[0]['account_id'])],
+            valid_until='2026-10-23T10:00:00+00:00', source_key='resale-proposal', evidence_reference='fixture',
+            occurred_at=time(15), supersedes_version_id=self.version['version_id'])
+        for minute, actor in ((16, self.customer), (17, self.staff)):
+            self.listings.approve(actor, revision['version_id'], source_key='resale-approve-' + str(actor.user_id),
+                evidence_reference='fixture', occurred_at=time(minute))
+        listing = self.service.record_listing(self.staff, revision['version_id'], self.accounts[0]['account_id'],
+            external_listing_id='resale-listing', occurred_at=time(18), source_key='resale-listing', evidence_reference='fixture')
+        resale = self.order(listing, key='resale-order', external_order_id='resale-order', sale_gross_yen=39000, occurred_at=time(19))
+        self.assertEqual(resale['status'], 'accepted')
+        tasks = self.service.overview(self.staff)['stop_tasks']
+        self.assertEqual([task for task in tasks if task['status'] == 'confirmed_stopped'], confirmed)
+        pending = [task for task in tasks if task['status'] == 'pending']
+        self.assertEqual([task['listing_id'] for task in pending], [listing['listing_id']])
+
+        send = lambda: self.service.ship_order(self.staff, resale['order_id'], tracking_reference='resale-shipment',
+            occurred_at=time(21), source_key='resale-ship', evidence_reference='fixture')
+        self.code('other_listing_stop_unconfirmed', send)
+        self.service.stop_task(self.staff, pending[0]['task_id'], status='confirmed_stopped', occurred_at=time(20),
+            source_key='resale-stop', evidence_reference='fixture')
+        self.assertEqual(send()['status'], 'shipped')
+        self.assertEqual(self.db.execute('SELECT COUNT(*) FROM stage4_order_shipments').fetchone()[0], 2)
+        self.assertEqual(len(self.store.query('SELECT * FROM stage3_charge_drafts')), 4)
 
     def test_cancel_before_shipping_has_no_charge_and_hold_sale_review(self):
         order=self.order()
@@ -501,6 +555,34 @@ class ChannelTests(unittest.TestCase):
         self.assertEqual(sent['physical_state'], 'return_in_transit')
         self.assertEqual(self.db.execute('SELECT COUNT(*) FROM stage3_charge_drafts').fetchone()[0], 0)
         self.assertEqual(self.db.execute('SELECT COUNT(*) FROM stage3_fund_records').fetchone()[0], 0)
+
+    def test_legacy_duplicate_without_evidence_is_ignored_but_failed_stop_still_blocks(self):
+        listing = self.ready(two=False)
+        self.service.request_item_stop(self.staff, self.item, reason='返送', occurred_at=time(8),
+            evidence_reference='fixture', source_key='manual-stop')
+        self.stop_all()
+        for minute, task_id in ((10, 'historical-duplicate'), (11, 'historical-failed-stop')):
+            late = self.order(listing, key='order-' + task_id, external_order_id=task_id, occurred_at=time(minute))
+            # Reproduce records that old releases created automatically even
+            # when this exact external listing already had a stop task.
+            self.db.execute('INSERT INTO stage4_stop_tasks(task_id,order_id,listing_id,created_at,reason,reason_key) VALUES (?,?,?,?,?,?)',
+                (task_id, late['order_id'], listing['listing_id'], time(minute), '注文受付後の出品停止確認', late['order_id'] + ':' + listing['listing_id']))
+        self.db.execute('''INSERT INTO stage4_stop_events(event_id,task_id,revision,status,evidence_reference,occurred_at,
+            recorded_at,actor_user_id,source_key) VALUES (?,?,?,?,?,?,?,?,?)''',
+            ('old-failure', 'historical-failed-stop', 1, 'failed', 'fixture-old-failure', time(12), time(12), self.staff.user_id, 'old-failure'))
+        tasks = self.service.overview(self.staff)['stop_tasks']
+        self.assertEqual([task['status'] for task in tasks], ['confirmed_stopped', 'failed'])
+
+        action = lambda task_id, key: self.service.stop_task(self.staff, task_id, status='confirmed_stopped',
+            occurred_at=time(13), source_key=key, evidence_reference='fixture')
+        self.code('listing_stop_task_reused', lambda: action('historical-duplicate', 'stale-form'))
+        send = lambda when: self.registry.record_event(self.staff, self.item, 'return_shipped', when, 'return-to-owner', 'fixture')
+        self.code('return_listing_stop_unconfirmed', lambda: send(time(14)))
+        action('historical-failed-stop', 'real-confirmation')
+        self.code('return_before_listing_stop_confirmation', lambda: send(time(12)))
+        self.assertEqual(send(time(14))['physical_state'], 'return_in_transit')
+        self.assertEqual(self.db.execute('SELECT COUNT(*) FROM stage4_stop_tasks').fetchone()[0], 3)
+        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM stage4_stop_events WHERE task_id='historical-duplicate'").fetchone()[0], 0)
 
     def test_manual_stop_request_reuses_tasks_and_late_order_remains_conflict(self):
         listing = self.ready()
