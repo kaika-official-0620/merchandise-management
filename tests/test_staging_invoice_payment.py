@@ -162,6 +162,56 @@ class StagingInvoicePaymentTests(unittest.TestCase):
         with closing(self.connect()) as db:
             return [dict(row) for row in db.execute('SELECT * FROM staging_wallet_resale_test_costs')]
 
+    def resale_receipt_rows(self):
+        with closing(self.connect()) as db:
+            return [dict(row) for row in db.execute('SELECT * FROM staging_wallet_resale_receipt_demo')]
+
+    def confirm_resale_receipt(self, page_path, invoice_id, costs):
+        target = page_path + '/test-sale-receipt'
+        purpose = 'finance_staging_resale_receipt'
+        for role in ('member', 'other', 'limited_staff'):
+            with self.subTest(unauthorized_sale_receipt=role):
+                fields = self.signed_fields(role, 'receipt', invoice_id, purpose=purpose)
+                self.assertEqual(self.clients[role].post(target, data=fields).status_code, 403)
+        with patch.dict(self.app.extensions, {'kaika_staging': False}):
+            self.assertIsNone(self.form('staff', page_path, target))
+            fields = self.signed_fields('staff', 'receipt', invoice_id, purpose=purpose)
+            self.assertEqual(self.clients['staff'].post(target, data=fields).status_code, 404)
+        fields = self.signed_fields('staff', 'receipt', DEMO_INVOICE_ID, purpose=purpose)
+        self.assertEqual(self.clients['staff'].post(INVOICE_PATH + '/test-sale-receipt', data=fields).status_code, 404)
+
+        for role in ('staff', 'member'):
+            with self.subTest(pending_receipt_view=role):
+                response = self.clients[role].get(page_path)
+                self.assertEqual(response.status_code, 200)
+                text = response.get_data(as_text=True)
+                for value in ('入金確認待ち（検証）', 'テスト精算予定額', '7,200円', '精算未実施', '2,670円'):
+                    self.assertIn(value, text)
+        self.assertIsNone(self.form('member', page_path, target))
+        form = self.form('staff', page_path, target, submit_label='テスト入金を確認する')
+        self.assertTrue(form)
+        self.assertEqual(self.clients['staff'].post(target, data={}).status_code, 400)
+        self.assertEqual(self.resale_receipt_rows(), [])
+        response = self.clients['staff'].post(target, data=form)
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.location.endswith(page_path + '#resale-receipt'))
+        receipt = self.resale_receipt_rows()[0]
+        self.assertEqual((receipt['invoice_id'], receipt['sale_event_id']), (invoice_id, costs['sale_event_id']))
+        self.assertEqual((receipt['sale_gross_yen'], receipt['planned_settlement_yen']), (8500, 7200))
+        self.assertEqual(receipt['confirmed_by'], STAFF.user_id)
+        self.assertGreaterEqual(datetime.fromisoformat(receipt['confirmed_at']), datetime.fromisoformat(costs['recorded_at']))
+        self.assertEqual(self.clients['staff'].post(target, data=form).status_code, 302)
+        self.assertEqual(self.resale_receipt_rows(), [receipt])
+        for role in ('staff', 'member'):
+            with self.subTest(confirmed_receipt_view=role):
+                response = self.clients[role].get(page_path)
+                self.assertEqual(response.status_code, 200)
+                text = response.get_data(as_text=True)
+                for value in ('入金確認済み（検証）', 'テスト精算予定額', '7,200円', '精算未実施', '2,670円'):
+                    self.assertIn(value, text)
+                self.assertNotIn('入金確認待ち（検証）', text)
+        return receipt, form
+
     def record_resale_costs(self, page_path, invoice, payment):
         target = page_path + '/test-costs'
         purpose = 'finance_staging_resale_costs'
@@ -631,6 +681,10 @@ class StagingInvoicePaymentTests(unittest.TestCase):
                 self.assertNotIn(reconciliation_label, self.clients['member'].get(path).get_data(as_text=True))
             self.assertEqual(self.clients['member'].get(export_path).data, before_resale_csv.data)
 
+        receipt_target = resale_path + '/test-sale-receipt'
+        self.assertIsNone(self.form('staff', resale_path, receipt_target))
+        receipt_fields = self.signed_fields('staff', 'receipt', current_id, purpose='finance_staging_resale_receipt')
+        self.assertEqual(self.clients['staff'].post(receipt_target, data=receipt_fields).status_code, 409)
         costs, cost_request = self.record_resale_costs(resale_path, current, paid)
         final_label = '最終的な手残り（検証用）'
         for role in ('staff', 'member'):
@@ -657,6 +711,16 @@ class StagingInvoicePaymentTests(unittest.TestCase):
         costs_csv = list(csv.reader(StringIO(self.clients['member'].get(export_path).get_data(as_text=True))))
         self.assertEqual(costs_csv, original_rows + cost_reconciliation_rows)
 
+        receipt, receipt_form = self.confirm_resale_receipt(resale_path, current_id, costs)
+        self.assertEqual(self.unaffected_tables(), before)
+        self.notification_projection.assert_not_called()
+        self.assertEqual(self.resale_rows(), [paid])
+        self.assertEqual(self.resale_cost_rows(), [costs])
+        self.assertEqual(self.rehearsal_rows(), completed_payment)
+        self.assertEqual(self.return_rows(), completed_return)
+        self.assertEqual(self.clients['member'].get(INVOICE_PATH + '/export.csv').data, original_csv)
+        self.assertIn('880円', self.clients['member'].get(INVOICE_PATH).get_data(as_text=True))
+
         with closing(self.connect()) as db:
             registry = Registry(db)
             store = FinanceStore(registry)
@@ -671,7 +735,11 @@ class StagingInvoicePaymentTests(unittest.TestCase):
         for path in (item_path, month_source):
             self.assertNotIn(reconciliation_label, self.clients['member'].get(path).get_data(as_text=True))
         self.assertIsNone(self.form('staff', resale_path, costs_target))
-        self.assertEqual(self.clients['staff'].post(costs_target, data=cost_request).status_code, 409)
+        self.assertEqual(self.clients['staff'].post(costs_target,
+            data={**cost_request, 'registry_csrf': receipt_form['registry_csrf']}).status_code, 409)
+        self.assertIsNone(self.form('staff', resale_path, receipt_target))
+        self.assertEqual(self.clients['staff'].post(receipt_target, data=receipt_form).status_code, 409)
+        self.assertEqual(self.resale_receipt_rows(), [receipt])
         self.assertEqual(self.resale_cost_rows(), [costs])
         historic = self.clients['member'].get(resale_path).get_data(as_text=True)
         self.assertIn('8,170円', historic)
