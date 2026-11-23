@@ -312,8 +312,7 @@ def register_stage3_finance(runtime):
         return render_template('finance_review/invoice.html', month=month, staff=_staff(),
                                provisional_fee_preview=preview, demo_payment=demo,
                                resale_reconciliation=reconciliation,
-                               can_record_resale_costs=bool(_staff() and reconciliation and not reconciliation['costs']
-                                                            and month['is_current_snapshot']))
+                               can_record_resale_costs=bool(_staff() and reconciliation and month['is_current_snapshot']))
 
     @bp.post('/finance/months/<month_id>/test-payment/<action>')
     @allowed()
@@ -336,7 +335,9 @@ def register_stage3_finance(runtime):
         service.verify('finance_staging_resale_costs', month_id)
         amounts = {name: _amount(name) for name in RESALE_COST_FIELDS}
         with service.db(write=True) as store:
-            record_resale_costs(store, service.actor(), **amounts)
+            created = record_resale_costs(store, service.actor(), **amounts)
+        flash('検証用の費用を保存しました。' if created
+              else '同じ費用で再保存しました。記録は1件のままです。', 'success')
         return redirect(url_for('finance_review.invoice', month_id=month_id))
 
     @bp.get('/finance/months/<month_id>/export.csv')

@@ -277,10 +277,11 @@ def record_resale_costs(store, actor, *, purchase_cost_yen, shipping_cost_yen, c
         if saved:
             if saved['sale_event_id'] != result['sale_event_id'] or tuple(saved[field] for field in RESALE_COST_FIELDS) != amounts:
                 raise RegistryError('staging_resale_costs_conflict', 'この検証明細には費用がすでに記録されています。', 409)
-            return
+            return False
         store.execute('''INSERT INTO staging_wallet_resale_test_costs
             (invoice_id, sale_event_id, purchase_cost_yen, shipping_cost_yen, channel_fee_yen, recorded_by, recorded_at)
             VALUES (?,?,?,?,?,?,?)''', (RESALE_INVOICE_ID, result['sale_event_id'], *amounts, actor.user_id, _now()))
+        return True
 
 
 def append_resale_csv(content, reconciliation):
