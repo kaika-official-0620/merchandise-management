@@ -40,7 +40,8 @@
   <h2>対象商品</h2>
   {% for item in items %}
   {% set linked = linked_items.get(item.id) %}
-  {% set product_name = item.product_name|clean_display('商品名未登録') %}
+  {% set product_name = item.product_name or '商品名未登録' %}
+  {% if 'clean_display' is filter %}{% set product_name = item.product_name|clean_display('商品名未登録') %}{% endif %}
   <p class="custody-item-reference">
     {% if linked %}
     {% if linked.detail_url %}<a href="{{ linked.detail_url }}">#{{ item.id }} {{ product_name }}の保管・作業履歴</a>{% else %}#{{ item.id }} {{ product_name }}{% endif %}
