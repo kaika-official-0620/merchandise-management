@@ -8,12 +8,14 @@
 .resale-reconciliation-values dd { margin: 0; font-variant-numeric: tabular-nums; }
 .resale-reconciliation-costs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .resale-reconciliation-form { margin-top: 1rem; }
+.resale-reconciliation-receipt { margin-top: 1.25rem; padding-top: .9rem; border-top: 1px solid var(--line); }
 @media (max-width: 650px) {
     .resale-reconciliation-values { grid-template-columns: minmax(0, 1fr); }
     .resale-reconciliation-form button { width: 100%; }
 }
 </style>
 {% set costs=resale_reconciliation.costs|default(none) %}
+{% set sale_receipt=resale_reconciliation.sale_receipt|default(none) %}
 <section class="card" aria-labelledby="resale-reconciliation-heading">
     <h2 id="resale-reconciliation-heading">再販売の差引参考額（検証）</h2>
     {% if reconciliation_location == 'customer' %}
@@ -69,6 +71,33 @@
         </div>
         <button type="submit">{{ '同じ費用で再保存' if costs else '検証用の費用を保存' }}</button>
     </form>
+    {% endif %}
+    {% if sale_receipt %}
+    <section id="resale-receipt" class="resale-reconciliation-receipt" tabindex="-1" aria-labelledby="resale-receipt-heading">
+        <h3 id="resale-receipt-heading">売上の入金確認（検証）</h3>
+        <p><span class="badge">{{ '入金確認済み（検証）' if sale_receipt.status == 'confirmed' else '入金確認待ち（検証）' }}</span> <span class="badge">精算未実施</span></p>
+        <dl class="resale-reconciliation-values">
+            <div>
+                <dt>テスト精算予定額</dt>
+                <dd><strong>{{ money(sale_receipt.planned_settlement_yen) }}</strong></dd>
+            </div>
+        </dl>
+        {% if costs %}
+        <p>売上{{ money(resale_reconciliation.sale_gross_yen) }} − 販売先手数料{{ money(costs.channel_fee_yen) }} − 送料{{ money(costs.shipping_cost_yen) }}</p>
+        {% else %}
+        <p>売上から販売先手数料と送料を差し引いた予定額です。</p>
+        {% endif %}
+        <p>開花販売料{{ money(resale_reconciliation.paid_fee_yen) }}は別にテスト支払い済みです。予定額は上の内訳で計算しています。</p>
+        {% if sale_receipt.status == 'confirmed' and sale_receipt.confirmed_at|default(none) %}
+        <p class="muted">入金確認日時（日本時間） <time datetime="{{ sale_receipt.confirmed_at }}">{{ registry_time(sale_receipt.confirmed_at) }}</time></p>
+        {% endif %}
+        {% if reconciliation_location == 'invoice' and staff and sale_receipt.status == 'pending' and can_confirm_resale_receipt|default(false) %}
+        <form class="resale-reconciliation-form" method="post" action="{{ url_for('finance_review.staging_resale_receipt', month_id=resale_reconciliation.invoice_id) }}">
+            {{ tokens('finance_staging_resale_receipt', resale_reconciliation.invoice_id) }}
+            <button type="submit">テスト入金を確認する</button>
+        </form>
+        {% endif %}
+    </section>
     {% endif %}
     {% if reconciliation_location in ('item', 'customer') %}
     <nav aria-label="今回の検証明細">
