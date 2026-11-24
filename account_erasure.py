@@ -1,11 +1,12 @@
-"""Reviewable erasure plans and disposable-data rehearsals, never live erasure.
+"""Reviewable erasure plans and evidence-gated synthetic-only completion.
 
-No startup migration, network, provider deletion or production enable switch.
-Retained accounting/ownership records and unreviewed stores prevent completion.
+No startup migration, network, real provider deletion or production switch.
+Unreviewed records and copies block completion in the disposable fixture.
 """
 from datetime import date
 import hashlib
 import json
+import re
 import secrets
 import uuid
 
@@ -28,6 +29,55 @@ TASKS = {
 }
 ACTIONS = {'unconfirmed': '未確定', 'erase': '削除する案', 'retain': '期限と理由を付けて保持する案',
            'not_applicable': '対象なしの案'}
+COMPLETION_ACTIONS = {
+    'profile': {'erase'}, 'notifications': {'erase'},
+    'goods': {'retain'}, 'money': {'retain'}, 'records': {'retain'},
+    'photos': {'erase', 'not_applicable'}, 'providers': {'erase', 'retain', 'not_applicable'},
+    'backups': {'erase', 'retain', 'not_applicable'},
+    'completion_notice': {'retain', 'not_applicable'}, 'unclassified': {'not_applicable'},
+}
+_REMOVED_PERSONAL_ROWS = {'mobile_sessions': 'user_id', 'push_devices': 'user_id',
+                          'stage6_notification_preferences': 'customer_id', 'stage6_home_preferences': 'customer_id'}
+_SCRUBBED_PERSONAL_FIELDS = {
+    'push_outbox': ('user_id', {'token': '', 'binding': '', 'path': ''}),
+    'stage6_notifications': ('customer_id', {'source_json': '{}', 'title': '削除済み', 'body': '', 'path': ''}),
+    'stage6_notification_outbox': ('customer_id', {'private_payload_json': '{}', 'claim_hash': None}),
+    'stage6_destinations': ('customer_id', {'address': '', 'address_hash': '', 'binding_hash': None, 'installation': None}),
+    'stage6_destination_proofs': ('customer_id', {'address': '', 'expires_at': 0}),
+}
+_ACTIVE_NOTICE_STATES = {'push_outbox': {'queued', 'sending', 'receipt'},
+                         'stage6_notification_outbox': {'queued', 'claimed', 'failed', 'sending'}}
+_REVIEWED_FIXTURE_TABLES = {
+    'users', 'merchandise', 'stage2_photo_records', 'business_item_links', 'business_parties',
+    'business_item_assignments', 'invoices', 'stage6_delivery_audit',
+    'account_restore_environment', 'account_restore_bindings', 'account_restore_replays',
+    'account_lifecycle_schema', 'account_deletion_requests', 'account_deletion_events',
+    'account_deletion_reauth', 'account_deletion_operations', 'account_erasure_schema', 'account_erasure_plans',
+    'account_erasure_decisions', 'account_erasure_events', 'account_erasure_notice_schema',
+    'account_erasure_notices', 'account_erasure_notice_events', 'account_erasure_notice_operations',
+    *_REMOVED_PERSONAL_ROWS, *_SCRUBBED_PERSONAL_FIELDS,
+}
+_SHA256 = re.compile(r'[a-f0-9]{64}')
+
+
+def _completion_digest(evidence):
+    value = json.dumps(evidence, sort_keys=True, ensure_ascii=False, separators=(',', ':'), allow_nan=False)
+    return hashlib.sha256(value.encode()).hexdigest()
+
+
+def _event_matches(serialized, expected):
+    try:
+        return serialized == json.dumps(expected, sort_keys=True, ensure_ascii=False, allow_nan=False)
+    except (TypeError, ValueError):
+        return False
+
+
+def _retention_in_future(value, now):
+    try:
+        expiry = date.fromisoformat(value)
+        return expiry.isoformat() == value and expiry > date.fromisoformat(now[:10])
+    except (TypeError, ValueError):
+        return False
 
 
 def migration_statements(dialect='sqlite'):
@@ -97,7 +147,7 @@ class ErasureService:
         plan['decisions'] = {d['task_key']: d for d in self.store.query('SELECT * FROM account_erasure_decisions WHERE plan_id=?', (plan['plan_id'],))}
         row = self.lifecycle.get(actor, customer_id)
         plan['editable'] = bool(row and row['request_id'] == request_id and row['state'] in ('requested', 'reviewing', 'erasure_pending'))
-        plan['complete'] = False
+        plan['complete'] = self._recorded_completion(plan, row) is not None
         plan['unresolved'] = [k for k in TASKS if k not in plan['decisions'] or plan['decisions'][k]['action'] == 'unconfirmed']
         return plan
 
@@ -128,12 +178,8 @@ class ErasureService:
         if action == 'erase' and task_key in ('goods', 'money', 'records', 'unclassified'):
             raise RegistryError('erasure_scope_unresolved', '所有・金銭・取引・未分類情報の一括消去はできません。', 409)
         if action == 'retain':
-            try:
-                parsed = date.fromisoformat(retain_until)
-                if parsed.isoformat() != retain_until or parsed <= date.fromisoformat(self.clock()[:10]):
-                    raise ValueError()
-            except (TypeError, ValueError):
-                raise RegistryError('retention_expiry_required', '保持理由と将来の保持期限を確認してください。未定なら未確定を選びます。', 400) from None
+            if not _retention_in_future(retain_until, self.clock()):
+                raise RegistryError('retention_expiry_required', '保持理由と将来の保持期限を確認してください。未定なら未確定を選びます。', 400)
         elif retain_until:
             raise RegistryError('erasure_decision_invalid', status=400)
         with self.store.atomic():
@@ -185,6 +231,169 @@ class ErasureService:
             self._event(actor, plan['plan_id'], 'local_fixture_erasure', result)
             return result
 
+    def _recorded_completion(self, plan, row):
+        if (not row or row['state'] != 'completed' or row['execution_scope'] != 'fixture_only'
+                or 'kaika_recovery_quarantine' in tables(self.store)):
+            return None
+        result = plan['fixture_result']
+        completion = result.get('completion') if isinstance(result, dict) else None
+        if (not isinstance(completion, dict) or completion.get('complete') is not True
+                or completion.get('state') != 'completed' or completion.get('request_id') != row['request_id']
+                or type(completion.get('customer_id')) is not int or completion['customer_id'] != row['customer_id']
+                or completion.get('plan_id') != plan['plan_id'] or not isinstance(completion.get('evidence_sha256'), str)
+                or not _SHA256.fullmatch(completion['evidence_sha256'])):
+            return None
+        events = self.store.query("SELECT details_json FROM account_erasure_events WHERE plan_id=? AND kind='fixture_completed'",
+                                  (plan['plan_id'],))
+        if len(events) == 1 and _event_matches(events[0]['details_json'], completion):
+            return completion
+        return None
+
+    def fixture_completion(self, actor, customer_id, request_id):
+        """Read the paired plan/journal record for the synthetic completion mail."""
+        plan = self.get(actor, customer_id, request_id)
+        if plan and plan['complete']:
+            return plan['fixture_result']['completion']
+        return None
+
+    def complete_fixture(self, actor, customer_id, request_id, *, fixture_database, revision,
+                         file_plan_id=None, fixture_root=None, backup=None, providers=None):
+        """Finalize only the marked synthetic case after independently checking its evidence."""
+        from account_erasure_notice import NoticeService, protected_destination
+        from account_erasure_files import reconcile_fixture_photo_references
+        from account_erasure_copies import verify_fixture_copies
+
+        self._authorize(actor, customer_id)
+        assert_fixture_database(self.store, fixture_database)
+        if type(revision) is not int:
+            raise RegistryError('erasure_plan_stale', status=409)
+        with self.store.atomic():
+            self.lifecycle.lock(customer_id)
+            if 'kaika_recovery_quarantine' in tables(self.store):
+                raise RegistryError('erasure_fixture_restore_quarantined', status=409)
+            row = self.lifecycle.get(actor, customer_id)
+            if not row or row['request_id'] != request_id or row['state'] not in ('requested', 'reviewing', 'erasure_pending', 'completed'):
+                raise RegistryError('deletion_state_conflict', status=409)
+            plan = self.get(actor, customer_id, request_id)
+            if row['state'] == 'completed':
+                if plan and plan['complete']:
+                    return plan['fixture_result']['completion']
+                raise RegistryError('erasure_completion_evidence_required', status=409)
+            if not plan or plan['revision'] != revision:
+                raise RegistryError('erasure_plan_stale', status=409)
+
+            def pending(blockers):
+                return {'state': row['state'], 'complete': False, 'blockers': sorted(set(blockers))}
+
+            if row['state'] != 'erasure_pending' or row['execution_scope'] != 'fixture_only':
+                return pending(['local_erasure_required'])
+            now = self.clock()
+            decisions = plan['decisions']
+            blockers = self._completion_decision_blockers(decisions, now)
+            held = protected_destination(self.store, customer_id)
+            if not self._local_erasure_confirmed(plan, customer_id, held):
+                blockers.append('local_erasure_required')
+            if self._unreviewed_fixture_data():
+                blockers.append('unclassified')
+            notice = NoticeService(self.store, self.clock).get(actor, customer_id, request_id)
+            notice_action = decisions.get('completion_notice', {}).get('action')
+            if (held and (notice_action != 'retain' or notice['state'] != 'held' or not notice['consented'] or not notice['held'])
+                    or not held and (notice_action != 'not_applicable' or notice['consented'])):
+                blockers.append('completion_notice')
+            if blockers:
+                return pending(blockers)
+            try:
+                copies = verify_fixture_copies(self.store, actor, customer_id, request_id, fixture_database=fixture_database,
+                                               backup=backup, providers=providers)
+            except RegistryError as error:
+                if error.code in {'erasure_copy_evidence_required', 'erasure_copy_scope_mismatch', 'erasure_copy_policy_invalid'}:
+                    return pending(['backups', 'providers'])
+                raise
+            for task in ('backups', 'providers'):
+                proof = copies.get(task, {})
+                decision = decisions[task]
+                if (any(proof.get(name) != decision[name] for name in ('action', 'reference', 'retain_until'))
+                        or not _SHA256.fullmatch(str(proof.get('digest', '')))):
+                    blockers.append(task)
+            if blockers:
+                return pending(blockers)
+            if fixture_root is None:
+                return pending(['photos'])
+            try:
+                photos = reconcile_fixture_photo_references(self.store, customer_id, fixture_root=fixture_root,
+                                                            plan_id=file_plan_id, action=decisions['photos']['action'])
+            except RegistryError as error:
+                if error.code.startswith('file_cleanup_'):
+                    return pending(['photos'])
+                raise
+            task_proofs = {'photos': photos, **copies}
+            evidence_sha256 = _completion_digest({'customer_id': customer_id, 'request_id': request_id, 'plan_id': plan['plan_id'],
+                                                  'revision': revision, 'checks': task_proofs, 'decisions': decisions})
+            result = {'state': 'completed', 'complete': True, 'blockers': [], 'fixture_only': True, 'customer_id': customer_id,
+                      'request_id': request_id, 'plan_id': plan['plan_id'], 'recorded_at': now, 'evidence_sha256': evidence_sha256,
+                      'deleted_photos': photos['deleted'], 'photo_references_removed': photos['references_removed']}
+            fixture_result = {**plan['fixture_result'], 'account_state': 'completed', 'complete': True, 'remaining': [], 'completion': result}
+            self.store.execute('UPDATE account_erasure_plans SET fixture_result_json=?,revision=revision+1,updated_at=? WHERE plan_id=?',
+                               (json.dumps(fixture_result, sort_keys=True), now, plan['plan_id']))
+            self.store.execute("UPDATE account_deletion_requests SET state='completed',updated_at=?,version=version+1 WHERE customer_id=? AND request_id=?",
+                               (now, customer_id, request_id))
+            self._event(actor, plan['plan_id'], 'fixture_completed', result)
+            self.lifecycle.event(actor, row, 'fixture_completed', {'evidence_sha256': evidence_sha256})
+            return result
+
+    @staticmethod
+    def _completion_decision_blockers(decisions, now):
+        blockers = []
+        for task, allowed in COMPLETION_ACTIONS.items():
+            decision = decisions.get(task, {})
+            action = decision.get('action')
+            if (action not in allowed or not decision.get('reason') or not decision.get('reference')
+                    or action == 'retain' and not _retention_in_future(decision.get('retain_until'), now)):
+                blockers.append(task)
+        return blockers
+
+    def _local_erasure_confirmed(self, plan, customer_id, held):
+        previous = plan['fixture_result']
+        if (not isinstance(previous, dict) or previous.get('fixture_only') is not True
+                or previous.get('selected_profile_fields_scrubbed') is not True):
+            return False
+        events = self.store.query("SELECT details_json FROM account_erasure_events WHERE plan_id=? AND kind='local_fixture_erasure'",
+                                  (plan['plan_id'],))
+        if len(events) != 1 or not _event_matches(events[0]['details_json'], previous):
+            return False
+        user = self.store.query('SELECT * FROM users WHERE id=?', (customer_id,))[0]
+        if (not str(user.get('username', '')).startswith('closed-') or not user.get('password_hash')
+                or any(user.get(field) for field in ('email', 'display_name', 'phone', 'postal_code', 'address',
+                                                     'shipping_addresses', 'last_name', 'first_name'))):
+            return False
+        names = tables(self.store)
+        for table, key in _REMOVED_PERSONAL_ROWS.items():
+            if table in names and self.store.query(f'SELECT 1 FROM {table} WHERE {key}=? LIMIT 1', (customer_id,)):
+                return False
+        for table, (key, candidates) in _SCRUBBED_PERSONAL_FIELDS.items():
+            if table not in names:
+                continue
+            for current in self.store.query(f'SELECT * FROM {table} WHERE {key}=?', (customer_id,)):
+                if (current.get('state') in _ACTIVE_NOTICE_STATES.get(table, ())
+                        or table == 'stage6_destinations' and current.get('revoked_at') is None):
+                    return False
+                if table == 'stage6_destinations' and current['destination_id'] == held:
+                    continue
+                if any(current[field] != expected for field, expected in candidates.items() if field in current):
+                    return False
+        return True
+
+    def _unreviewed_fixture_data(self):
+        """The synthetic executor knows only the data stores used in its rehearsal."""
+        for table in tables(self.store) - _REVIEWED_FIXTURE_TABLES:
+            if table.startswith('sqlite_'):
+                continue
+            if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', table):
+                return True
+            if self.store.query('SELECT 1 FROM "' + table + '" LIMIT 1'):
+                return True
+        return False
+
     def _scrub_notification_fields(self, customer_id):
         from account_erasure_notice import protected_destination
         protected=protected_destination(self.store,customer_id)
@@ -192,19 +401,10 @@ class ErasureService:
         # Display choices are personal settings too. This helper is reached
         # only by the existing guarded fixture rehearsal after both profile and
         # notification erasure decisions; it does not enable live deletion.
-        for table, key in (('mobile_sessions','user_id'), ('push_devices','user_id'),
-                           ('stage6_notification_preferences','customer_id'),
-                           ('stage6_home_preferences','customer_id')):
+        for table, key in _REMOVED_PERSONAL_ROWS.items():
             if table in names:
                 counts[table] = self.store.execute(f'DELETE FROM {table} WHERE {key}=?', (customer_id,)).rowcount
-        fields_by_table = {
-            'push_outbox': ('user_id', {'token':'', 'binding':'', 'path':''}),
-            'stage6_notifications': ('customer_id', {'source_json':'{}', 'title':'削除済み', 'body':'', 'path':''}),
-            'stage6_notification_outbox': ('customer_id', {'private_payload_json':'{}', 'claim_hash':None}),
-            'stage6_destinations': ('customer_id', {'address':'', 'address_hash':'', 'binding_hash':None, 'installation':None}),
-            'stage6_destination_proofs': ('customer_id', {'address':'', 'expires_at':0}),
-        }
-        for table, (key, candidates) in fields_by_table.items():
+        for table, (key, candidates) in _SCRUBBED_PERSONAL_FIELDS.items():
             if table not in names:
                 continue
             available = columns(self.store, table)

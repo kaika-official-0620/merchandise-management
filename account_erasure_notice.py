@@ -5,7 +5,6 @@ outbox; only the already verified destination reference is held temporarily.
 No external provider, environment switch, scheduler or import-time I/O.
 """
 import hashlib
-import re
 import uuid
 
 from account_lifecycle import LifecycleService, tables
@@ -13,7 +12,6 @@ from account_erasure_restore import _fixture
 from item_registry import RegistryError, _now
 
 VERSION = 'account-erasure-notice-2026-10-26-v1'
-_REFERENCE = re.compile(r'^[A-Za-z0-9_.:/-]{1,200}$')
 
 
 def migration_statements(dialect='sqlite'):
@@ -67,6 +65,19 @@ def _destination(store, notice):
     if hashlib.sha256(dest['address'].encode()).hexdigest() != notice['address_hash']:
         return None
     return dest
+
+
+def _require_completion_evidence(store, actor, customer_id, request_id, evidence):
+    """Use the erasure gate's paired plan/append-only-journal verification."""
+    from account_erasure import ErasureService
+    try:
+        completion = ErasureService(store).fixture_completion(actor, customer_id, request_id)
+    except (TypeError, ValueError, AttributeError):
+        # Malformed stored JSON cannot become permission to claim a notice.
+        raise RegistryError('completion_notice_evidence_required', status=409) from None
+    if (not isinstance(evidence, str) or not isinstance(completion, dict)
+            or completion.get('evidence_sha256') != evidence):
+        raise RegistryError('completion_notice_evidence_required', status=409)
 
 
 def protected_destination(store, customer_id):
@@ -218,15 +229,14 @@ class NoticeService:
             api.lock(customer_id)
             request=_active_request(self.store,customer_id,request_id)
             row=self._row(customer_id,request_id)
-            if not row or row['consent_revoked_at'] is not None:
+            if not row or not row['consented_at'] or row['consent_revoked_at'] is not None:
                 raise RegistryError('completion_notice_consent_required',status=409)
+            if request['state']!='completed' or request['execution_scope']!='fixture_only':
+                raise RegistryError('completion_notice_erasure_not_complete',status=409)
+            _require_completion_evidence(self.store, actor, customer_id, request_id, completion_evidence)
             if row['state']=='accepted':return self.get(actor,customer_id,request_id)
             if row['attempts'] or row['state'] in ('sending','unknown','failed'):
                 raise RegistryError('completion_notice_no_automatic_retry',status=409)
-            if request['state']!='completed' or request['execution_scope']!='fixture_only':
-                raise RegistryError('completion_notice_erasure_not_complete',status=409)
-            if not isinstance(completion_evidence,str) or not _REFERENCE.fullmatch(completion_evidence):
-                raise RegistryError('completion_notice_evidence_required',status=409)
             if not isinstance(sender,str) or not sender.endswith('@example.invalid') or '\n' in sender or '\r' in sender:
                 raise RegistryError('completion_notice_fixture_sender_required',status=409)
             dest=_destination(self.store,row)
@@ -250,4 +260,9 @@ class NoticeService:
                 # Release the temporary address only after capture acceptance.
                 self.store.execute("UPDATE stage6_destinations SET address='',address_hash=? WHERE destination_id=? AND customer_id=? AND address_hash=?",
                     ('erased-notice-'+uuid.uuid4().hex,row['destination_id'],customer_id,row['address_hash']))
+                # Keep the consent/attempt audit, not the no-longer-needed
+                # identity binding or a misleading outstanding hold flag.
+                self.store.execute('''UPDATE account_erasure_notices SET destination_id=NULL,
+                    address_hash=NULL,verified_at=NULL,held_at=NULL WHERE request_id=? AND customer_id=?''',
+                    (request_id,customer_id))
             return self.get(actor,customer_id,request_id)

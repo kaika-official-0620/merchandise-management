@@ -5,8 +5,8 @@ image is used. A dedicated marked OS-temp SQLite/file fixture is removed after
 all handles are closed. Reports contain only checks, counts and source hashes.
 """
 import argparse
-from contextlib import ExitStack
-from datetime import datetime, timezone
+from contextlib import ExitStack, closing
+from datetime import date, datetime, timedelta, timezone
 import hashlib
 import json
 from pathlib import Path
@@ -14,22 +14,30 @@ import secrets
 import sqlite3
 import sys
 import tempfile
+from types import SimpleNamespace
 from unittest.mock import patch
+
+from flask import Flask, abort, redirect, request as http_request, session, url_for
+from flask_login import LoginManager, UserMixin, login_user
+from jinja2 import ChoiceLoader, DictLoader
 
 SOURCE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SOURCE))
 
 from account_erasure import ErasureService, migration_statements as erasure_schema
+from account_erasure_copies import FixtureCopies
 from account_erasure_files import MARKER as FILE_MARKER, MARKER_NAME, plan_file_cleanup, execute_fixture_cleanup
 from account_erasure_notice import NoticeService, CapturedCompletionTransport, protected_destination
 from account_erasure_restore import (MARKER as DB_MARKER, prepare_fixture_bindings,
     export_fixture_manifest, replay_fixture_manifest, manifest_digest)
 from account_lifecycle import (LifecycleService, migration_statements as lifecycle_schema,
     access_allowed_in_store, outbound_allowed_in_store)
+from account_lifecycle_web import register_account_lifecycle
 from item_registry import Actor, Registry, RegistryError
 from recovery_runtime_guard import guard_new_connection, RecoveryQuarantineError
 from stage6_notifications_schema import migration_statements as notification_schema
 from werkzeug.security import generate_password_hash, check_password_hash
+from verify_stage2 import Forms
 
 
 def fixture(root):
@@ -83,6 +91,43 @@ def fixture(root):
     return db, path, password
 
 
+def fixture_http_clients(path):
+    """Mount the real deletion routes on an in-process, fixture-only Flask app."""
+    app = Flask(__name__, template_folder=str(SOURCE / 'templates'))
+    app.config.update(TESTING=True, ACCOUNT_LIFECYCLE_ENABLED=True, SECRET_KEY=secrets.token_hex(32))
+    app.jinja_loader = ChoiceLoader([DictLoader({'base.html':
+        '<title>{% block title %}{% endblock %}</title>{% block content %}{% endblock %}'}), app.jinja_loader])
+    login = LoginManager(app)
+    login.login_view = 'login'
+
+    class FixtureUser(UserMixin):
+        def __init__(self, user_id):
+            self.id = str(user_id)
+
+    def connection():
+        return sqlite3.connect(path)
+
+    @login.user_loader
+    def load_fixture_user(user_id):
+        with closing(connection()) as db:
+            row = db.execute('SELECT id FROM users WHERE id=?', (user_id,)).fetchone()
+        return FixtureUser(row[0]) if row else None
+
+    @app.post('/login', endpoint='login')
+    def login_fixture_user():
+        with closing(connection()) as db:
+            row = db.execute('SELECT id,password_hash FROM users WHERE username=?',
+                             (http_request.form.get('username', ''),)).fetchone()
+        if not row or not check_password_hash(row[1], http_request.form.get('password', '')):
+            abort(403)
+        session.clear()
+        login_user(FixtureUser(row[0]))
+        return redirect(url_for('account_lifecycle.information'), code=303)
+
+    register_account_lifecycle(SimpleNamespace(app=app, DATABASE_URL=None, get_db=connection))
+    return app.test_client(), app.test_client()
+
+
 def run():
     checks = []
     def check(name, condition):
@@ -96,11 +141,11 @@ def run():
             check(name,error.code == expected)
         else:
             check(name,False)
-    report = {'date':'2026-10-26','executed_at_utc':datetime.now(timezone.utc).isoformat(),
-        'scope':'fresh marked OS-temp SQLite and fictional photos; cross-module rehearsal; no application startup',
+    report = {'executed_at_utc':datetime.now(timezone.utc).isoformat(),
+        'scope':'fresh marked OS-temp SQLite, fictional files and providers; in-process Flask deletion routes',
         'checks':checks,'real_provider_calls':0,'production_changed':False,'real_charges':0,
         'not_verified':['real provider erasure or delivery','production migrations','legal retention periods',
-            'all personal data erasure','native devices and store publication','production backup systems']}
+            'production personal data erasure','native devices and store publication','production backup systems']}
     temporary = tempfile.TemporaryDirectory(prefix='account-erasure-files-workflow-')
     root = Path(temporary.name).resolve()
     connections = []
@@ -115,6 +160,7 @@ def run():
             connections.append(db)
             store=Registry(db); lifecycle=LifecycleService(store); erasure=ErasureService(store)
             notices=NoticeService(store); customer=Actor(1); staff=Actor(3)
+            copies = FixtureCopies(store, path)
             key=secrets.token_bytes(32); environment=secrets.token_hex(16)
             prepare_fixture_bindings(store,staff,fixture_database=path,environment_id=environment)
             db.commit()
@@ -130,17 +176,37 @@ def run():
             backup_photo=root/'old-backup-photo.jpg'
             source_photo=root/'static/uploads/fictional-1.jpg';other_photo=root/'static/uploads/fictional-2.jpg'
             backup_photo.write_bytes(source_photo.read_bytes())
+            backup_id = copies.seed_backup(staff, 1, payload=backup_photo.read_bytes())
+            other_backup_id = copies.seed_backup(staff, 2, payload=other_photo.read_bytes())
+            copies.seed_provider(staff, 1, service='email', payload='fictional external notification record')
+            copies.seed_provider(staff, 2, service='email', payload='another fictional customer record')
             other_before=store.query('SELECT * FROM users WHERE id=2')
             financial_before=store.query('SELECT * FROM invoices ORDER BY id')
             ownership_before=store.query('SELECT * FROM business_item_assignments ORDER BY physical_item_id')
-            request=lifecycle.request(customer,source_key='fictional-workflow-request')
+            member_http, staff_http = fixture_http_clients(path)
+            request_path, queue_path = '/account/deletion', '/admin/account-deletions'
+            check('fictional_member_and_staff_sign_in',
+                  member_http.post('/login', data={'username': 'fixture1', 'password': password}).status_code == 303
+                  and staff_http.post('/login', data={'username': 'fixture3', 'password': password}).status_code == 303)
+            submit = Forms(member_http.get(request_path)).fields(request_path)
+            check('member_submits_real_deletion_route', member_http.post(request_path, data={**submit,
+                  'confirm': 'delete_account', 'password': password}).status_code == 302)
+            request = lifecycle.get(customer, 1)
+            listed = staff_http.get(queue_path)
+            check('staff_sees_same_receipt_before_erasure', listed.status_code == 200
+                  and request['request_id'] in listed.get_data(as_text=True)
+                  and '削除申請を受け付けました' in listed.get_data(as_text=True)
+                  and member_http.get(queue_path).status_code == 403)
             plan=erasure.prepare(staff,1,request['request_id'])
             for task in ('profile','notifications'):
                 plan=erasure.decide(staff,1,request['request_id'],revision=plan['revision'],task_key=task,
                     action='erase',reason='Synthetic rehearsal only',reference='fictional-erasure-policy')
             check('request_and_draft_do_not_erase_or_close',access_allowed_in_store(store,1) and source_photo.exists()
                   and store.query('SELECT email FROM users WHERE id=1')[0]['email']!='')
-            notices.set_consent(customer,request['request_id'],True,source_key='fictional-completion-opt-in')
+            consent_path = request_path + '/completion-notice'
+            consent = Forms(member_http.get(request_path)).fields(consent_path)
+            check('member_confirms_completion_notice_via_real_route', member_http.post(consent_path,
+                  data={**consent, 'completion_email': 'yes', 'password': password}).status_code == 302)
             check('completion_email_separate_opt_in_bound',protected_destination(store,1)=='email-1'
                   and not outbound_allowed_in_store(store,1))
             result=erasure.rehearse_local(staff,1,request['request_id'],fixture_database=path,revision=plan['revision'])
@@ -204,8 +270,83 @@ def run():
                 environment_id=environment,expected_manifest_sha256=digest,signing_key=key)
             check('manifest_replay_idempotent_without_duplicate_events',replay_again['already_recorded']
                   and events==restored.query('SELECT COUNT(*) AS n FROM account_deletion_events')[0]['n'])
-            report.update(account_deletion_complete=False, completion_messages=0, deleted_fictional_photos=1,
-                          restored_photo_requires_review=True, source_auth_closed=True, restored_auth_closed=True)
+
+            # Dispose of the exact examination copies from this temporary run.
+            # The archived photo copy in FixtureCopies still requires proof of removal.
+            restored_db.close()
+            connections.remove(restored_db)
+            restored_path.unlink()
+            restored_path.with_suffix('.fixture.json').unlink()
+            backup_photo.unlink()
+            check('temporary_recovery_copies_disposed', not restored_path.exists() and not backup_photo.exists())
+
+            request_id = request['request_id']
+            def finish(**proofs):
+                plan = erasure.get(staff, 1, request_id)
+                outcome = erasure.complete_fixture(staff, 1, request_id, fixture_database=path,
+                    revision=plan['revision'], file_plan_id=file_plan['plan_id'], fixture_root=root, **proofs)
+                db.commit()
+                return outcome
+
+            def decide(task, action, reference, *, retain_until=None):
+                plan = erasure.get(staff, 1, request_id)
+                erasure.decide(staff, 1, request_id, revision=plan['revision'], task_key=task, action=action,
+                    reason='Synthetic workflow rehearsal only', reference=reference, retain_until=retain_until)
+                db.commit()
+
+            check('missing_retention_and_copy_reviews_keep_erasure_pending', not finish()['complete']
+                  and lifecycle.get(staff, 1)['state'] == 'erasure_pending')
+            retention_deadline = (date.today() + timedelta(days=30)).isoformat()
+            for task in ('goods', 'money', 'records', 'completion_notice'):
+                decide(task, 'retain', 'fixture-retention-' + task, retain_until=retention_deadline)
+            decide('photos', 'erase', 'fixture-photo-verified')
+            decide('unclassified', 'not_applicable', 'fixture-inventory-reviewed')
+            for task in ('backups', 'providers'):
+                decide(task, 'erase', 'fixture-erase-' + task)
+
+            archived_photo = copies.directory / f'backup-{backup_id}.copy'
+            other_archive = copies.directory / f'backup-{other_backup_id}.copy'
+            check('backup_contains_a_real_copy_before_reconciliation', archived_photo.is_file())
+            copies.reconcile(staff, 1, request_id, task='backups', action='erase', reference='fixture-erase-backups')
+            check('only_target_backup_copy_removed', not archived_photo.exists() and other_archive.read_bytes() == other_photo.read_bytes())
+            check('backup_proof_alone_does_not_complete', not finish(backup=copies, providers=copies)['complete'])
+            copies.reconcile(staff, 1, request_id, task='providers', action='erase', reference='fixture-erase-providers')
+            completion = finish(backup=copies, providers=copies)
+            check('verified_fixture_reaches_completed', completion['complete'] and completion['state'] == 'completed'
+                  and lifecycle.get(staff, 1)['state'] == 'completed')
+            source_path = 'uploads/fictional-1.jpg'
+            check('completed_photo_erasure_clears_owned_database_references', not source_photo.exists()
+                  and not store.query('SELECT id FROM merchandise WHERE user_id=? AND photo_path=?', (1, source_path))
+                  and not store.query('SELECT merchandise_id FROM stage2_photo_records WHERE owner_user_id=? AND photo_path=?',
+                                      (1, source_path)))
+            check('completion_replay_does_not_change_evidence', finish(backup=copies, providers=copies) == completion)
+
+            def complete_mail(evidence):
+                return notices.dispatch_fixture(staff, 1, request_id, fixture_database=path,
+                    completion_evidence=evidence, sender='fixture@example.invalid', transport=capture)
+
+            evidence = completion['evidence_sha256']
+            refuses('mismatched_completion_evidence_does_not_send', 'completion_notice_evidence_required',
+                    lambda: complete_mail('0' * 64))
+            outcome = complete_mail(evidence)
+            check('completion_notice_captured_once_to_verified_address', outcome['state'] == 'accepted'
+                  and len(capture.messages) == 1 and capture.messages[0]['recipient'] == 'verified-1@example.invalid')
+            check('completion_releases_temporary_destination', not outcome['held']
+                  and store.query("SELECT address FROM stage6_destinations WHERE destination_id='email-1'")[0]['address'] == '')
+            check('replayed_completion_notice_does_not_send_again', complete_mail(evidence) == outcome
+                  and len(capture.messages) == 1)
+            check('completion_proof_remains_stable_after_notification', finish(backup=copies, providers=copies) == completion)
+            listed = staff_http.get(queue_path)
+            check('staff_sees_same_receipt_completed', listed.status_code == 200
+                  and request_id in listed.get_data(as_text=True) and '削除完了' in listed.get_data(as_text=True))
+            check('member_session_and_original_sign_in_are_closed', member_http.get(request_path).status_code == 302
+                  and member_http.post('/login', data={'username': 'fixture1', 'password': password}).status_code == 403)
+            check('completed_erasure_keeps_other_customer_and_approved_records', access_allowed_in_store(store, 2)
+                  and other_photo.exists() and other_before == store.query('SELECT * FROM users WHERE id=2')
+                  and financial_before == store.query('SELECT * FROM invoices ORDER BY id')
+                  and ownership_before == store.query('SELECT * FROM business_item_assignments ORDER BY physical_item_id'))
+            report.update(account_deletion_complete=True, completion_messages=len(capture.messages),
+                          deleted_fictional_photos=1, source_auth_closed=True, restored_auth_closed=True)
     except Exception as error:
         report['error_type']=type(error).__name__
         report['error_code']=error.code if isinstance(error,RegistryError) else 'workflow_check_or_fixture_failure'
@@ -222,15 +363,15 @@ def run():
     report['passed']=sum(c['passed'] for c in checks)
     report['failed']=sum(not c['passed'] for c in checks) or int('error_type' in report)
     report['source_sha256']={name:hashlib.sha256((SOURCE/name).read_bytes()).hexdigest() for name in (
-        'account_erasure.py','account_erasure_guard.py','account_erasure_files.py','account_erasure_restore.py',
-        'account_erasure_notice.py','account_lifecycle.py','account_data_inventory.py','recovery_runtime_guard.py',
+        'account_erasure.py','account_erasure_guard.py','account_erasure_files.py','account_erasure_restore.py','account_erasure_copies.py',
+        'account_erasure_notice.py','account_lifecycle.py','account_lifecycle_web.py','account_data_inventory.py','recovery_runtime_guard.py',
         'scripts/verify_account_erasure_workflow.py')}
     return report
 
 
 def main():
     parser=argparse.ArgumentParser()
-    parser.add_argument('--report',type=Path,default=SOURCE/'docs/account-erasure-workflow-evidence-2026-10-26.json')
+    parser.add_argument('--report',type=Path,default=SOURCE/'docs/account-erasure-workflow-evidence-2026-11-25.json')
     args=parser.parse_args()
     report=run()
     args.report.parent.mkdir(parents=True,exist_ok=True)

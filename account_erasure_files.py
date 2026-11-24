@@ -1,8 +1,7 @@
-"""File erasure rehearsal, confined to a marked disposable SQLite fixture.
+"""File erasure and reference reconciliation in disposable SQLite fixtures.
 
-No production enable flag, HTTP route, network, database mutation or import I/O.
-This deletes only explicitly reviewed fictional photos. It does not complete an
-account deletion; attachments/evidence, providers and backups remain separate.
+No production enable flag, HTTP route, network or import I/O. This handles only
+reviewed fictional photos. Attachments, providers and backups remain separate.
 """
 from contextlib import contextmanager
 import hashlib
@@ -395,3 +394,83 @@ def execute_fixture_cleanup(store, plan, *, fixture_root):
                   'entries':state['entries'], 'database_records_deleted':0,
                   'account_deletion_complete':False, 'real_provider_calls':0}
         return report
+
+
+def reconcile_fixture_photo_references(store, customer_id, *, fixture_root, plan_id, action):
+    """Verify checked deletion from disk and clear only its exclusive references.
+
+    The caller owns a write transaction so references and their acknowledgement
+    commit together with the completion record. An interrupted unlink, a new
+    owner/reference or a reappearing file leaves the account pending.
+    """
+    from account_erasure_guard import assert_fixture_database
+    if not store.connection.in_transaction:
+        _reject('file_cleanup_completion_evidence_required')
+    root = _fixture(store, fixture_root)
+    database = next(row['file'] for row in store.query('PRAGMA database_list') if row['name'] == 'main')
+    assert_fixture_database(store, database)
+    with _execution_lock(root):
+        refs, candidates, issues = _references(store, customer_id, root)
+        if issues:
+            _reject('file_cleanup_completion_evidence_required')
+        if not candidates:
+            if action != 'not_applicable' or plan_id is not None:
+                _reject('file_cleanup_completion_evidence_required')
+            return {'action': action, 'digest': _digest([customer_id, action]), 'deleted': 0, 'references_removed': 0}
+        if action != 'erase' or not isinstance(plan_id, str) or not re.fullmatch(r'[0-9a-f]{32}', plan_id):
+            _reject('file_cleanup_completion_evidence_required')
+        journal = root / '.file-cleanup'
+        _plain(journal)
+        plan_path, state_path = (journal / (plan_id + suffix) for suffix in ('.plan.json', '.result.json'))
+        _plain(plan_path)
+        _plain(state_path)
+        try:
+            plan = json.loads(plan_path.read_text(encoding='utf-8'))
+            state = json.loads(state_path.read_text(encoding='utf-8'))
+            entries = {entry['relative_path']: entry for entry in plan['entries']}
+            outcomes = state['entries']
+            if (plan['version'] != VERSION or plan['plan_id'] != plan_id or plan['customer_id'] != customer_id
+                    or plan['synthetic_only'] is not True or plan['reference_scan_issues']
+                    or state['plan_sha256'] != _digest(plan) or set(entries) != set(candidates)
+                    or len(entries) != len(plan['entries']) or set(outcomes) != {e['entry_id'] for e in entries.values()}):
+                _reject('file_cleanup_completion_evidence_required')
+            references = set()
+            for reference, entry in entries.items():
+                current = refs[reference]
+                outcome = outcomes[entry['entry_id']]
+                if (entry['entry_id'] != hashlib.sha256(reference.encode()).hexdigest() or entry['status'] != 'ready'
+                        or outcome.get('status') != 'deleted' or outcome.get('removed_once') is not True
+                        or outcome.get('removal_status') != 'deleted' or outcome.get('reason') is not None
+                        or _digest(current) != entry['reference_sha256']
+                        or any(record.get('unreviewed_retained_reference') or record['record_owner'] != customer_id
+                               or record['current_owners'] != [customer_id] for record in current)
+                        or len({record['item'] for record in current}) != 1
+                        or _path(root, reference, missing=True).exists()):
+                    _reject('file_cleanup_completion_evidence_required')
+                references.update(record['reference_key_sha256'] for record in current)
+        except (KeyError, TypeError, ValueError, AttributeError, OSError):
+            _reject('file_cleanup_completion_evidence_required')
+        count = _clear_photo_references(store, customer_id, references)
+        return {'action': action, 'digest': _digest([customer_id, plan, state]), 'deleted': len(entries),
+                'references_removed': count}
+
+
+def _clear_photo_references(store, customer_id, references):
+    def approved(reference):
+        return isinstance(reference, str) and hashlib.sha256(reference.encode()).hexdigest() in references
+
+    count = 0
+    for row in store.query('SELECT id,photo_path,additional_photos FROM merchandise WHERE user_id=?', (customer_id,)):
+        current = json.loads(row['additional_photos'] or '[]')
+        kept = [reference for reference in current if not approved(reference)]
+        clear_main = approved(row['photo_path'])
+        if clear_main or kept != current:
+            store.execute('UPDATE merchandise SET photo_path=?,additional_photos=? WHERE id=? AND user_id=?',
+                          (None if clear_main else row['photo_path'], json.dumps(kept) if kept != current else row['additional_photos'],
+                           row['id'], customer_id))
+            count += int(clear_main) + len(current) - len(kept)
+    for row in store.query('SELECT merchandise_id,photo_path FROM stage2_photo_records WHERE owner_user_id=?', (customer_id,)):
+        if approved(row['photo_path']):
+            count += store.execute('DELETE FROM stage2_photo_records WHERE owner_user_id=? AND merchandise_id=? AND photo_path=?',
+                                   (customer_id, row['merchandise_id'], row['photo_path'])).rowcount
+    return count
