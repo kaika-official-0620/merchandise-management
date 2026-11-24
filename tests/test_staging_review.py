@@ -135,6 +135,13 @@ class StagingReviewScopeTests(unittest.TestCase):
         ddl.assert_not_called()
         self.assertNotIn('kaika_staging_deletion_receipts', self.app.extensions)
 
+    def test_restarted_seeded_admin_promoted_to_owner_can_read_receipts(self):
+        self.named_seed_rows[0] = ('user:admin', 2, 'staging_admin', 'owner')
+        with patch.dict(os.environ, self.environment, clear=True), patch.object(review, 'check_upload_disk'), \
+                patch.object(review, '_check_columns'), patch.object(review, 'apply_additive_schema', return_value=291):
+            self.assertTrue(self.bootstrap()['enabled'])
+        self.assertEqual(self.app.extensions['kaika_staging_deletion_receipts']['staff_id'], 2)
+
 
 class StagingReviewSchemaTests(unittest.TestCase):
     def test_all_current_postgres_definitions_use_non_destructive_executor(self):

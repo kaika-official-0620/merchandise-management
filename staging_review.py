@@ -183,9 +183,12 @@ def _deletion_test_accounts(cursor):
         JOIN public.users u ON u.id=s.record_id WHERE s.seed_key IN ('user:admin','user:normal','user:business')""")
     seeded = {key: (identifier, username, role) for key, identifier, username, role in
               (_row_values(row, ('seed_key', 'id', 'username', 'role')) for row in cursor.fetchall())}
-    if any(seeded.get('user:' + kind, (None, None, None))[1:] != (username, role)
-           for kind, (username, _, role) in TEST_USERS.items()):
-        raise StagingConfigurationError('Staging deletion receipts require the named fictional seed accounts.')
+    for kind, (username, _, role) in TEST_USERS.items():
+        _, current_username, current_role = seeded.get('user:' + kind, (None, None, None))
+        # The legacy initializer promotes the first admin on reboot if no owner exists.
+        allowed_roles = ('admin', 'owner') if kind == 'admin' else (role,)
+        if current_username != username or current_role not in allowed_roles:
+            raise StagingConfigurationError('Staging deletion receipts require the named fictional seed accounts.')
     return {kind: seeded['user:' + kind][0] for kind in TEST_USERS}
 
 
