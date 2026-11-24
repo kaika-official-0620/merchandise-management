@@ -18,9 +18,10 @@ import socket
 import time
 from urllib.parse import parse_qsl, unquote, urlsplit
 
-from flask import abort, flash, jsonify, redirect, request, url_for
+from flask import abort, flash, jsonify, redirect, request, session, url_for
 from flask_login import current_user, logout_user
 from werkzeug.security import generate_password_hash
+from public_release_pages import PUBLIC_PATHS
 
 
 TEST_USERS = {
@@ -266,6 +267,14 @@ def register_staging_boundary(runtime):
                         "/api/google-drive/", "/billing/", "/internal/", "/api/plans/store-intent",
                         "/api/plans/store-verify", "/payments/sandbox", "/webhooks/stripe/",
                         "/notifications/line/", "/account/deletion", "/admin/account-deletions")
+    receipt_routes = {
+        ("GET", "/account/deletion"): "account_lifecycle.page",
+        ("HEAD", "/account/deletion"): "account_lifecycle.page",
+        ("POST", "/account/deletion"): "account_lifecycle.submit",
+        ("POST", "/account/deletion/withdraw"): "account_lifecycle.withdraw",
+        ("GET", "/admin/account-deletions"): "account_lifecycle.admin_list",
+        ("HEAD", "/admin/account-deletions"): "account_lifecycle.admin_list",
+    }
     test_usernames = {value[0] for value in TEST_USERS.values()}
     # Local proof landing pages remain reachable; external callbacks stay blocked
     # even if a later extension accidentally enables one of the runtime flags.
@@ -284,10 +293,19 @@ def register_staging_boundary(runtime):
 
     def boundary():
         path = request.path
-        if (path.startswith(blocked_prefixes)
+        if path == '/logout' or (path == '/login' and request.method == 'POST'):
+            session.pop('_staging_deletion_reauth', None)
+        receipt = app.extensions.get('kaika_staging_deletion_receipts')
+        receipt_route = bool(receipt and request.endpoint
+                             and receipt_routes.get((request.method, path)) == request.endpoint)
+        public_release_page = (
+            path in PUBLIC_PATHS and request.blueprint == "public_release_pages"
+            and request.method in {"GET", "HEAD"}
+        )
+        if ((path.startswith(blocked_prefixes) and not receipt_route)
                 or re.fullmatch(r"/notifications/deliveries/[^/]+/(?:send_test|reconcile)", path)
                 or path in {"/admin/backup/import", "/backup/import_user"}):
-            return jsonify(error={"code": "staging_disabled", "message": "検証環境では外部連携・実課金・アカウント削除・旧データの取込みを停止しています。"}), 403
+            return jsonify(error={"code": "staging_disabled", "message": "検証環境では外部連携・実課金・データ削除の実行・旧データの取込みを停止しています。"}), 403
         if path == "/register":
             return redirect(url_for("login"))
         # The separate, opt-in one-use access extension performs its own
@@ -300,7 +318,7 @@ def register_staging_boundary(runtime):
                 and not (path.startswith("/static/") and not path.startswith("/static/uploads/"))
                 and current_user.is_authenticated and current_user.username not in test_usernames):
             logout_user()
-            if path in public_flow_paths:
+            if path in public_flow_paths or public_release_page:
                 return None
             return test_account_required()
         if path == "/login" or path == "/api/mobile/v1/session":
@@ -330,7 +348,7 @@ def register_staging_boundary(runtime):
                 if not isinstance(username, str) or username not in test_usernames:
                     return test_account_required()
             return None
-        if path in {"/healthz", "/robots.txt"} or path in public_flow_paths:
+        if path in {"/healthz", "/robots.txt"} or path in public_flow_paths or public_release_page:
             return None
         if path.startswith("/static/") and not path.startswith("/static/uploads/"):
             return None
@@ -342,6 +360,13 @@ def register_staging_boundary(runtime):
             if path.startswith("/api/"):
                 return jsonify(error={"code": "authentication_required", "message": "ログインしてください。"}), 401
             return redirect(url_for("login", next=request.full_path.rstrip("?")))
+        if receipt_route and request.method == 'POST':
+            origin = receipt['origin']
+            sent_origin = request.headers.get('Origin')
+            same_origin = (sent_origin == origin if sent_origin is not None else
+                           request.headers.get('Referer', '').startswith(origin + '/'))
+            if not same_origin:
+                abort(403)
         return None
 
     # Run before existing hooks that query user data or write workflow state.

@@ -15,6 +15,7 @@ from werkzeug.security import generate_password_hash
 
 SCHEMA_VERSION = 'account-lifecycle-2026-10-25-v1'
 CLOSED = ('access_closed', 'erasure_pending', 'completed')
+RECEIPT_STATES = ('requested', 'withdrawn')
 REVIEW_CATEGORIES = ('goods', 'funds', 'subscriptions', 'retention', 'providers', 'photos', 'backups')
 REVIEW_LABELS = dict(zip(REVIEW_CATEGORIES, (
     '預かり商品・未発送・返送', '未精算売上・残高・請求', '継続課金と購入元',
@@ -150,7 +151,12 @@ class LifecycleService:
             suppress_customer_payment_jobs(self.store, customer_id,
                 'account_closed' if closed else 'account_deletion_pending')
 
-    def request(self, actor, *, source_key=None):
+    @staticmethod
+    def ensure_receipt(row):
+        if row and (row['execution_scope'] != 'request_only' or row['state'] not in RECEIPT_STATES):
+            raise RegistryError('deletion_state_conflict', status=409)
+
+    def request(self, actor, *, source_key=None, receipt_only=False):
         # Always accept the customer's request even when goods/debts remain.
         self.authorize(actor, actor.user_id)
         if self.store.query('SELECT role FROM users WHERE id=?', (actor.user_id,))[0]['role'] != 'user':
@@ -158,6 +164,8 @@ class LifecycleService:
         with self.store.atomic():
             self.lock(actor.user_id)
             old = self.get(actor, actor.user_id)
+            if receipt_only:
+                self.ensure_receipt(old)
             if source_key is not None:
                 if not isinstance(source_key,str) or not 1 <= len(source_key) <= 256:
                     raise RegistryError('invalid_source_key', status=400)
@@ -181,15 +189,18 @@ class LifecycleService:
             if source_key is not None:
                 self.store.execute('INSERT INTO account_deletion_operations VALUES (?,?,?,?)',
                     (source_key,actor.user_id,row['request_id'],now))
-            self.suppress(actor.user_id)
+            if not receipt_only:
+                self.suppress(actor.user_id)
             self.event(actor, row, 'requested')
             return row
 
-    def withdraw(self, actor, request_id):
+    def withdraw(self, actor, request_id, *, receipt_only=False):
         self.authorize(actor, actor.user_id)
         with self.store.atomic():
             self.lock(actor.user_id)
             row = self.get(actor, actor.user_id)
+            if receipt_only:
+                self.ensure_receipt(row)
             if not row or row['request_id'] != request_id or row['state'] not in ('requested', 'reviewing', 'withdrawn'):
                 raise RegistryError('deletion_state_conflict', status=409)
             if row['state'] != 'withdrawn':

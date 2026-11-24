@@ -9,12 +9,21 @@ from verify_stage5 import Forms
 def run(module, users, preview):
     from account_lifecycle import LifecycleService, migration_statements as lifecycle_schema
     from account_erasure import ErasureService, migration_statements
-    from stage6_notifications_schema import migration_statements as notification_schema
     from item_registry import Actor, Registry
+    from stage2_migration import prepare_stage2_fixture
+    from stage3_migration import prepare_stage3_fixture
+    from stage4_migration import prepare_stage4_fixture
+    from stage5_migration import prepare_stage5_fixture
+    from stage6_migration import prepare_stage6_fixture
     app=module.app
-    app.config.update(ACCOUNT_LIFECYCLE_ENABLED=True,PROPAGATE_EXCEPTIONS=True)
+    for migrate in (prepare_stage2_fixture, prepare_stage3_fixture, prepare_stage4_fixture,
+                    prepare_stage5_fixture, prepare_stage6_fixture):
+        migrate(module, allowed_test_path=preview/'preview.sqlite3')
+    app.config.update(ACCOUNT_LIFECYCLE_ENABLED=True,PROPAGATE_EXCEPTIONS=True,
+                      STAGE2_INVENTORY_ENABLED=True, STAGE3_FINANCE_ENABLED=True, STAGE4_COMMERCE_ENABLED=True,
+                      STAGE5_PAYMENTS_ENABLED=True, STAGE6_ENABLED=True)
     db=module.get_db()
-    for sql in lifecycle_schema()+notification_schema()+migration_statements():db.execute(sql)
+    for sql in lifecycle_schema()+migration_statements():db.execute(sql)
     address='completion-fixture@example.invalid'
     db.execute('INSERT INTO stage6_destinations VALUES (?,?,?,?,?,?,?,?,?,?)',
         ('completion-fixture',users['normal']['id'],'email',address,hashlib.sha256(address.encode()).hexdigest(),None,None,None,1,None))
@@ -35,9 +44,17 @@ def run(module, users, preview):
     for role in ('normal','business','admin'):
         check('login '+role,http(role,'/login',{'username':users[role]['username'],'password':users[role]['password']}).status_code==302)
     request_path='/account/deletion'
+    settings_path = '/notifications/settings'
+    settings_link = ('href="'+settings_path+'"').encode()
+    check('pre-request mail verification link opens customer settings',
+          settings_link in http('normal',request_path).data and http('normal',settings_path).status_code == 200)
+    app.config['STAGE6_ENABLED'] = False
+    check('disabled notification settings never linked',settings_link not in http('normal',request_path).data)
+    app.config['STAGE6_ENABLED'] = True
     form=fields('normal',request_path,request_path)
     form.update(password=users['normal']['password'],confirm='delete_account')
     check('accept request',http('normal',request_path,form).status_code==302)
+    check('pending customer does not see disabled settings link',settings_link not in http('normal',request_path).data)
     db=module.get_db();store=Registry(db)
     customer=users['normal']['id'];staff=Actor(users['admin']['id'])
     row=LifecycleService(store).get(staff,customer);db.close()
@@ -50,16 +67,27 @@ def run(module, users, preview):
     revoke.update(password=users['normal']['password'],request_id=row['request_id'],completion_email='no')
     check('owner can revoke completion consent',http('normal',notice_path,revoke).status_code==302)
     check('late opt-in form replay returns without change',http('normal',notice_path,consent).status_code==302)
-    check('late replay does not revive consent','メール連絡への同意なし' in http('normal',request_path).get_data(as_text=True))
+    check('late replay does not revive consent','メール連絡への同意はありません' in http('normal',request_path).get_data(as_text=True))
     consent=fields('normal',request_path,notice_path)
     consent.update(password=users['normal']['password'],request_id=row['request_id'],completion_email='yes')
     check('fresh explicit consent is accepted',http('normal',notice_path,consent).status_code==302)
     other=fields('business',request_path,request_path)
     other.update(password=users['business']['password'],confirm='delete_account')
     check('unverified email does not prevent deletion request',http('business',request_path,other).status_code==302)
+    unverified = http('business',request_path).get_data(as_text=True)
+    check('unverified account sees eligibility guidance without opt-in',
+          '現在利用できる本人確認済みのメールがありません' in unverified and 'action="'+notice_path+'"' not in unverified)
+    db=module.get_db()
+    address='other-completion-fixture@example.invalid'
+    db.execute('INSERT INTO stage6_destinations VALUES (?,?,?,?,?,?,?,?,?,?)',
+        ('other-completion-fixture',users['business']['id'],'email',address,hashlib.sha256(address.encode()).hexdigest(),None,None,None,1,None))
+    db.commit();db.close()
     other=fields('business',request_path,notice_path)
     other.update(password=users['business']['password'],completion_email='yes')
-    check('unverified completion email refused',http('business',notice_path,other).status_code==409)
+    db=module.get_db()
+    db.execute("UPDATE stage6_destinations SET revoked_at=2 WHERE destination_id='other-completion-fixture'")
+    db.commit();db.close()
+    check('destination revoked after the form opened cannot be used',http('business',notice_path,other).status_code==409)
     check('request remains accepted after notice error','削除申請を受け付けました' in http('business',request_path).get_data(as_text=True))
     review='/admin/account-deletions/'+str(customer);prepare=review+'/plan';decide=prepare+'/decision'
     check('other customer cannot read plan',http('business',review).status_code==403)

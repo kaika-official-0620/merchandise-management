@@ -36,7 +36,10 @@ class StagingReviewScopeTests(unittest.TestCase):
         self.connection = MagicMock()
         self.cursor = self.connection.cursor.return_value
         self.cursor.fetchone.side_effect = [('kaika_staging',), None]
-        self.cursor.fetchall.return_value = [('staging',)]
+        self.named_seed_rows = [('user:admin', 2, 'staging_admin', 'admin'),
+                                ('user:normal', 3, 'staging_normal', 'user'),
+                                ('user:business', 4, 'staging_business', 'user')]
+        self.cursor.fetchall.side_effect = [[('staging',)], self.named_seed_rows]
 
     def bootstrap(self):
         return review.bootstrap_staging_review(self.runtime, self.config, connection=self.connection)
@@ -86,7 +89,7 @@ class StagingReviewScopeTests(unittest.TestCase):
                  ('quarantine', [('kaika_staging',), ('kaika_recovery_quarantine',)], [('staging',)])]
         for name, singles, rows in cases:
             self.cursor.fetchone.side_effect = singles
-            self.cursor.fetchall.return_value = rows
+            self.cursor.fetchall.side_effect = [rows]
             with self.subTest(name=name), patch.dict(os.environ, self.environment, clear=True), \
                     patch.object(review, 'check_upload_disk'), patch.object(review, 'apply_additive_schema') as ddl:
                 with self.assertRaises(StagingConfigurationError):
@@ -118,8 +121,19 @@ class StagingReviewScopeTests(unittest.TestCase):
         self.connection.rollback.assert_not_called()
         self.assertTrue(all(self.app.config[flag] is True for flag in review.REVIEW_FLAGS))
         self.assertTrue(all(self.app.config[flag] is False for flag in review.DISABLED_REVIEW_FLAGS))
+        self.assertEqual(self.app.extensions['kaika_staging_deletion_receipts'],
+                         {'origin': 'https://review.example.invalid', 'staff_id': 2, 'customer_ids': (3, 4)})
         statements = [call.args[0] for call in self.cursor.execute.call_args_list]
         self.assertFalse(any(re.match(r'\s*(INSERT|UPDATE|DELETE|ALTER)', sql) for sql in statements))
+
+    def test_unmatched_deletion_seed_role_refuses_receipt_bootstrap(self):
+        self.named_seed_rows[-1] = ('user:business', 4, 'staging_business', 'admin')
+        with patch.dict(os.environ, self.environment, clear=True), patch.object(review, 'check_upload_disk'), \
+                patch.object(review, '_check_columns'), patch.object(review, 'apply_additive_schema') as ddl:
+            with self.assertRaises(StagingConfigurationError):
+                self.bootstrap()
+        ddl.assert_not_called()
+        self.assertNotIn('kaika_staging_deletion_receipts', self.app.extensions)
 
 
 class StagingReviewSchemaTests(unittest.TestCase):
@@ -132,7 +146,7 @@ class StagingReviewSchemaTests(unittest.TestCase):
         self.assertFalse(any(sql.startswith(('DROP', 'ALTER', 'UPDATE', 'DELETE', 'CREATE OR REPLACE')) for sql in executed))
         inserts = [sql for sql in executed if sql.startswith('INSERT')]
         self.assertTrue(inserts)
-        self.assertTrue(all(re.match(r'INSERT INTO (business_registry_schema|stage[3-7]_schema)\(version\)', sql) for sql in inserts))
+        self.assertTrue(all(re.match(r'INSERT INTO (business_registry_schema|stage[3-7]_schema|account_lifecycle_schema)\(version\)', sql) for sql in inserts))
         self.assertFalse(any('AUTOINCREMENT' in sql or 'PRAGMA ' in sql for sql in executed))
 
     def test_unrecognized_mutation_is_refused(self):

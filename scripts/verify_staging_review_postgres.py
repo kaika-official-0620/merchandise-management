@@ -31,6 +31,8 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from verify_stage5 import Forms
+
 # Flask test_client uses this only as an in-process Host header. No HTTP client
 # connects to this hostname, and every application socket remains prohibited.
 HTTP_HOST = 'kaika-platform-staging.onrender.com'
@@ -787,6 +789,62 @@ def verify_source_documents(runtime, state, state_path, users, clients, phase_na
           saved['item_id'] not in {int(row['id']) for row in (listed.get_json() or [])})
 
 
+def verify_deletion_receipts(runtime, state, users, clients, check):
+    base = 'https://' + HTTP_HOST
+    member, other, staff = (clients[role] for role in ('business', 'normal', 'admin'))
+    path, queue = '/account/deletion', '/admin/account-deletions'
+    origin = {'Origin': base}
+    receipt = runtime.app.extensions.get('kaika_staging_deletion_receipts', {})
+    check('receipt_scope_fixed_named_seeds', receipt.get('customer_ids') == (users['normal']['id'], users['business']['id'])
+          and receipt.get('staff_id') == users['admin']['id'] and receipt.get('origin') == base)
+    member_page = member.get(path, base_url=base)
+    check('receipt_page_private', member_page.status_code == 200 and member_page.headers.get('Referrer-Policy') == 'same-origin'
+          and 'no-store' in member_page.headers.get('Cache-Control', ''))
+    sample = Forms(member_page).fields(path)
+    check('receipt_scoped_member_form', bool(sample.get('registry_csrf')) and bool(sample.get('operation_token')))
+    data = {**sample, 'confirm': 'delete_account'}
+    check('receipt_cross_origin_rejected', member.post(path, data=data, headers={'Origin': 'https://not-staging.invalid'}, base_url=base).status_code == 403)
+    check('receipt_missing_origin_and_referrer_rejected', member.post(path, data=data, base_url=base).status_code == 403)
+    check('receipt_csrf_rejected', member.post(path, data={'confirm': 'delete_account'}, headers=origin, base_url=base).status_code == 400)
+    check('receipt_without_reauthentication_rejected', member.post(path, data=data, headers=origin, base_url=base).status_code == 403)
+    for customer, age, name in ((users['business']['id'], 600, 'expired'), (users['normal']['id'], 0, 'other_member')):
+        with member.session_transaction(base_url=base) as session:
+            session['_staging_deletion_reauth'] = {'user_id': str(customer), 'verified_at': int(time.time()) - age}
+        check('receipt_proof_' + name + '_rejected', member.post(path, data=data, headers=origin, base_url=base).status_code == 403)
+    with member.session_transaction(base_url=base) as session:
+        session['_staging_deletion_reauth'] = {'user_id': str(users['business']['id']), 'verified_at': int(time.time())}
+    check('receipt_link_proof_replaces_password_input', 'id="deletion-password"' not in member.get(path, base_url=base).get_data(as_text=True))
+    check('receipt_checkbox_required_even_after_link', member.post(path, data=sample, headers=origin, base_url=base).status_code == 400)
+    check('receipt_saved_after_recent_link_proof', member.post(path, data=data, headers=origin, base_url=base).status_code == 302)
+    check('receipt_replay_is_idempotent', member.post(path, data=data, headers=origin, base_url=base).status_code == 302)
+    withdraw_path = path + '/withdraw'
+    withdraw_fields = Forms(member.get(path, base_url=base)).fields(withdraw_path)
+    request_id = withdraw_fields.get('request_id', '').encode()
+    staff_page = staff.get(queue, base_url=base)
+    check('receipt_staff_sees_same_number_without_review_link', staff_page.status_code == 200 and bool(request_id)
+          and request_id in staff_page.data and (queue + '/').encode() not in staff_page.data)
+    check('receipt_staff_cannot_open_member_form', staff.get(path, base_url=base).status_code == 403)
+    check('receipt_customer_cannot_open_staff_list', other.get(queue, base_url=base).status_code == 403)
+    check('receipt_other_member_does_not_see_number', bool(request_id) and request_id not in other.get(path, base_url=base).data)
+    check('receipt_existing_login_and_notifications_unaffected', member.get('/profile', base_url=base).status_code == 200
+          and member.get('/notifications/settings', base_url=base).status_code == 200)
+    for blocked in (path + '/completion-notice', queue + '/0', queue + '/0/review', queue + '/0/plan', queue + '/0/plan/decision'):
+        check('receipt_other_operation_blocked_' + blocked, staff.post(blocked, data={}, headers=origin, base_url=base).status_code == 403)
+    # A normal sign-in invalidates the staged link proof and still permits password verification.
+    check('receipt_password_login_clears_link_proof', member.post('/login', data={
+        'username': 'staging_business', 'password': state['passwords']['business']}, base_url=base).status_code == 302)
+    member_page = member.get(path, base_url=base)
+    check('receipt_password_required_after_normal_login', 'id="withdraw-password"' in member_page.get_data(as_text=True))
+    withdraw_fields = Forms(member_page).fields(withdraw_path)
+    withdraw_fields['password'] = state['passwords']['business']
+    check('receipt_withdraw_using_same_origin_referer', member.post(withdraw_path, data=withdraw_fields,
+          headers={'Referer': base + path}, base_url=base).status_code == 302)
+    check('receipt_staff_sees_withdrawal', '申請を取り下げました' in staff.get(queue, base_url=base).get_data(as_text=True))
+    with closing(runtime.get_db()) as connection, connection.cursor() as cursor:
+        cursor.execute('SELECT kind FROM account_deletion_events WHERE request_id=%s', (request_id.decode(),))
+        check('receipt_audit_events_once_each', sorted(row[0] for row in cursor.fetchall()) == ['requested', 'withdrawn'])
+
+
 def phase(args):
     import psycopg2
     import run_app_preview as sandbox
@@ -973,6 +1031,7 @@ def phase(args):
         verify_access(runtime, config, access, state, state_path, users, args.phase, check)
         verify_documents(runtime, state, state_path, users, clients, args.phase, check)
         verify_source_documents(runtime, state, state_path, users, clients, args.phase, check)
+        verify_deletion_receipts(runtime, state, users, clients, check)
         if args.phase == 'restart':
             # This end-to-end workflow creates its own test item. Run it after
             # both phases have checked that seeding preserves the original rows.

@@ -418,6 +418,7 @@ def register_staging_access(runtime, config, *, connection):
                 session.clear()
                 session['_remember'] = 'clear'
                 return error()
+            session['_staging_deletion_reauth'] = {'user_id': str(user.get_id()), 'verified_at': _now()}
             return jsonify(ok=True, next='/workspace-home')
         except Exception:
             return error()

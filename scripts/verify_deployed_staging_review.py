@@ -47,6 +47,7 @@ STAFF_PAGES = (
     ('stage7_cohorts', '/pilot-review/cohorts', '受付した商品の経過'),
     ('stage7_costs', '/pilot-review/costs', '原価・使用量の記録'),
     ('stage7_scenarios', '/pilot-review/scenarios', '採算を条件ごとに比較'),
+    ('account_deletion_receipts', '/admin/account-deletions', '削除申請の確認一覧'),
 )
 # Even callback/action paths are probed with GET only. A 403 with this exact
 # boundary code confirms refusal before dispatch; it does not execute a POST.
@@ -59,8 +60,8 @@ BLOCKED_PAGES = (
     ('line_link', '/notifications/line/link'),
     ('line_callback', '/notifications/line/webhook'),
     ('notification_send', '/notifications/deliveries/staging-review-probe/send_test'),
-    ('account_deletion', '/account/deletion'),
-    ('staff_account_deletion', '/admin/account-deletions'),
+    ('account_deletion_completion_notice', '/account/deletion/completion-notice'),
+    ('staff_account_deletion_review', '/admin/account-deletions/0/review'),
 )
 
 
@@ -145,6 +146,7 @@ def verify_review(environ=None, *, session_factory=None):
                     ('support_guide', '/my/support/guide', '使い方・よくある質問'),
                     ('inquiry_form', '/inquiry/new', '開花に問い合わせる'),
                     ('inquiry_history', '/inquiry', '問い合わせ・返信の履歴'),
+                    ('account_deletion_receipt', '/account/deletion', 'アカウントとデータの削除申請'),
                     ('legacy_custody_reference', '/long-term-items', '以前の預かり記録'),
                     ('sales_analysis', '/my-analytics', '売上の分析'),
                 ):
@@ -186,7 +188,7 @@ def verify_review(environ=None, *, session_factory=None):
                             and body['error'].get('code') == 'staging_disabled')
             else:
                 stage = role + '_staff_only_work_denied'
-                for path in ('/inventory/reconcile', '/commerce/channels', '/pilot-review'):
+                for path in ('/inventory/reconcile', '/commerce/channels', '/pilot-review', '/admin/account-deletions'):
                     client.request('GET', path, expected={403})
                 require(stage, True)
     except Exception:

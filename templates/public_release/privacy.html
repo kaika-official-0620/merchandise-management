@@ -1,0 +1,33 @@
+{% extends 'public_release/base.html' %}
+{% block heading %}プライバシーポリシー{% endblock %}
+{% block page %}
+<p>株式会社開花は、開花アプリと会員向け物販管理サービスにおける個人情報を、以下の目的で取り扱います。</p>
+<section>
+  <h2>取り扱う情報と利用目的</h2>
+  <dl>
+    <dt>アカウント情報と連絡先</dt><dd>アカウントの作成・本人確認、ログイン、権限管理、申請や問い合わせへの対応に使います。</dd>
+    <dt>商品情報、写真、書類、取引や問い合わせの記録</dt><dd>利用者が入力・送信した情報を保存し、商品と在庫の管理、見積依頼、記録の表示、利用者への回答に使います。</dd>
+    <dt>アクセスと動作の記録</dt><dd>ログインの維持、不正利用の防止、障害調査に必要な通信・操作の情報を利用します。</dd>
+  </dl>
+</section>
+<section>
+  <h2>端末の権限・外部サービス</h2>
+  <p>写真の撮影や選択を行う際、端末からアクセスの許可を求めることがあります。許可は端末の設定から変更できます。</p>
+  {% if preview %}
+  <p>初回公開版で情報を取り扱う委託先・外部サービスと、共有する情報の範囲を確認中です。</p>
+  {% else %}
+  <p class="public-policy-text">{{ providers }}</p>
+  <p>個人情報の取扱いを委託する場合は、委託先に同等の保護を求め、必要な範囲で監督します。</p>
+  {% endif %}
+</section>
+<section>
+  <h2>保存期間と削除</h2>
+  {% if preview %}
+  <p>退会後に残す取引・会計記録などの範囲と保存期間は、公開前に確定します。</p>
+  {% else %}
+  <p class="public-policy-text">{{ retention }}</p>
+  {% endif %}
+  <p>アカウントと関連データの削除は、<a href="{{ url_for('account_lifecycle.information') }}">アカウントとデータの削除について</a>をご覧ください。情報の開示、訂正、利用停止、同意の撤回については、<a href="{{ url_for('public_release_pages.support') }}">サポート</a>からご相談ください。</p>
+</section>
+{% if not preview %}<p class="effective-date">施行日 <time datetime="{{ effective_date }}">{{ effective_date }}</time></p>{% endif %}
+{% endblock %}

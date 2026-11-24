@@ -58,12 +58,21 @@ class CompletionNoticeTests(LifecycleFixture):
         self.assertEqual('erasure_pending',self.api.get(self.staff,1)['state'])
 
     def test_unverified_or_multiple_email_addresses_require_resolution(self):
+        first = self.notices.get(self.customer, 1, self.request['request_id'])
+        self.assertTrue(first['can_opt_in'])
+        self.assertNotIn(self.email, json.dumps(first))
         self.db.execute('DELETE FROM stage6_destinations')
+        empty = self.notices.get(self.customer, 1, self.request['request_id'])
+        self.assertFalse(empty['can_opt_in'])
+        self.assertEqual('completion_email_not_verified', empty['availability_error'])
         self.error('completion_email_not_verified',lambda:self.notices.set_consent(self.customer,self.request['request_id'],True))
         for index in range(2):
             address=f'fictional-{index}@example.invalid'
             self.db.execute("INSERT INTO stage6_destinations(destination_id,customer_id,channel,address,address_hash,verified_at) VALUES(?,1,'email',?,?,123)",
                 ('email-'+str(index),address,hashlib.sha256(address.encode()).hexdigest()))
+        multiple = self.notices.get(self.customer, 1, self.request['request_id'])
+        self.assertFalse(multiple['can_opt_in'])
+        self.assertEqual('completion_email_selection_required', multiple['availability_error'])
         self.error('completion_email_selection_required',lambda:self.notices.set_consent(self.customer,self.request['request_id'],True))
 
     def test_other_customer_cannot_consent_or_read(self):
@@ -86,8 +95,10 @@ class CompletionNoticeTests(LifecycleFixture):
 
     def test_changed_destination_address_cannot_inherit_old_consent(self):
         self.notices.set_consent(self.customer,self.request['request_id'],True)
+        self.assertTrue(self.notices.get(self.customer, 1, self.request['request_id'])['consent_matches_destination'])
         changed='someone-else@example.invalid'
         self.db.execute('UPDATE stage6_destinations SET address=?,address_hash=?',(changed,hashlib.sha256(changed.encode()).hexdigest()))
+        self.assertFalse(self.notices.get(self.customer, 1, self.request['request_id'])['consent_matches_destination'])
         self.assertIsNone(protected_destination(self.store,1))
         self.assertIsNone(self.notices.hold_for_erasure(self.staff,1,self.request['request_id']))
 

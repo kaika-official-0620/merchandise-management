@@ -1,0 +1,21 @@
+{% extends 'public_release/base.html' %}
+{% block heading %}開花アプリのサポート{% endblock %}
+{% block page %}
+<p>開花アプリの操作や不具合、改善のご希望について、株式会社開花へお問い合わせいただけます。</p>
+<section>
+  <h2>お問い合わせ先</h2>
+  {% if preview %}
+  <p>{% if support_email %}公開予定の窓口は {{ support_email }} です。{% else %}公開時は、開花のアプリ窓口をこの画面からご案内します。{% endif %}</p>
+  {% else %}
+  <p>ログインできない場合もメールでお問い合わせいただけます。</p>
+  <a class="public-button" href="mailto:{{ support_email }}">{{ support_email }}</a>
+  {% endif %}
+  <p>操作や不具合のご連絡には、操作した画面、表示されたメッセージ、お使いの端末とOSを添えてください。書類に関するご連絡では、分かる場合に書類番号を添えてください。パスワード・認証コード・カード番号は送らないでください。</p>
+</section>
+<section>
+  <h2>よくあるご質問</h2>
+  <details><summary>ログインできません</summary><p>普段の開花アカウントのユーザー名をご確認ください。解決しない場合は、表示されたメッセージをアプリ窓口にお知らせください。</p></details>
+  <details><summary>商品に写真を付けたいです</summary><p>「商品・在庫」から商品を登録、または編集し、端末の写真を選んで保存します。写真の利用を求められた場合は端末の設定もご確認ください。</p></details>
+  <details><summary>見積依頼書を開花に送りたいです</summary><p>書類画面で見積依頼書を作成し、内容を確認して詳細画面から送信します。下書きは送信するまで開花へ届きません。</p></details>
+</section>
+{% endblock %}

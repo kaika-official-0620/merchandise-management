@@ -7,6 +7,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from flask import Blueprint, abort, current_app, g, render_template, request, url_for
 from flask_login import current_user, login_required
+from account_lifecycle_web import account_deletion_available
 
 
 SECTIONS = (
@@ -169,7 +170,7 @@ def section_cards(key):
         add('inquiry_new', '問い合わせを送る', '操作や商品について分からないことを相談します。')
         add('workspace_home.settings', '通知設定', 'プッシュ・メール・LINEの通知先と受取設定を確認します。', enabled=stage_available(6), secondary=True)
         add('profile', 'アカウント設定', '登録情報とアカウントの設定を確認します。', secondary=True)
-        add('account_lifecycle.page', '退会・アカウント削除', '削除申請の内容と、商品や必要な取引記録の扱いを確認します。', enabled=current_app.config.get('ACCOUNT_LIFECYCLE_ENABLED') is True, secondary=True)
+        add('account_lifecycle.page', '退会・アカウント削除', '削除申請の内容と、商品や必要な取引記録の扱いを確認します。', enabled=account_deletion_available(current_app), secondary=True)
     return cards
 
 
@@ -189,7 +190,7 @@ def register_customer_navigation(runtime):
         return render_template('customer_navigation/guide.html', guide_sections=sections,
                                inquiry_url=destination('inquiry_new'),
                                history_url=destination('inquiry_list'),
-                               deletion_url=destination('account_lifecycle.page') if current_app.config.get('ACCOUNT_LIFECYCLE_ENABLED') is True else None,
+                               deletion_url=destination('account_lifecycle.page') if account_deletion_available(current_app) else None,
                                private_preview=bool(current_app.extensions.get('kaika_staging_review')),
                                home_url=destination('workspace_home.home') if stage_available(6) else destination('user_home'))
 

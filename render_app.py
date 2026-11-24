@@ -563,6 +563,9 @@ register_stage5_payments(module)
 from account_lifecycle_web import register_account_lifecycle
 register_account_lifecycle(module)
 
+from public_release_pages import register_public_release_pages
+register_public_release_pages(app)
+
 # Sandbox-only card connector; configuration and fixture migration are explicit.
 from stage9_payment_web import register_stage9_payments
 register_stage9_payments(module)

@@ -3,15 +3,15 @@
 {% block deletion_content %}
 <h1 id="deletion-heading">アカウントとデータの削除申請</h1>
 <p><a href="{{ url_for('account_lifecycle.information') }}">削除・保存するデータについて</a></p>
-<p class="ad-notice">検証用の申請画面です。この操作で実顧客のデータを削除することはありません。受付・確認・利用停止と、関連データの削除完了は別の状態として記録します。</p>
+<p class="ad-notice">{% if deletion_receipt_only %}架空アカウント専用の受付テストです。申請は担当者の検証用一覧に届きます。取り下げも試せます。ログイン、商品・取引のデータ、決済には影響しません。{% else %}検証用の申請画面です。この操作で実顧客のデータを削除することはありません。受付・確認・利用停止と、関連データの削除完了は別の状態として記録します。{% endif %}</p>
 {% if row %}
 <section class="ad-card" aria-labelledby="request-status-heading">
   <h2 id="request-status-heading">申請の状況</h2>
   <dl>
     <dt>状態</dt><dd>{{ labels.get(row.state, '状態の確認が必要です') }}</dd>
     <dt>受付番号</dt><dd><code>{{ row.request_id }}</code></dd>
-    <dt>受付日時</dt><dd>{{ row.requested_at }}</dd>
-    <dt>最終更新日時</dt><dd>{{ row.updated_at }}</dd>
+    <dt>受付日時（日本時間）</dt><dd>{{ account_deletion_time(row.requested_at) }}</dd>
+    <dt>最終更新日時（日本時間）</dt><dd>{{ account_deletion_time(row.updated_at) }}</dd>
   </dl>
   {% if row.customer_notice %}<h3>開花からの案内</h3><p class="ad-preserve">{{ row.customer_notice }}</p>{% endif %}
   {% if row.state in ['access_closed', 'erasure_pending'] %}<p class="ad-notice">利用停止の記録がありますが、関連データの削除は完了していません。</p>{% endif %}
@@ -22,43 +22,59 @@
   <ul>
     <li>預かり商品、未発送、未精算の売上、未払請求があっても申請できます。返送・精算と、保持する取引記録は個別に確認します。</li>
     <li>申請だけで商品を処分したり、請求を取り消したり、継続課金を解約したりすることはありません。有料プランは購入元で別途解約してください。</li>
-    <li>この検証では、申請中の新しいプラン購入と、対象の自動通知・現物決済の処理を停止します。購入元が継続する月額課金の解約を代わりに行うものではありません。</li>
+    {% if not deletion_receipt_only %}<li>この検証では、申請中の新しいプラン購入と、対象の自動通知・現物決済の処理を停止します。購入元が継続する月額課金の解約を代わりに行うものではありません。</li>{% endif %}
     <li>不要な個人情報の削除と、商品の返送・精算・必要記録の保存は分けて確認します。保存する情報と期間、完了までの期間、問い合わせ窓口は未確定です。現在は実データ削除の完了処理を有効にしていません。</li>
+    {% if not deletion_receipt_only and (not row or row.state == 'withdrawn') and stage6_available|default(false) %}
+    <li>完了時のメール連絡を希望する場合は、申請前に<a href="{{ url_for('workspace_home.settings') }}">通知設定でメールを確認</a>してください。メールの確認が済んでいなくても申請できます。</li>
+    {% endif %}
   </ul>
 </section>
-{% if row and row.state in ['requested','reviewing'] and completion_notice_ready %}
+{% if not deletion_receipt_only and row and row.state in ['requested','reviewing'] %}
 <section class="ad-card" aria-labelledby="completion-notice-heading">
 <h2 id="completion-notice-heading">削除完了の連絡</h2>
-<p>削除申請を出した後、この画面で完了連絡を希望できます。宛先は、申請を出す前に本人確認を済ませた通知先メールです。完了時に1回連絡するために、宛先1件を一時的に保持します。現在は送信元などの準備中です。</p>
-<p>状態：{{ '完了時のメール連絡に同意済み' if completion_notice and completion_notice.consented else 'メール連絡への同意なし' }}。メール連絡を希望しなくても、削除申請は受け付けています。</p>
-<p class="ad-muted">本人確認済みの通知先がない場合や複数ある場合は、現在この連絡を設定できません。削除申請はそのまま保持します。利用停止後の確認方法は準備中です。</p>
+<p>本人確認済みのメールへ完了時に1回連絡を希望できます。連絡のために宛先1件を一時的に保持します。送信元と利用停止後の確認方法は準備中です。</p>
+{% if completion_notice %}
+  {% if completion_notice.consent_matches_destination %}<p>完了時のメール連絡に同意済みです。</p>
+  {% elif completion_notice.consented %}<p>同意は保存されています。現在の確認済み宛先と一致しているか確認が必要です。宛先が変わった場合は、新しい宛先への連絡に同意し直してください。</p>
+  {% else %}<p>完了時のメール連絡への同意はありません。</p>{% endif %}
+  {% if completion_notice.availability_error == 'completion_email_selection_required' %}<p class="ad-muted">確認済みのメールが複数あるため、完了連絡の宛先を選べません。</p>
+  {% elif completion_notice.availability_error == 'completion_email_not_verified' %}<p class="ad-muted">現在利用できる本人確認済みのメールがありません。</p>{% endif %}
+{% else %}<p class="ad-muted">完了連絡の設定は準備中です。</p>{% endif %}
+<p class="ad-muted">この連絡の設定にかかわらず、削除申請は受け付けています。</p>
+{% if completion_notice and (completion_notice.can_opt_in or completion_notice.consented) %}
 <form method="post" action="{{ url_for('account_lifecycle.completion_notice') }}">
 <input type="hidden" name="registry_csrf" value="{{ csrf }}"><input type="hidden" name="operation_token" value="{{ notice_token }}"><input type="hidden" name="request_id" value="{{ row.request_id }}">
-<label for="completion-choice">完了時のメール連絡</label><select id="completion-choice" name="completion_email" required><option value="no" {{ 'selected' if not completion_notice or not completion_notice.consented else '' }}>希望しない・同意を取り消す</option><option value="yes" {{ 'selected' if completion_notice and completion_notice.consented else '' }}>上記の一時保持と1回の連絡に同意する</option></select>
+<label for="completion-choice">完了時のメール連絡</label><select id="completion-choice" name="completion_email" required><option value="no" {{ 'selected' if not completion_notice.consent_matches_destination else '' }}>希望しない・同意を取り消す</option>{% if completion_notice.can_opt_in %}<option value="yes" {{ 'selected' if completion_notice.consent_matches_destination else '' }}>上記の一時保持と1回の連絡に同意する</option>{% endif %}</select>
 <label for="completion-password">現在のパスワード</label><input id="completion-password" type="password" name="password" autocomplete="current-password" maxlength="1024" required>
 <button class="ad-button ad-secondary">完了連絡の希望を保存する</button>
-</form></section>
+</form>
+{% endif %}
+</section>
 {% endif %}
 {% if not row or row.state == 'withdrawn' %}
 <form class="ad-card" method="post" action="{{ url_for('account_lifecycle.submit') }}">
   <h2>本人確認をして申請する</h2>
   <input type="hidden" name="registry_csrf" value="{{ csrf }}">
   <input type="hidden" name="operation_token" value="{{ token }}">
+  {% if recent_link_reauth %}<p class="ad-muted">検証用リンクでログインした直後のため、このまま本人確認できます。</p>{% else %}
   <label for="deletion-password">現在のパスワード</label>
   <input id="deletion-password" name="password" type="password" autocomplete="current-password" maxlength="1024" required aria-describedby="deletion-password-help">
   <p id="deletion-password-help" class="ad-muted">本人確認のため、この画面で入力してください。チャットや問い合わせ文には記載しないでください。</p>
+  {% endif %}
   <label><input type="checkbox" name="confirm" value="delete_account" required>上記を確認し、自分のアカウントと関連データの削除を申請します。</label>
   <button class="ad-button" type="submit">削除申請を送信する（検証）</button>
 </form>
 {% elif row.state in ['requested', 'reviewing'] %}
 <form class="ad-card" method="post" action="{{ url_for('account_lifecycle.withdraw') }}">
   <h2>申請を取り下げる</h2>
-  <p>申請・確認中は取り下げられます。停止済みの通知や決済を自動で再実行することはありません。</p>
+  <p>{% if deletion_receipt_only %}取り下げると、担当者の一覧にも「取り下げ」と表示されます。{% else %}申請・確認中は取り下げられます。停止済みの通知や決済を自動で再実行することはありません。{% endif %}</p>
   <input type="hidden" name="registry_csrf" value="{{ csrf }}">
   <input type="hidden" name="operation_token" value="{{ cancel_token }}">
   <input type="hidden" name="request_id" value="{{ row.request_id }}">
+  {% if recent_link_reauth %}<p class="ad-muted">検証用リンクでログインした直後のため、このまま本人確認できます。</p>{% else %}
   <label for="withdraw-password">現在のパスワード</label>
   <input id="withdraw-password" name="password" type="password" autocomplete="current-password" maxlength="1024" required>
+  {% endif %}
   <button class="ad-button ad-secondary" type="submit">本人確認をして申請を取り下げる</button>
 </form>
 {% endif %}

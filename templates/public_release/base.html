@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ self.heading() }} | 開花</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/public-release.css') }}">
+</head>
+<body>
+  <header class="public-header">
+    <a class="public-brand" href="{{ url_for('login') }}">
+      <img src="{{ url_for('static', filename='brand/kaika-home-icon.png') }}" alt="" width="36" height="36">
+      開花
+    </a>
+    <a href="{{ url_for('login') }}">会員ログイン</a>
+  </header>
+  <main>
+    {% if preview %}<p class="preview-notice">公開前の確認用です。掲載内容は確認後に確定します。</p>{% endif %}
+    <h1>{% block heading %}{% endblock %}</h1>
+    {% block page %}{% endblock %}
+  </main>
+  <footer>
+    <nav aria-label="サポートとデータの手続き">
+      <a href="{{ url_for('public_release_pages.support') }}">サポート</a>
+      {% if privacy_available %}<a href="{{ url_for('public_release_pages.privacy') }}">プライバシーポリシー</a>{% endif %}
+      <a href="{{ url_for('account_lifecycle.information') }}">アカウントとデータの削除</a>
+    </nav>
+    <small>株式会社開花</small>
+  </footer>
+</body>
+</html>

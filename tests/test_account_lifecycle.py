@@ -210,10 +210,65 @@ class LifecycleHttpTests(LifecycleFixture):
         self.authenticate()
         self.assertEqual(400,self.client.post('/account/deletion',data={}).status_code)
         form=self.form();form['password']='wrong'
-        self.assertEqual(403,self.client.post('/account/deletion',data=form).status_code)
+        failed = self.client.post('/account/deletion', data=form)
+        self.assertEqual(403, failed.status_code)
+        self.assertIn('本人確認ができませんでした', failed.get_data(as_text=True))
+        self.assertIn('href="/account/deletion"', failed.get_data(as_text=True))
+        self.assertNotIn('value="wrong"', failed.get_data(as_text=True))
         form=self.form();form.pop('confirm')
         self.assertEqual(400,self.client.post('/account/deletion',data=form).status_code)
         self.assertIsNone(self.api.get(self.customer,1))
+
+    def test_staging_link_proof_has_no_effect_in_regular_lifecycle_mode(self):
+        import time
+        self.authenticate()
+        form = self.form()
+        form.pop('password')
+        with self.client.session_transaction() as session:
+            session['_staging_deletion_reauth'] = {'user_id': '1', 'verified_at': int(time.time())}
+        response = self.client.post('/account/deletion', data=form)
+        self.assertEqual(403, response.status_code)
+        self.assertIsNone(self.api.get(self.customer, 1))
+
+    def test_staff_is_denied_member_routes_before_reauthentication_and_gets_staff_recovery(self):
+        self.authenticate(3)
+        for path in ('/account/deletion', '/account/deletion/completion-notice', '/account/deletion/withdraw'):
+            denied = self.client.post(path)
+            self.assertEqual(403, denied.status_code)
+            self.assertIn('href="/admin/account-deletions"', denied.get_data(as_text=True))
+            self.assertNotIn('href="/account/deletion"', denied.get_data(as_text=True))
+        self.assertEqual(403, self.client.get('/account/deletion').status_code)
+        self.assertEqual(0, self.db.execute('SELECT COUNT(*) FROM account_deletion_reauth').fetchone()[0])
+        self.authenticate(4)
+        denied = self.client.get('/admin/account-deletions')
+        self.assertEqual(403, denied.status_code)
+        self.assertNotIn('href="/admin/account-deletions"', denied.get_data(as_text=True))
+        self.assertNotIn('href="/account/deletion"', denied.get_data(as_text=True))
+
+    def test_unready_notice_schema_does_not_block_pending_request_or_withdrawal(self):
+        self.db.execute('CREATE TABLE account_erasure_notice_schema(version TEXT PRIMARY KEY)')
+        self.db.commit()
+        self.authenticate()
+        self.assertEqual(302, self.client.post('/account/deletion', data=self.form()).status_code)
+        status = self.client.get('/account/deletion')
+        self.assertEqual(200, status.status_code)
+        self.assertIn('完了連絡の設定は準備中です', status.get_data(as_text=True))
+        self.assertNotIn('action="/account/deletion/completion-notice"', status.get_data(as_text=True))
+        request_id = self.api.get(self.customer, 1)['request_id']
+        token = self.form(purpose='account_deletion_withdraw', target=request_id)
+        self.assertEqual(302, self.client.post('/account/deletion/withdraw', data={**token, 'request_id': request_id}).status_code)
+        self.assertEqual('withdrawn', self.api.get(self.customer, 1)['state'])
+
+    def test_submission_time_is_displayed_in_japan_time_for_member_and_staff(self):
+        row = self.api.request(self.customer)
+        self.db.execute('UPDATE account_deletion_requests SET requested_at=? WHERE request_id=?',
+                        ('2026-11-24T15:30:00+00:00', row['request_id']))
+        self.db.commit()
+        for user, path in ((1, '/account/deletion'), (3, '/admin/account-deletions'), (3, '/admin/account-deletions/1')):
+            self.authenticate(user)
+            html = self.client.get(path).get_data(as_text=True)
+            self.assertIn('受付日時（日本時間）', html)
+            self.assertIn('2026/11/25 00:30', html)
 
     def test_request_blocks_checkout_keeps_login_and_can_withdraw(self):
         self.authenticate()

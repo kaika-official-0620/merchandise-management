@@ -6,7 +6,7 @@
 <p class="ad-notice">確認記録を保存する検証画面です。ここから本番のデータ削除・利用停止は行えません。認証を失効する試験も、専用の使い捨て架空データに限ります。利用停止は関連データの削除完了ではありません。</p>
 <section class="ad-card" aria-labelledby="review-status-heading">
   <h2 id="review-status-heading">申請の状態</h2>
-  <dl><dt>顧客ID</dt><dd>{{ row.customer_id }}</dd><dt>受付番号</dt><dd><code>{{ row.request_id }}</code></dd><dt>状態</dt><dd>{{ labels.get(row.state, '要確認') }}</dd><dt>受付日時</dt><dd>{{ row.requested_at }}</dd><dt>最終更新日時</dt><dd>{{ row.updated_at }}</dd></dl>
+  <dl><dt>顧客ID</dt><dd>{{ row.customer_id }}</dd><dt>受付番号</dt><dd><code>{{ row.request_id }}</code></dd><dt>状態</dt><dd>{{ labels.get(row.state, '要確認') }}</dd><dt>受付日時（日本時間）</dt><dd>{{ account_deletion_time(row.requested_at) }}</dd><dt>最終更新日時（日本時間）</dt><dd>{{ account_deletion_time(row.updated_at) }}</dd></dl>
   <h3>お客様へ表示する現在の案内</h3><p class="ad-preserve">{{ row.customer_notice or 'まだ登録されていません。' }}</p>
   <p class="ad-muted">保有商品・残高・継続課金を理由に申請の受付を拒まないでください。返送・精算・解約案内・保持の必要性を確認し、削除が完了したものと未完了のものを分けて記録します。</p>
 </section>
@@ -14,8 +14,8 @@
   <h2 id="review-categories-heading">確認項目</h2>
   <p>保持する対象・理由・期間、処理期限、外部サービスとバックアップの扱いを確認します。確認済みの記録があっても、削除済みとは判定しません。</p>
   <div class="ad-scroll" tabindex="0" role="region" aria-label="確認項目。小さい画面では横にスクロールできます">
-    <table><thead><tr><th scope="col">対象</th><th scope="col">記録</th><th scope="col">確認日時・担当ID</th></tr></thead><tbody>
-    {% for category, label in categories.items() %}{% set record = row.review.get(category) %}<tr><th scope="row">{{ label }}</th><td>{% if record %}{{ record.reference }}{% else %}未確認{% endif %}</td><td>{% if record %}{{ record.reviewed_at }}<br>担当ID {{ record.actor_id }}{% else %}—{% endif %}</td></tr>{% endfor %}
+    <table><thead><tr><th scope="col">対象</th><th scope="col">記録</th><th scope="col">確認日時（日本時間）・担当ID</th></tr></thead><tbody>
+    {% for category, label in categories.items() %}{% set record = row.review.get(category) %}<tr><th scope="row">{{ label }}</th><td>{% if record %}{{ record.reference }}{% else %}未確認{% endif %}</td><td>{% if record %}{{ account_deletion_time(record.reviewed_at) }}<br>担当ID {{ record.actor_id }}{% else %}—{% endif %}</td></tr>{% endfor %}
     </tbody></table>
   </div>
 </section>

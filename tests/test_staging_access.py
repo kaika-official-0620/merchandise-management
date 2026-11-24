@@ -289,6 +289,9 @@ class StagingAccessTests(unittest.TestCase):
         self.assertIsNone(self.client.get_cookie('kaika_staging_remember', domain=access.HOST))
         with self.client.session_transaction(base_url=self.origin) as state:
             self.assertEqual(state['_user_id'], '1')
+            proof = state['_staging_deletion_reauth']
+            self.assertEqual(proof['user_id'], state['_user_id'])
+            self.assertIsInstance(proof['verified_at'], int)
             self.assertNotIn('previous_admin_state', state)
             self.assertNotIn('_staging_access_csrf', state)
         self.assertEqual(self.client.get('/workspace-home', base_url=self.origin).json,

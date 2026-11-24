@@ -5,16 +5,20 @@ import time
 from flask import Blueprint, abort, jsonify, redirect, render_template, request, session, url_for
 from flask_login import current_user, login_required, logout_user
 from werkzeug.security import check_password_hash
-from account_lifecycle import LifecycleService, REVIEW_LABELS, access_allowed_in_store, outbound_allowed_in_store
+from account_lifecycle import LifecycleService, RECEIPT_STATES, REVIEW_LABELS, access_allowed_in_store, outbound_allowed_in_store
+from business_display_time import database_event_time
 from inventory_registry_web import RegistryWeb
 from item_registry import Actor, RegistryError
 from account_erasure import ErasureService, TASKS as ERASURE_TASKS, ACTIONS as ERASURE_ACTIONS
 from account_erasure_notice import NoticeService
-from account_lifecycle import tables
 
 LABELS = {'requested':'削除申請を受け付けました','reviewing':'削除の対象と手続きを確認中',
     'withdrawn':'申請を取り下げました','access_closed':'利用停止済み・削除作業待ち',
     'erasure_pending':'利用停止済み・関連データの削除は未完了','completed':'削除完了'}
+
+
+def account_deletion_available(app):
+    return app.config.get('ACCOUNT_LIFECYCLE_ENABLED') is True or bool(app.extensions.get('kaika_staging_deletion_receipts'))
 
 
 class LifecycleWeb(RegistryWeb):
@@ -31,14 +35,25 @@ class LifecycleWeb(RegistryWeb):
         return self._allowed(customer_id, access_allowed_in_store)
 
     def outbound_allowed(self, customer_id):
-        return self._allowed(customer_id, outbound_allowed_in_store)
+        return bool(self.app.extensions.get('kaika_staging_deletion_receipts')) or self._allowed(customer_id, outbound_allowed_in_store)
 
     def actor(self):
         return Actor(int(current_user.get_id()))
 
+    def recent_link_reauthentication(self):
+        staging = self.app.extensions.get('kaika_staging_deletion_receipts')
+        proof = session.get('_staging_deletion_reauth')
+        if not staging or not isinstance(proof, dict) or not session.get('_fresh'):
+            return False
+        verified_at = proof.get('verified_at')
+        return (self.actor().user_id in staging['customer_ids'] and proof.get('user_id') == str(current_user.get_id())
+                and type(verified_at) is int and 0 <= int(time.time()) - verified_at < 600)
+
     def reauthenticate(self):
         customer_id, now = int(current_user.get_id()), int(time.time())
         password, good = request.form.get('password',''), False
+        if not password and self.recent_link_reauthentication():
+            return
         with self.db(True) as store:
             api = LifecycleService(store)
             api.ready()
@@ -57,7 +72,7 @@ class LifecycleWeb(RegistryWeb):
                 ON CONFLICT(customer_id) DO UPDATE SET failures=excluded.failures,window_started=excluded.window_started''',
                 (customer_id,0 if good else row['failures']+1,row['window_started']))
         if not good:
-            abort(403, description='本人確認ができませんでした。パスワードをご確認ください。続けて失敗した場合は15分後にお試しください。')
+            raise RegistryError('account_reauthentication_failed', status=403)
 
 
 def register_account_lifecycle(runtime):
@@ -67,28 +82,41 @@ def register_account_lifecycle(runtime):
     app.config.setdefault('ACCOUNT_LIFECYCLE_ENABLED',os.environ.get('ACCOUNT_LIFECYCLE_ENABLED')=='1')
     service = LifecycleWeb(runtime)
     app.extensions['account_lifecycle'] = service
-    app.extensions['stage6_customer_active'] = outbound_allowed_in_store
+    def staging_receipts():
+        return app.extensions.get('kaika_staging_deletion_receipts')
+
+    app.extensions['stage6_customer_active'] = lambda store, customer_id: bool(staging_receipts()) or outbound_allowed_in_store(store, customer_id)
     bp = Blueprint('account_lifecycle',__name__)
 
-    def allowed(staff=False):
+    def allowed(staff=False, receipt=False):
         def decorate(view):
             @wraps(view)
             @login_required
             def inner(*args,**kwargs):
-                if app.config.get('ACCOUNT_LIFECYCLE_ENABLED') is not True:
+                staging = staging_receipts()
+                active = receipt if staging else app.config.get('ACCOUNT_LIFECYCLE_ENABLED') is True
+                if not active:
                     abort(404)
+                viewer = None
                 try:
                     with service.db() as store:
-                        LifecycleService(store).authorize(service.actor(),staff_only=staff)
+                        viewer = 'staff' if LifecycleService(store).authorize(service.actor()) else 'customer'
+                    if (viewer == 'staff') != staff:
+                        raise RegistryError('account_access_denied', status=403)
+                    if staging:
+                        allowed_ids = (staging['staff_id'],) if staff else staging['customer_ids']
+                        if service.actor().user_id not in allowed_ids:
+                            viewer = None
+                            raise RegistryError('account_access_denied', status=403)
                     return view(*args,**kwargs)
                 except RegistryError as error:
-                    return render_template('account_deletion/error.html',code=error.code),error.status
+                    return render_template('account_deletion/error.html', code=error.code, viewer=viewer), error.status
             return inner
         return decorate
 
     @bp.get('/account-deletion-info')
     def information():
-        enabled = app.config.get('ACCOUNT_LIFECYCLE_ENABLED') is True
+        enabled = account_deletion_available(app)
         entry = None
         if enabled and not current_user.is_authenticated:
             entry = 'login'
@@ -101,17 +129,22 @@ def register_account_lifecycle(runtime):
         return render_template('account_deletion/info.html', enabled=enabled, entry=entry)
 
     @bp.get('/account/deletion')
-    @allowed()
+    @allowed(receipt=True)
     def page():
         with service.db() as store:
             row = LifecycleService(store).get(service.actor(),int(current_user.get_id()))
-            notice_ready='account_erasure_notice_schema' in tables(store)
-            notice=None
-            if notice_ready and row and row['state']!='withdrawn':
-                notice=NoticeService(store).get(service.actor(),int(current_user.get_id()),row['request_id'])
+            notice = None
+            if staging_receipts():
+                LifecycleService.ensure_receipt(row)
+            if not staging_receipts() and row and row['state'] in ('requested', 'reviewing'):
+                try:
+                    notice = NoticeService(store).get(service.actor(), int(current_user.get_id()), row['request_id'])
+                except RegistryError as error:
+                    if error.code != 'account_erasure_notice_migration_required':
+                        raise
         return render_template('account_deletion/request.html',row=row,labels=LABELS,csrf=service.csrf(),
             token=service.operation('account_deletion_request'),cancel_token=service.operation('account_deletion_withdraw',row['request_id']) if row else '',
-            completion_notice=notice,completion_notice_ready=notice_ready,
+            completion_notice=notice, recent_link_reauth=service.recent_link_reauthentication(),
             notice_token=service.operation('account_completion_notice',row['request_id']) if row else '')
 
     @bp.post('/account/deletion/completion-notice')
@@ -127,31 +160,37 @@ def register_account_lifecycle(runtime):
         return redirect(url_for('account_lifecycle.page'))
 
     @bp.post('/account/deletion')
-    @allowed()
+    @allowed(receipt=True)
     def submit():
         source_key=service.verify('account_deletion_request')
         if request.form.get('confirm') != 'delete_account':
             abort(400)
         service.reauthenticate()
         with service.db(True) as store:
-            LifecycleService(store).request(service.actor(),source_key=source_key)
+            LifecycleService(store).request(service.actor(), source_key=source_key, receipt_only=bool(staging_receipts()))
         return redirect(url_for('account_lifecycle.page'))
 
     @bp.post('/account/deletion/withdraw')
-    @allowed()
+    @allowed(receipt=True)
     def withdraw():
         request_id = request.form.get('request_id','')
         service.verify('account_deletion_withdraw',request_id)
         service.reauthenticate()
         with service.db(True) as store:
-            LifecycleService(store).withdraw(service.actor(),request_id)
+            LifecycleService(store).withdraw(service.actor(), request_id, receipt_only=bool(staging_receipts()))
         return redirect(url_for('account_lifecycle.page'))
 
     @bp.get('/admin/account-deletions')
-    @allowed(staff=True)
+    @allowed(staff=True, receipt=True)
     def admin_list():
         with service.db() as store:
-            rows=store.query('SELECT customer_id,request_id,state,requested_at FROM account_deletion_requests ORDER BY requested_at DESC')
+            sql = 'SELECT customer_id,request_id,state,requested_at FROM account_deletion_requests'
+            staging = staging_receipts()
+            if staging:
+                rows = store.query(sql + " WHERE customer_id IN (?,?) AND execution_scope='request_only' AND state IN (?,?) ORDER BY requested_at DESC",
+                                   staging['customer_ids'] + RECEIPT_STATES)
+            else:
+                rows = store.query(sql + ' ORDER BY requested_at DESC')
         return render_template('account_deletion/list.html',rows=rows,labels=LABELS)
 
     @bp.get('/admin/account-deletions/<int:customer_id>')
@@ -212,7 +251,7 @@ def register_account_lifecycle(runtime):
 
     @bp.after_request
     def private_response(response):
-        response.headers.update({'Cache-Control':'private, no-store','Referrer-Policy':'no-referrer',
+        response.headers.update({'Cache-Control':'private, no-store','Referrer-Policy':'same-origin' if staging_receipts() else 'no-referrer',
                                  'X-Content-Type-Options':'nosniff'})
         return response
 
@@ -220,7 +259,8 @@ def register_account_lifecycle(runtime):
 
     @app.context_processor
     def deletion_context():
-        return {'account_deletion_enabled':app.config.get('ACCOUNT_LIFECYCLE_ENABLED') is True}
+        return {'account_deletion_enabled':account_deletion_available(app), 'deletion_receipt_only': bool(staging_receipts()),
+                'account_deletion_time':lambda value: database_event_time(value, postgres=service.dialect == 'postgres')}
 
     original_loader=app.login_manager._user_callback
     if original_loader:

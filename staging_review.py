@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 import re
 
-from staging_environment import StagingConfigurationError, check_upload_disk, validate_environment
+from staging_environment import TEST_USERS, StagingConfigurationError, check_upload_disk, validate_environment
 
 
 REVIEW_FLAGS = ('STAGE2_INVENTORY_ENABLED', 'STAGE3_FINANCE_ENABLED',
@@ -48,11 +48,12 @@ def schema_statements():
     from stage7_measurement_schema import migration_statements as measurement
     from stage7_economics_schema import migration_statements as economics
     from staging_invoice_payment import migration_statements as invoice_payment_demo
+    from account_lifecycle import migration_statements as deletion_receipts
     statements = list(registry('postgres')) + list(import_schema_statements())
     statements += list(SELF_INVENTORY_DDL) + list(custody_ddl('postgres')) + [PHOTO_RECORDS_DDL]
     for provider in (finance, profit, billing, funds, commerce, catalog, listings,
                      channels, payments, payment_records, home, notifications,
-                     actions, pilot, measurement, economics, invoice_payment_demo):
+                     actions, pilot, measurement, economics, invoice_payment_demo, deletion_receipts):
         statements += list(provider('postgres'))
     return tuple(statements)
 
@@ -170,11 +171,22 @@ def apply_additive_schema(cursor):
         if match:
             _trigger(cursor, statement, match.group(1))
             continue
-        if re.fullmatch(r"INSERT INTO (?:business_registry_schema|stage[3-7]_schema)\(version\) VALUES \('[a-z0-9-]+'\) ON CONFLICT\(version\) DO NOTHING", statement, re.I):
+        if re.fullmatch(r"INSERT INTO (?:business_registry_schema|stage[3-7]_schema|account_lifecycle_schema)\(version\) VALUES \('[a-z0-9-]+'\) ON CONFLICT\(version\) DO NOTHING", statement, re.I):
             cursor.execute(statement)
             continue
         raise StagingConfigurationError('Staging review refuses an unrecognized or non-additive schema statement.')
     return len(statements)
+
+
+def _deletion_test_accounts(cursor):
+    cursor.execute("""SELECT s.seed_key, u.id, u.username, u.role FROM public.kaika_staging_seeds s
+        JOIN public.users u ON u.id=s.record_id WHERE s.seed_key IN ('user:admin','user:normal','user:business')""")
+    seeded = {key: (identifier, username, role) for key, identifier, username, role in
+              (_row_values(row, ('seed_key', 'id', 'username', 'role')) for row in cursor.fetchall())}
+    if any(seeded.get('user:' + kind, (None, None, None))[1:] != (username, role)
+           for kind, (username, _, role) in TEST_USERS.items()):
+        raise StagingConfigurationError('Staging deletion receipts require the named fictional seed accounts.')
+    return {kind: seeded['user:' + kind][0] for kind in TEST_USERS}
 
 
 def bootstrap_staging_review(runtime, config, *, connection):
@@ -186,6 +198,7 @@ def bootstrap_staging_review(runtime, config, *, connection):
     app = runtime.app
     app.config.update({name: False for name in REVIEW_FLAGS + DISABLED_REVIEW_FLAGS})
     app.config['STAGE2_FREE_LIMIT_PROPOSAL_ENABLED'] = False
+    app.extensions.pop('kaika_staging_deletion_receipts', None)
     value = os.environ.get('KAIKA_STAGING_REVIEW_ENABLED', '0')
     if value not in ('0', '1'):
         raise StagingConfigurationError('KAIKA_STAGING_REVIEW_ENABLED must be 0 or 1.')
@@ -213,6 +226,7 @@ def bootstrap_staging_review(runtime, config, *, connection):
         cursor.execute('SELECT pg_advisory_xact_lock(574920270)')
         cursor.execute('SET LOCAL search_path=public,pg_catalog')
         _check_columns(cursor, 'merchandise', {'id', 'user_id', 'custody_location', 'custody_version', 'custody_received_at'})
+        accounts = _deletion_test_accounts(cursor)
         count = apply_additive_schema(cursor)
         connection.commit()
     except StagingConfigurationError:
@@ -228,4 +242,8 @@ def bootstrap_staging_review(runtime, config, *, connection):
     app.config.update({name: True for name in REVIEW_FLAGS})
     app.config['STAGE2_FREE_LIMIT_PROPOSAL_ENABLED'] = True
     app.extensions['kaika_staging_review'] = {'schema_only': True, 'legacy_reconciliation': 'manual'}
+    app.extensions['kaika_staging_deletion_receipts'] = {
+        'origin': 'https://' + config.host, 'staff_id': accounts['admin'],
+        'customer_ids': (accounts['normal'], accounts['business']),
+    }
     return {'enabled': True, 'schema_statements': count, 'legacy_reconciliation': 'manual'}

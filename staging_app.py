@@ -21,6 +21,8 @@ with staging_bootstrap(config) as staging_connection:
                                       for role in ("admin", "normal", "business")})
     register_staging_boundary(render_app.module)
     bootstrap_staging_review(render_app.module, config, connection=staging_connection)
+    if render_app.app.extensions.get('kaika_staging_review'):
+        render_app.app.config['APP_PUBLIC_PAGES_MODE'] = 'preview'
     register_staging_access(render_app.module, config, connection=staging_connection)
 
 app = render_app.app

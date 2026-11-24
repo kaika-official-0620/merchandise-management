@@ -100,7 +100,9 @@ class NoticeService:
     def __init__(self,store,clock=_now):self.store,self.clock=store,clock
 
     def ready(self):
-        if 'account_erasure_notice_schema' not in tables(self.store) or not self.store.query('SELECT version FROM account_erasure_notice_schema WHERE version=?',(VERSION,)):
+        required = {'account_erasure_notice_schema', 'account_erasure_notices',
+                    'account_erasure_notice_events', 'account_erasure_notice_operations'}
+        if not required <= tables(self.store) or not self.store.query('SELECT version FROM account_erasure_notice_schema WHERE version=?',(VERSION,)):
             raise RegistryError('account_erasure_notice_migration_required','完了連絡の確認準備が未完了です。',503)
         return True
 
@@ -112,15 +114,41 @@ class NoticeService:
         self.store.execute('INSERT INTO account_erasure_notice_events VALUES(?,?,?,?,?)',
             (uuid.uuid4().hex,request_id,customer_id,kind,self.clock()))
 
+    def _consent_destination(self, customer_id):
+        if 'stage6_destinations' not in tables(self.store):
+            raise RegistryError('completion_email_not_verified', status=409)
+        destinations = self.store.query("""SELECT * FROM stage6_destinations WHERE customer_id=?
+            AND channel='email' AND verified_at IS NOT NULL AND revoked_at IS NULL""", (customer_id,))
+        if len(destinations) != 1:
+            raise RegistryError('completion_email_selection_required' if destinations else 'completion_email_not_verified',
+                                status=409)
+        destination = destinations[0]
+        if not destination['address'] or hashlib.sha256(destination['address'].encode()).hexdigest() != destination['address_hash']:
+            raise RegistryError('completion_email_not_verified', status=409)
+        return destination
+
+    @staticmethod
+    def _matches_destination(notice, destination):
+        return all(notice[key] == destination[key] for key in ('destination_id', 'address_hash', 'verified_at'))
+
     def get(self,actor,customer_id,request_id):
         self.ready();LifecycleService(self.store).authorize(actor,customer_id)
-        _active_request(self.store,customer_id,request_id)
+        request = _active_request(self.store,customer_id,request_id)
         row=self._row(customer_id,request_id)
-        if not row:return {'request_id':request_id,'state':'no_consent','consented':False,'held':False,'attempts':0,'blockers':['no_completion_email_consent']}
+        consented = bool(row and row['consented_at'] and not row['consent_revoked_at'])
+        destination, availability_error = None, None
+        if request['state'] in ('requested', 'reviewing') and not (row and row['attempts']):
+            try:
+                destination = self._consent_destination(customer_id)
+            except RegistryError as error:
+                availability_error = error.code
         # No address, address hash or destination binding is exposed to the UI.
-        return {'request_id':request_id,'state':row['state'],'consented':bool(row['consented_at'] and not row['consent_revoked_at']),
-            'held':bool(row['held_at']),'attempts':row['attempts'],'outcome_code':row['outcome_code'],
-            'blockers':(['no_completion_email_consent'] if row['consent_revoked_at'] else [])}
+        return {'request_id':request_id,'state':row['state'] if row else 'no_consent','consented':consented,
+            'held':bool(row and row['held_at']),'attempts':row['attempts'] if row else 0,
+            'outcome_code':row['outcome_code'] if row else None,
+            'blockers':[] if consented else ['no_completion_email_consent'],
+            'can_opt_in': destination is not None, 'availability_error': availability_error,
+            'consent_matches_destination': bool(consented and destination and self._matches_destination(row, destination))}
 
     def set_consent(self,actor,request_id,enabled,*,source_key=None):
         self.ready();api=LifecycleService(self.store);api.authorize(actor,actor.user_id)
@@ -149,16 +177,8 @@ class NoticeService:
                     if old['consent_revoked_at'] is None:self._event(actor.user_id,request_id,'consent_revoked')
                 remember()
                 return {'request_id':request_id,'state':'no_consent','consented':False}
-            if 'stage6_destinations' not in tables(self.store):
-                raise RegistryError('completion_email_not_verified','通知設定でメールアドレスを確認してから同意してください。',409)
-            destinations=self.store.query("SELECT * FROM stage6_destinations WHERE customer_id=? AND channel='email' AND verified_at IS NOT NULL AND revoked_at IS NULL",(actor.user_id,))
-            if len(destinations)!=1:
-                raise RegistryError('completion_email_not_verified' if not destinations else 'completion_email_selection_required',
-                    '本人確認済みのメール通知先を1件にしてください。',409)
-            dest=destinations[0]
-            if not dest['address'] or hashlib.sha256(dest['address'].encode()).hexdigest()!=dest['address_hash']:
-                raise RegistryError('completion_email_not_verified',status=409)
-            if old and old['consent_revoked_at'] is None and old['destination_id']==dest['destination_id'] and old['address_hash']==dest['address_hash'] and old['verified_at']==dest['verified_at']:
+            dest = self._consent_destination(actor.user_id)
+            if old and old['consent_revoked_at'] is None and self._matches_destination(old, dest):
                 remember()
                 return self.get(actor,actor.user_id,request_id)
             self.store.execute('''INSERT INTO account_erasure_notices(request_id,customer_id,destination_id,address_hash,verified_at,consented_at,state,updated_at)
