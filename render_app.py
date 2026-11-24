@@ -193,6 +193,13 @@ def render_enforce_primary_domain():
     return None
 
 
+@app.get("/google42621b60b3de99c1.html")
+def google_site_verification():
+    if normalize_request_host(request.host) != PRIMARY_DOMAIN:
+        abort(404)
+    return send_from_directory(str(REPO_DIR), "google42621b60b3de99c1.html", mimetype="text/html")
+
+
 if "healthz" not in app.view_functions:
     @app.route("/healthz")
     def healthz():
